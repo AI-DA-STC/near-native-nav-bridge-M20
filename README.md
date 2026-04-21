@@ -2,6 +2,13 @@
 
 Navigation command bridge for DeepRobotics M20 Pro. Sends waypoints over UDP, subscribes to `/ODOM` for position tracking, and supports structured benchmark testing (T1–T4) with Excel output.
 
+## File transfer to robot
+
+```bash
+ rsync -avz /path/to/near-native-nav-bridge-M20 user@10.21.31.106:/home/user/workspace
+```
+Note : If you're unsure of the above command, pls set your destination path to `/home/user/workspace2`
+
 ## Building
 
 Requires ROS 2 Foxy.
@@ -99,10 +106,3 @@ python3 scripts/run.py test T3 --map office --bridge
 python3 scripts/run.py test T4 --map office --bridge
 ```
 
-Results are saved to `~/nav_benchmarks/<timestamp>/` as structured CSVs and an Excel workbook.
-
-To regenerate Excel from existing CSVs:
-
-```bash
-python3 scripts/run.py excel ~/nav_benchmarks/2026-04-16_143052/
-```
