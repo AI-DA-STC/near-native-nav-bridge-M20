@@ -1,0 +1,3 @@
+[submodule "external/lightning-lm"]
+	path = external/lightning-lm
+	url = https://github.com/gaoxiang12/lightning-lm.git
