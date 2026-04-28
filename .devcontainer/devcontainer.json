@@ -1,0 +1,27 @@
+{
+  "name": "ROS2 Foxy",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": ".."
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-iot.vscode-ros",
+        "twxs.cmake",
+        "ms-vscode.cmake-tools"
+      ],
+      "settings": {
+        "terminal.integrated.defaultProfile.linux": "bash",
+        "ros.distro": "foxy"
+      }
+    }
+  },
+  "mounts": [
+  "source=${localWorkspaceFolder},target=/root/ros2_ws/src/nav_cmd_bridge,type=bind"
+  ],
+  "runArgs": ["--network=host"],
+  "workspaceFolder": "/root/ros2_ws/src/nav_cmd_bridge",
+  "postCreateCommand": "rosdep update"
+}
