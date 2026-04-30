@@ -28,8 +28,12 @@ install(TARGETS nav_cmd_bridge
   DESTINATION lib/${PROJECT_NAME}
 )
 
-install(PROGRAMS scripts/run.py
+install(PROGRAMS scripts/benchmark.py
   DESTINATION lib/${PROJECT_NAME}
+)
+
+install(DIRECTORY launch
+  DESTINATION share/${PROJECT_NAME}
 )
 
 ament_package()

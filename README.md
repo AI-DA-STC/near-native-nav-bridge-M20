@@ -1,108 +1,116 @@
 # nav_cmd_bridge
 
-Navigation command bridge for DeepRobotics M20 Pro. Sends waypoints over UDP, subscribes to `/ODOM` for position tracking, and supports structured benchmark testing (T1–T4) with Excel output.
-
-## File transfer to robot
-
-```bash
- rsync -avz /path/to/near-native-nav-bridge-M20 user@10.21.31.106:/home/user/workspace
-```
-Note : If you're unsure of the above command, pls set your destination path to `/home/user/workspace2`
+Navigation command bridge for DeepRobotics M20 Pro. Sends waypoints over UDP and subscribes to `/ODOM` for position tracking. Supports RViz2-driven navigation and structured benchmark testing (T1–T4).
 
 ## Building
 
 Requires ROS 2 Foxy.
 
 ```bash
-# From your colcon workspace (e.g. ~/colcon_ws)
-cd ~/colcon_ws/src
-ln -s /path/to/near-native-nav-bridge nav_cmd_bridge
-
 cd ~/colcon_ws
 colcon build --packages-select nav_cmd_bridge
 source install/setup.bash
 ```
 
-## Usage
+## Bridge — direct navigation
 
-### C++ node directly
+The C++ node handles navigation commands. All commands accept `--ip <addr>` to override the default robot IP (`10.21.31.103`).
 
 ```bash
 # Single waypoint
-ros2 run nav_cmd_bridge nav_cmd_bridge nav <x> <y> [yaw]
+ros2 run nav_cmd_bridge nav_cmd_bridge nav <x> <y> [yaw_rad]
 
-# Multi-waypoint patrol
+# Multiple waypoints in sequence
 ros2 run nav_cmd_bridge nav_cmd_bridge patrol <x,y,yaw> <x,y,yaw> ...
 
-# RViz2 bridge (draw arrows to navigate)
+# RViz2 bridge — draw a 2D Goal Pose arrow to navigate immediately
 ros2 run nav_cmd_bridge nav_cmd_bridge bridge
+
+# RViz2 bridge — queue mode: collect arrows, execute all on ENTER
 ros2 run nav_cmd_bridge nav_cmd_bridge bridge queue
 
 # Robot commands
-ros2 run nav_cmd_bridge nav_cmd_bridge status
-ros2 run nav_cmd_bridge nav_cmd_bridge loc
-ros2 run nav_cmd_bridge nav_cmd_bridge stand
-ros2 run nav_cmd_bridge nav_cmd_bridge sit
 ros2 run nav_cmd_bridge nav_cmd_bridge estop
 ros2 run nav_cmd_bridge nav_cmd_bridge cancel
-ros2 run nav_cmd_bridge nav_cmd_bridge heartbeat
-ros2 run nav_cmd_bridge nav_cmd_bridge monitor
-ros2 run nav_cmd_bridge nav_cmd_bridge nav_mode
-ros2 run nav_cmd_bridge nav_cmd_bridge regular_mode
-ros2 run nav_cmd_bridge nav_cmd_bridge gait_flat
-ros2 run nav_cmd_bridge nav_cmd_bridge gait_stair
-ros2 run nav_cmd_bridge nav_cmd_bridge clearqueue
 
-# Optional flags
---csv /path/to/output.csv    # override CSV output path
---json                       # machine-readable output (loc only)
+# Override robot IP
+ros2 run nav_cmd_bridge nav_cmd_bridge bridge --ip 192.168.8.101
 ```
 
-### Python run.py
-
-`run.py` wraps the C++ binary and adds benchmark test orchestration.
+## Bridge — launch file
 
 ```bash
-# Install Python dependency (for Excel generation)
-pip install openpyxl
+# Immediate mode (default)
+ros2 launch nav_cmd_bridge bridge.launch.py
 
-# Passthrough commands (same as C++ directly)
-python3 scripts/run.py nav 2.15 0.83 1.567
-python3 scripts/run.py patrol 2.0,1.0,0.0 4.0,2.0,1.57
-python3 scripts/run.py bridge
-python3 scripts/run.py stand
-# ... any C++ command works here
+# Queue mode
+ros2 launch nav_cmd_bridge bridge.launch.py queue:=true
+
+# Custom robot IP
+ros2 launch nav_cmd_bridge bridge.launch.py robot_ip:=192.168.8.101
 ```
 
-### Benchmark tests
+## Benchmark tests
 
-Create a waypoints file (CSV, one waypoint per line):
+### Waypoints file
+
+Create a CSV with one waypoint per line (yaw in radians, optional):
 
 ```
-# waypoints.csv
 # x, y, yaw_rad
 2.15, 0.83, 1.567
 4.00, 2.00, 0.000
 0.50, 3.10, 3.140
-1.20, 1.50, 0.785
 ```
 
-Run tests:
+### Run via launch file
 
 ```bash
-# T1 – SLAM loop closure (teleoperation-based)
-# Press ENTER to record start pose, teleoperate the loop, press ENTER to record end pose
-python3 scripts/run.py test T1 --map office --trials 5
+# T1 — SLAM loop closure (teleoperation-based, 5 trials)
+ros2 launch nav_cmd_bridge benchmark.launch.py test:=T1 map:=office
 
-# T2/T3/T4 – Navigation tests with waypoints from file
-python3 scripts/run.py test T2 --map office --waypoints waypoints.csv
-python3 scripts/run.py test T3 --map office --waypoints waypoints.csv
-python3 scripts/run.py test T4 --map office --waypoints waypoints.csv
+# T2/T3/T4 — waypoint navigation from file
+ros2 launch nav_cmd_bridge benchmark.launch.py test:=T2 map:=office waypoints:=/path/to/wps.csv
+ros2 launch nav_cmd_bridge benchmark.launch.py test:=T3 map:=office waypoints:=/path/to/wps.csv
+ros2 launch nav_cmd_bridge benchmark.launch.py test:=T4 map:=office waypoints:=/path/to/wps.csv
 
-# T2/T3/T4 – Navigation tests with waypoints from RViz2
-# Uses bridge queue mode – draw arrows in RViz2, press ENTER to execute
-python3 scripts/run.py test T2 --map office --bridge
-python3 scripts/run.py test T3 --map office --bridge
-python3 scripts/run.py test T4 --map office --bridge
+# T2/T3/T4 — collect waypoints from RViz2 (draw arrows, press ENTER to run)
+ros2 launch nav_cmd_bridge benchmark.launch.py test:=T2 map:=office
+
+# Multiple trials
+ros2 launch nav_cmd_bridge benchmark.launch.py test:=T2 map:=office waypoints:=wps.csv trials:=3
+
+# Custom output directory
+ros2 launch nav_cmd_bridge benchmark.launch.py test:=T2 map:=office waypoints:=wps.csv output_dir:=/tmp/results
 ```
 
+### Run directly
+
+```bash
+pip install openpyxl   # for Excel output (optional)
+
+python3 scripts/benchmark.py T1 --map office --trials 5
+python3 scripts/benchmark.py T2 --map office --waypoints wps.csv
+python3 scripts/benchmark.py T2 --map office --bridge   # RViz2 waypoint collection
+```
+
+### Output
+
+Results are saved to `assets/outputs/<timestamp>/`:
+
+| File | Contents |
+|---|---|
+| `T1_SLAM_Loop_Closure.csv` | LCE and heading drift per trial |
+| `T2_Nav_No_Obstacles.csv` | Waypoint reach results |
+| `T3_Nav_Static_Obs.csv` | Waypoint reach results |
+| `T4_Nav_Dynamic_Obs.csv` | Waypoint reach results |
+| `SLAM_Nav_Benchmark.xlsx` | Formatted Excel workbook (requires openpyxl) |
+
+### Pass criteria
+
+| Test | Metric | Threshold |
+|---|---|---|
+| T1 | LCE < 0.15 m AND Δθ < 5° | > 4/5 trials pass |
+| T2 | Waypoint within 0.1 m | > 8/10 waypoints |
+| T3 | Waypoint within 0.1 m | > 6/10 waypoints |
+| T4 | Waypoint within 0.1 m | > 6/10 waypoints |
