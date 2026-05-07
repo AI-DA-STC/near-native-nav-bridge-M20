@@ -242,7 +242,7 @@ private:
 };
 
 struct Config {
-    std::string robot_ip = "10.21.31.103";
+    std::string robot_ip = "192.168.8.101";
     std::vector<std::string> args;
 };
 

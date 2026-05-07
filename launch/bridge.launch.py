@@ -15,7 +15,7 @@ def _launch(context, *args, **kwargs):
 
 def generate_launch_description():
     return LaunchDescription([
-        DeclareLaunchArgument("robot_ip", default_value="10.21.31.103",
+        DeclareLaunchArgument("robot_ip", default_value="192.168.8.101",
                               description="Robot IP address"),
         DeclareLaunchArgument("queue", default_value="false",
                               description="true = queue mode (collect goals, execute on ENTER)"),

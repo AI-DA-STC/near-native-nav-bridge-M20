@@ -1,3 +1,3 @@
-[submodule "external/lightning-lm"]
-	path = external/lightning-lm
-	url = https://github.com/gaoxiang12/lightning-lm.git
+[submodule "external/topic_tools"]
+	path = external/topic_tools
+	url = https://github.com/ros-tooling/topic_tools.git

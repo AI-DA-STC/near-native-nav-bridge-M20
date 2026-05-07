@@ -15,11 +15,11 @@ Setup guide for running multiple DeepRobotics M20 robots on a shared network wit
 |----------------|-----------|-----------------|
 | Router         | —         | 192.168.8.1     |
 | Laptop         | wlan0     | 192.168.8.10    |
-| Robot 1 (AOS)  | p2p0      | 192.168.8.101   |
-| Robot 2 (AOS)  | p2p0      | 192.168.8.102   |
+| Robot 741 (AOS)  | p2p0      | 192.168.8.101   |
+| Robot 738 (AOS)  | p2p0      | 192.168.8.102   |
 | Robot 3 (AOS)  | p2p0      | 192.168.8.103   |
 
-All devices use `ROS_DOMAIN_ID=10`.
+All devices use `ROS_DOMAIN_ID=0`.
 
 ---
 

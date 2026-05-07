@@ -14,6 +14,7 @@ find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(nav_msgs REQUIRED)
+find_package(sensor_msgs REQUIRED)
 
 include_directories(include)
 
@@ -24,7 +25,24 @@ ament_target_dependencies(nav_cmd_bridge
   nav_msgs
 )
 
-install(TARGETS nav_cmd_bridge
+add_executable(odom_relay src/odom_relay_node.cpp)
+ament_target_dependencies(odom_relay rclcpp nav_msgs)
+
+add_executable(pointcloud_relay src/pointcloud_relay_node.cpp)
+ament_target_dependencies(pointcloud_relay rclcpp sensor_msgs)
+
+add_executable(occupancygrid_relay src/occupancygrid_relay_node.cpp)
+ament_target_dependencies(occupancygrid_relay rclcpp nav_msgs)
+
+add_executable(posestamped_relay src/posestamped_relay_node.cpp)
+ament_target_dependencies(posestamped_relay rclcpp geometry_msgs)
+
+install(TARGETS
+  nav_cmd_bridge
+  odom_relay
+  pointcloud_relay
+  occupancygrid_relay
+  posestamped_relay
   DESTINATION lib/${PROJECT_NAME}
 )
 
