@@ -349,6 +349,12 @@ int main(int argc, char* argv[]) {
         listenResponses(3);
     }
 
+    else if (cmd == "standup") {
+        sendUDP(R"({"PatrolDevice":{"Type":2,"Command":2,"Time":"2025-01-01 00:00:00","Items":{"MotionParam":1}}})");
+        printf("standup sent\n");
+        listenResponses(3);
+    }
+
     else if (cmd == "cancel") {
         sendUDP(R"({"PatrolDevice":{"Type":1004,"Command":1,"Time":"2025-01-01 00:00:00","Items":{}}})");
         printf("cancel sent\n");
@@ -357,7 +363,7 @@ int main(int argc, char* argv[]) {
 
     else {
         printf("Unknown command: %s\n", cmd.c_str());
-        printf("Commands: nav, patrol, bridge, bridge queue, estop, cancel\n");
+        printf("Commands: nav, patrol, bridge, bridge queue, estop, cancel, standup\n");
         printf("Flags:    --ip <addr>  (default 10.21.31.103)\n");
         close(g_fd); return 1;
     }

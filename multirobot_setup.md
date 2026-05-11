@@ -118,14 +118,14 @@ EOF
 
 ```bash
 export FASTRTPS_DEFAULT_PROFILES_FILE=~/fastdds_profile.xml
-export ROS_DOMAIN_ID=10
+export ROS_DOMAIN_ID=0
 ```
 
 To make this persist across reboots, add to `~/.bashrc`:
 
 ```bash
 echo 'export FASTRTPS_DEFAULT_PROFILES_FILE=~/fastdds_profile.xml' >> ~/.bashrc
-echo 'export ROS_DOMAIN_ID=10' >> ~/.bashrc
+echo 'export ROS_DOMAIN_ID=0' >> ~/.bashrc
 ```
 
 **Test:** Publish a dummy topic to verify everything is running:
@@ -344,3 +344,27 @@ ros2 topic list
 
 ---
 
+
+
+On the robot side 
+
+export ROS_DOMAIN_ID=0
+export FASTRTPS_DEFAULT_PROFILES_FILE=/home/user/fastdds_profile.xml
+source install/setup.bash
+ros2 launch nav_cmd_bridge relays.launch.py
+
+
+On the laptop side
+export ROS_DOMAIN_ID=0
+export FASTRTPS_DEFAULT_PROFILES_FILE=/root/ros2_ws/src/nav_cmd_bridge/.devcontainer/fastdds_profile.xml
+cd ~/ros2_ws
+source install/setup.bash
+
+in one terminal run the following
+ros2 run nav_cmd_bridge tfmessage_relay --ros-args -p input_topic:=/tf_relayed -p output_topic:=/tf &
+ros2 run nav_cmd_bridge tfmessage_relay --ros-args \
+  -p input_topic:=/tf_static_relayed -p output_topic:=/tf_static \
+  -p durability:=transient_local &
+
+in another terminal run the above exports, then 
+rviz2 
