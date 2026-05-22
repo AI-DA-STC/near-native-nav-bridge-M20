@@ -155,6 +155,12 @@ static bool waitForArrival(double gx, double gy, int timeout_sec = 120) {
 
 static void executeWaypoint(int num, int total, double gx, double gy, double gyaw) {
     printf("\n[WP %d/%d] x=%.4f y=%.4f yaw=%.1fdeg\n", num, total, gx, gy, gyaw * 180.0 / M_PI);
+
+    sendUDP(R"({"PatrolDevice":{"Type":100,"Command":100,"Time":"2025-01-01 00:00:00","Items":{}}})");
+    usleep(300000);
+    sendUDP(R"({"PatrolDevice":{"Type":1101,"Command":5,"Time":"2025-01-01 00:00:00","Items":{"Mode":1}}})");
+    usleep(1000000);
+
     char buf[BUFFER_SIZE];
     snprintf(buf, sizeof(buf),
         R"({"PatrolDevice":{"Type":1003,"Command":1,"Time":"2025-01-01 00:00:00","Items":{"Value":%d,"MapID":0,"PosX":%.6f,"PosY":%.6f,"PosZ":0.0,"AngleYaw":%.6f,"PointInfo":1,"Gait":12290,"Speed":1,"Manner":0,"ObsMode":0,"NavMode":1}}})",
@@ -178,7 +184,7 @@ public:
         goal_sub_ = create_subscription<geometry_msgs::msg::PoseStamped>(
             "/goal_pose", 10, std::bind(&GoalBridge::goalCb, this, std::placeholders::_1));
         odom_sub_ = create_subscription<nav_msgs::msg::Odometry>(
-            "/ODOM", 10, std::bind(&GoalBridge::odomCb, this, std::placeholders::_1));
+            "/ODOM_relayed", 10, std::bind(&GoalBridge::odomCb, this, std::placeholders::_1));
         if (queue_mode_) {
             RCLCPP_INFO(get_logger(), "Queue mode — draw arrows in RViz2, then press ENTER");
             std::thread([this]() {
@@ -315,7 +321,7 @@ int main(int argc, char* argv[]) {
         rclcpp::init(argc, argv);
         auto node = std::make_shared<rclcpp::Node>("patrol_node");
         auto odom_sub = node->create_subscription<nav_msgs::msg::Odometry>(
-            "/ODOM", 10,
+            "/ODOM_relayed", 10,
             [](const nav_msgs::msg::Odometry::SharedPtr msg) {
                 std::lock_guard<std::mutex> lk(g_pos_mutex);
                 g_cur_x   = msg->pose.pose.position.x;

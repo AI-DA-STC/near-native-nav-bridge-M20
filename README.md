@@ -35,7 +35,12 @@ ros2 run nav_cmd_bridge nav_cmd_bridge cancel
 
 # Override robot IP
 ros2 run nav_cmd_bridge nav_cmd_bridge bridge --ip 192.168.8.101
+
+# to stand up
+ros2 run nav_cmd_bridge nav_cmd_bridge standup
+
 ```
+
 
 ## Bridge — launch file
 

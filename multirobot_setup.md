@@ -17,7 +17,7 @@ Setup guide for running multiple DeepRobotics M20 robots on a shared network wit
 | Laptop         | wlan0     | 192.168.8.10    |
 | Robot 741 (AOS)  | p2p0      | 192.168.8.101   |
 | Robot 738 (AOS)  | p2p0      | 192.168.8.102   |
-| Robot 3 (AOS)  | p2p0      | 192.168.8.103   |
+| Robot 665 (AOS)  | p2p0      | 192.168.8.103   | 
 
 All devices use `ROS_DOMAIN_ID=0`.
 
@@ -46,14 +46,7 @@ nmcli d wifi list
 Connect using the BSSID if the SSID has special characters or spaces:
 
 ```bash
-# Option A: connect by SSID
-sudo nmcli d wifi connect "SSID" password "enter_password" ifname wlan0
-
-# Option B: connect by BSSID (if SSID fails with "No network found")
-sudo nmcli d wifi connect <BSSID> password "enter_password" ifname wlan0
-
-# Option C: use p2p0 if wlan0 won't release AP mode
-sudo nmcli d wifi connect "SSID" password "enter_password" ifname p2p0
+sudo nmcli d wifi connect "near-robots-2.4G" password "enter_password" ifname p2p0
 ```
 
 **Test:** Verify the connection:
@@ -68,10 +61,10 @@ nmcli con show --active
 Replace `192.168.8.101` with the IP for this specific robot.
 
 ```bash
-sudo nmcli con modify "SSID" ipv4.addresses 192.168.8.101/24
-sudo nmcli con modify "SSID" ipv4.gateway 192.168.8.1
-sudo nmcli con modify "SSID" ipv4.method manual
-sudo nmcli con up "SSID"
+sudo nmcli con modify "near-robots-2.4G" ipv4.addresses 192.168.8.101/24
+sudo nmcli con modify "near-robots-2.4G" ipv4.gateway 192.168.8.1
+sudo nmcli con modify "near-robots-2.4G" ipv4.method manual
+sudo nmcli con up "near-robots-2.4G"
 ```
 
 If the connection name doesn't match the SSID, find it with `nmcli con show` and use the exact `NAME` value (in quotes) or the `UUID`.
@@ -96,19 +89,27 @@ cat > ~/fastdds_profile.xml << 'EOF'
       <transport_id>custom_udp</transport_id>
       <type>UDPv4</type>
       <interfaceWhiteList>
-        <address>192.168.8.101</address>
+        <address>127.0.0.1</address>
+        <address>10.21.31.103</address>     <!-- eth3: to NOS -->
+        <address>192.168.8.101</address>    <!-- p2p0: to laptop -->
       </interfaceWhiteList>
+    </transport_descriptor>
+    <transport_descriptor>
+      <transport_id>custom_shm</transport_id>
+      <type>SHM</type>
     </transport_descriptor>
   </transport_descriptors>
   <participant profile_name="default_profile" is_default_profile="true">
     <rtps>
       <userTransports>
+        <transport_id>custom_shm</transport_id>
         <transport_id>custom_udp</transport_id>
       </userTransports>
       <useBuiltinTransports>false</useBuiltinTransports>
     </rtps>
   </participant>
 </profiles>
+
 EOF
 ```
 
@@ -143,16 +144,16 @@ ros2 topic pub /test_robot1 std_msgs/msg/String "data: 'hello from robot 1'" --o
 Connect your laptop to the `SSID` WiFi network, then assign a static IP:
 
 ```bash
-sudo nmcli con modify "SSID" ipv4.addresses 192.168.8.10/24
-sudo nmcli con modify "SSID" ipv4.gateway 192.168.8.1
-sudo nmcli con modify "SSID" ipv4.method manual
-sudo nmcli con up "SSID"
+sudo nmcli con modify "near-robots-2.4G" ipv4.addresses 192.168.8.10/24
+sudo nmcli con modify "near-robots-2.4G" ipv4.gateway 192.168.8.1
+sudo nmcli con modify "near-robots-2.4G" ipv4.method manual
+sudo nmcli con up "near-robots-2.4G"
 ```
 
 **Test:** Verify the IP:
 
 ```bash
-ifconfig wlan0
+ifconfig wlp131s0f0
 # Should show inet 192.168.8.10
 ```
 
@@ -267,8 +268,8 @@ docker run --network=host -it \
 ### 2.7 Export environment variables inside the container
 
 ```bash
-export ROS_DOMAIN_ID=10
-export FASTRTPS_DEFAULT_PROFILES_FILE=/root/ros2_ws/src/nav_cmd_bridge/config/fastdds_profile.xml
+export ROS_DOMAIN_ID=0
+export FASTRTPS_DEFAULT_PROFILES_FILE=/root/ros2_ws/src/nav_cmd_bridge/fastdds_profile.xml
 ```
 
 To make this automatic, add to the Dockerfile:
@@ -351,20 +352,21 @@ On the robot side
 export ROS_DOMAIN_ID=0
 export FASTRTPS_DEFAULT_PROFILES_FILE=/home/user/fastdds_profile.xml
 source install/setup.bash
+cd workspace/ros2_ws
 ros2 launch nav_cmd_bridge relays.launch.py
 
 
 On the laptop side
 export ROS_DOMAIN_ID=0
-export FASTRTPS_DEFAULT_PROFILES_FILE=/root/ros2_ws/src/nav_cmd_bridge/.devcontainer/fastdds_profile.xml
+export FASTRTPS_DEFAULT_PROFILES_FILE=/root/ros2_ws/src/nav_cmd_bridge/fastdds_profile.xml
 cd ~/ros2_ws
 source install/setup.bash
-
-in one terminal run the following
 ros2 run nav_cmd_bridge tfmessage_relay --ros-args -p input_topic:=/tf_relayed -p output_topic:=/tf &
 ros2 run nav_cmd_bridge tfmessage_relay --ros-args \
   -p input_topic:=/tf_static_relayed -p output_topic:=/tf_static \
   -p durability:=transient_local &
 
 in another terminal run the above exports, then 
-rviz2 
+rviz2 &
+
+ros2 run nav_cmd_bridge nav_cmd_bridge --ip 192.168.8.103 bridge
