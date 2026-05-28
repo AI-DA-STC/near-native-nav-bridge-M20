@@ -22,6 +22,9 @@ ros2 run nav_cmd_bridge nav_cmd_bridge nav <x> <y> [yaw_rad]
 
 # Multiple waypoints in sequence
 ros2 run nav_cmd_bridge nav_cmd_bridge patrol <x,y,yaw> <x,y,yaw> ...
+#preprogrammed waypoints for demo
+ros2 run nav_cmd_bridge nav_cmd_bridge patrol --ip 192.168.8.103 -3.20162,-3.81141,-0.0404694 -1.72499,-3.88239,0.0412739 0.200177,-1.78368,0.00477056
+
 
 # RViz2 bridge — draw a 2D Goal Pose arrow to navigate immediately
 ros2 run nav_cmd_bridge nav_cmd_bridge bridge

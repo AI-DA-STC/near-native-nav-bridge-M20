@@ -351,8 +351,8 @@ On the robot side
 
 export ROS_DOMAIN_ID=0
 export FASTRTPS_DEFAULT_PROFILES_FILE=/home/user/fastdds_profile.xml
-source install/setup.bash
 cd workspace/ros2_ws
+source install/setup.bash
 ros2 launch nav_cmd_bridge relays.launch.py
 
 
@@ -370,3 +370,4 @@ in another terminal run the above exports, then
 rviz2 &
 
 ros2 run nav_cmd_bridge nav_cmd_bridge --ip 192.168.8.103 bridge
+ros2 run nav_cmd_bridge nav_cmd_bridge patrol --ip 192.168.8.103 -3.20162,-3.81141,-0.0404694 -1.72499,-3.88239,0.0412739 0.200177,-1.78368,0.00477056
