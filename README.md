@@ -1,6 +1,6 @@
 # nav_cmd_bridge
 
-Navigation command bridge for DeepRobotics M20 Pro. Sends waypoints over UDP and subscribes to `/ODOM` for position tracking. Supports RViz2-driven navigation and structured benchmark testing (T1–T4).
+Navigation command bridge for DeepRobotics M20 Pro. Sends waypoints over UDP and subscribes to `ODOM_relayed` for position tracking. Supports RViz2-driven navigation, multi-robot fleets (per-robot ROS namespaces, shared `map` frame, prefixed TF), and structured benchmark testing (T1–T4).
 
 ## Building
 
@@ -20,17 +20,24 @@ The C++ node handles navigation commands. All commands accept `--ip <addr>` to o
 # Single waypoint
 ros2 run nav_cmd_bridge nav_cmd_bridge nav <x> <y> [yaw_rad]
 
-# Multiple waypoints in sequence
-ros2 run nav_cmd_bridge nav_cmd_bridge patrol <x,y,yaw> <x,y,yaw> ...
-#preprogrammed waypoints for demo
-ros2 run nav_cmd_bridge nav_cmd_bridge patrol --ip 192.168.8.103 -3.20162,-3.81141,-0.0404694 -1.72499,-3.88239,0.0412739 0.200177,-1.78368,0.00477056
+# Multiple waypoints in sequence (single robot — must be run inside a namespace
+# so /ODOM_relayed resolves to /<robot_name>/ODOM_relayed)
+ros2 run nav_cmd_bridge nav_cmd_bridge patrol <x,y,yaw> <x,y,yaw> ... \
+    --ip <robot_ip> --ros-args -r __ns:=/<robot_name>
 
+# preprogrammed waypoints for demo (robot_665)
+ros2 run nav_cmd_bridge nav_cmd_bridge patrol --ip 192.168.8.103 \
+    -3.20162,-3.81141,-0.0404694 -1.72499,-3.88239,0.0412739 0.200177,-1.78368,0.00477056 \
+    --ros-args -r __ns:=/robot_665
 
 # RViz2 bridge — draw a 2D Goal Pose arrow to navigate immediately
-ros2 run nav_cmd_bridge nav_cmd_bridge bridge
+# (the launch files below are usually easier; this is the raw form)
+ros2 run nav_cmd_bridge nav_cmd_bridge bridge \
+    --ip <robot_ip> --ros-args -r __ns:=/<robot_name>
 
-# RViz2 bridge — queue mode: collect arrows, execute all on ENTER
-ros2 run nav_cmd_bridge nav_cmd_bridge bridge queue
+# RViz2 bridge — queue mode
+ros2 run nav_cmd_bridge nav_cmd_bridge bridge queue \
+    --ip <robot_ip> --ros-args -r __ns:=/<robot_name>
 
 # Robot commands
 ros2 run nav_cmd_bridge nav_cmd_bridge estop
@@ -47,16 +54,51 @@ ros2 run nav_cmd_bridge nav_cmd_bridge standup
 
 ## Bridge — launch file
 
+All bridge launches put nodes under a per-robot namespace (`/<robot_name>/...`).
+RViz must publish goals to `/<robot_name>/goal_pose` to target a specific robot.
+
+### Single robot
+
 ```bash
-# Immediate mode (default)
+# Defaults: robot_name=robot_741, robot_ip=192.168.8.101
 ros2 launch nav_cmd_bridge bridge.launch.py
 
 # Queue mode
 ros2 launch nav_cmd_bridge bridge.launch.py queue:=true
 
-# Custom robot IP
-ros2 launch nav_cmd_bridge bridge.launch.py robot_ip:=192.168.8.101
+# Specify a different robot
+ros2 launch nav_cmd_bridge bridge.launch.py \
+    robot_name:=robot_665 robot_ip:=192.168.8.103
 ```
+
+### Multi-robot
+
+```bash
+# Default fleet (defined in launch/multirobot.launch.py)
+ros2 launch nav_cmd_bridge multirobot.launch.py
+
+# Custom fleet — comma-separated name:ip pairs
+ros2 launch nav_cmd_bridge multirobot.launch.py \
+    robots:=robot_741:192.168.8.101,robot_738:192.168.8.102,robot_665:192.168.8.103
+
+# Queue mode applied to every robot in the fleet
+ros2 launch nav_cmd_bridge multirobot.launch.py queue:=true
+```
+
+The multirobot launch spawns per-robot tf fan-in relays plus a namespaced
+`nav_cmd_bridge` bridge for each robot. The robots already publish frame-
+prefixed TF (see [multirobot_setup.md](multirobot_setup.md)), so all robots
+share a single `map` frame and RViz sees:
+
+```
+map
+├── robot_741/odom -> robot_741/base_link
+├── robot_738/odom -> robot_738/base_link
+└── robot_665/odom -> robot_665/base_link
+```
+
+To send a goal in RViz, set the 2D Goal Pose tool's topic to
+`/<robot_name>/goal_pose` (right-click the tool or edit the panel config).
 
 ## Benchmark tests
 

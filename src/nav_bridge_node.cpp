@@ -181,10 +181,12 @@ public:
         heartbeat_timer_ = create_wall_timer(std::chrono::seconds(1), [this]() {
             sendUDP(R"({"PatrolDevice":{"Type":100,"Command":100,"Time":"2025-01-01 00:00:00","Items":{}}})");
         });
+        // Relative topics: resolved against the node's namespace so a single binary
+        // run as /robot_741/goal_bridge subscribes to /robot_741/{goal_pose,ODOM_relayed}.
         goal_sub_ = create_subscription<geometry_msgs::msg::PoseStamped>(
-            "/goal_pose", 10, std::bind(&GoalBridge::goalCb, this, std::placeholders::_1));
+            "goal_pose", 10, std::bind(&GoalBridge::goalCb, this, std::placeholders::_1));
         odom_sub_ = create_subscription<nav_msgs::msg::Odometry>(
-            "/ODOM_relayed", 10, std::bind(&GoalBridge::odomCb, this, std::placeholders::_1));
+            "ODOM_relayed", 10, std::bind(&GoalBridge::odomCb, this, std::placeholders::_1));
         if (queue_mode_) {
             RCLCPP_INFO(get_logger(), "Queue mode — draw arrows in RViz2, then press ENTER");
             std::thread([this]() {
@@ -320,8 +322,9 @@ int main(int argc, char* argv[]) {
 
         rclcpp::init(argc, argv);
         auto node = std::make_shared<rclcpp::Node>("patrol_node");
+        // Relative topic — namespace (e.g. /robot_741) applied via --ros-args -r __ns:=...
         auto odom_sub = node->create_subscription<nav_msgs::msg::Odometry>(
-            "/ODOM_relayed", 10,
+            "ODOM_relayed", 10,
             [](const nav_msgs::msg::Odometry::SharedPtr msg) {
                 std::lock_guard<std::mutex> lk(g_pos_mutex);
                 g_cur_x   = msg->pose.pose.position.x;

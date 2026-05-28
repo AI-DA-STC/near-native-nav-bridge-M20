@@ -347,27 +347,85 @@ ros2 topic list
 
 
 
-On the robot side 
+## Part 4 — Running the multi-robot navigation stack
 
+Each robot must run `relays.launch.py` with a unique `robot_name`. The laptop
+runs a single `multirobot.launch.py` that brings up tf fan-in relays and a
+namespaced `nav_cmd_bridge` for every robot in the fleet.
+
+The TF frame layout the laptop sees is:
+
+```
+map
+├── robot_741/odom -> robot_741/base_link
+├── robot_738/odom -> robot_738/base_link
+└── robot_665/odom -> robot_665/base_link
+```
+
+`map` is shared; each robot's own localizer publishes onto it. All other
+frames are prefixed by the robot's namespace.
+
+### 4.1 Robot side (run on each robot)
+
+Use a different `robot_name` per robot — these become the ROS namespace and
+the TF prefix.
+
+```bash
+# Robot 741 (192.168.8.101)
 export ROS_DOMAIN_ID=0
 export FASTRTPS_DEFAULT_PROFILES_FILE=/home/user/fastdds_profile.xml
 cd workspace/ros2_ws
 source install/setup.bash
-ros2 launch nav_cmd_bridge relays.launch.py
+ros2 launch nav_cmd_bridge relays.launch.py robot_name:=robot_741
 
+# Robot 738 — same command, robot_name:=robot_738
+# Robot 665 — same command, robot_name:=robot_665
+```
 
-On the laptop side
+### 4.2 Laptop side
+
+```bash
 export ROS_DOMAIN_ID=0
 export FASTRTPS_DEFAULT_PROFILES_FILE=/root/ros2_ws/src/nav_cmd_bridge/fastdds_profile.xml
 cd ~/ros2_ws
 source install/setup.bash
-ros2 run nav_cmd_bridge tfmessage_relay --ros-args -p input_topic:=/tf_relayed -p output_topic:=/tf &
-ros2 run nav_cmd_bridge tfmessage_relay --ros-args \
-  -p input_topic:=/tf_static_relayed -p output_topic:=/tf_static \
-  -p durability:=transient_local &
 
-in another terminal run the above exports, then 
-rviz2 &
+# Brings up all per-robot tf fan-ins + bridges in one shot.
+# The default fleet is defined in launch/multirobot.launch.py.
+ros2 launch nav_cmd_bridge multirobot.launch.py
 
-ros2 run nav_cmd_bridge nav_cmd_bridge --ip 192.168.8.103 bridge
-ros2 run nav_cmd_bridge nav_cmd_bridge patrol --ip 192.168.8.103 -3.20162,-3.81141,-0.0404694 -1.72499,-3.88239,0.0412739 0.200177,-1.78368,0.00477056
+# Or a custom subset:
+ros2 launch nav_cmd_bridge multirobot.launch.py \
+    robots:=robot_741:192.168.8.101,robot_665:192.168.8.103
+```
+
+In a separate terminal (after running the same exports), launch RViz:
+
+```bash
+rviz2
+```
+
+In RViz, set the Fixed Frame to `map`. To send a goal to a specific robot,
+either:
+
+* Add one 2D Goal Pose tool per robot in the RViz toolbar, each with its
+  topic set to `/<robot_name>/goal_pose`, or
+* Right-click the 2D Goal Pose tool and change its topic between robots.
+
+### 4.3 Single robot (subset of the multi-robot setup)
+
+```bash
+ros2 launch nav_cmd_bridge bridge.launch.py \
+    robot_name:=robot_665 robot_ip:=192.168.8.103
+```
+
+### 4.4 Patrol mode (preprogrammed waypoints)
+
+`patrol` must run inside the robot's namespace so `/ODOM_relayed` resolves
+to `/<robot_name>/ODOM_relayed`:
+
+```bash
+ros2 run nav_cmd_bridge nav_cmd_bridge patrol --ip 192.168.8.103 \
+    -3.20162,-3.81141,-0.0404694 -1.72499,-3.88239,0.0412739 0.200177,-1.78368,0.00477056 \
+    --ros-args -r __ns:=/robot_665
+```

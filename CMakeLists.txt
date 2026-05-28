@@ -45,6 +45,9 @@ ament_target_dependencies(odom_to_pose_relay_field rclcpp nav_msgs geometry_msgs
 add_executable(tfmessage_relay src/tfmessage_relay_node.cpp)
 ament_target_dependencies(tfmessage_relay rclcpp tf2_msgs)
 
+add_executable(tfmessage_prefix_relay src/tfmessage_prefix_relay_node.cpp)
+ament_target_dependencies(tfmessage_prefix_relay rclcpp tf2_msgs)
+
 add_executable(path_relay src/path_relay_node.cpp)
 ament_target_dependencies(path_relay rclcpp nav_msgs)
 
@@ -68,6 +71,7 @@ install(TARGETS
   posestamped_relay
   odom_to_pose_relay_field
   tfmessage_relay
+  tfmessage_prefix_relay
   path_relay
   imu_relay
   posewithcov_relay
