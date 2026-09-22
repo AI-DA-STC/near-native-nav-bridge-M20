@@ -1,0 +1,5 @@
+services:
+  nav_cmd_bridge:
+    image: m20-bridge:foxy
+    network_mode: host
+    command: bash -c "source install/setup.bash && tail -f /dev/null"

@@ -1,0 +1,23 @@
+FROM ros:foxy-ros-base
+
+RUN apt-get update && apt-get install -y \
+    python3-pip \
+    python3-colcon-common-extensions \
+    python3-rosdep \
+    git \
+    curl \
+    libjsoncpp-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt /tmp/requirements.txt
+RUN pip3 install --no-cache-dir -r /tmp/requirements.txt
+
+COPY . /root/ros2_ws/src/nav_cmd_bridge
+
+WORKDIR /root/ros2_ws
+RUN /bin/bash -c "source /opt/ros/foxy/setup.bash && colcon build"
+
+RUN echo "source /opt/ros/foxy/setup.bash" >> /root/.bashrc && \
+    echo "source /root/ros2_ws/install/setup.bash" >> /root/.bashrc
+
+CMD ["bash"]
