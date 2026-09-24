@@ -32,6 +32,13 @@ static std::mutex g_pos_mutex;
 static std::queue<Waypoint> g_wp_queue;
 static std::mutex g_queue_mutex;
 
+// Must match the suffix relays.launch.py applies on the robot, so export the same
+// ROBOT_ID on both machines. Unset on both sides gives the single-robot name.
+static std::string perRobot(const std::string& name) {
+    const char* id = std::getenv("ROBOT_ID");
+    return (id && *id) ? name + "_" + id : name;
+}
+
 static const char* navErrorStr(int c) {
     switch (c) {
         case 0:      return "OK";
@@ -142,7 +149,7 @@ static bool waitForArrival(double gx, double gy, int timeout_sec = 120) {
         double cx, cy;
         {
             std::lock_guard<std::mutex> lk(g_pos_mutex);
-            if (!g_pos_valid) { printf("[NAV] Waiting for ODOM... %ds\n", t + 1); continue; }
+            if (!g_pos_valid) { printf("[NAV] Waiting for %s... %ds\n", perRobot("/ODOM_relayed").c_str(), t + 1); continue; }
             cx = g_cur_x; cy = g_cur_y;
         }
         double dist = std::sqrt((cx - gx) * (cx - gx) + (cy - gy) * (cy - gy));
@@ -177,14 +184,15 @@ static void executeWaypoint(int num, int total, double gx, double gy, double gya
 
 class GoalBridge : public rclcpp::Node {
 public:
-    GoalBridge(bool queue_mode) : Node("goal_bridge"), wp_count_(0), queue_mode_(queue_mode) {
+    GoalBridge(bool queue_mode) : Node(perRobot("goal_bridge")), wp_count_(0), queue_mode_(queue_mode) {
         heartbeat_timer_ = create_wall_timer(std::chrono::seconds(1), [this]() {
             sendUDP(R"({"PatrolDevice":{"Type":100,"Command":100,"Time":"2025-01-01 00:00:00","Items":{}}})");
         });
         goal_sub_ = create_subscription<geometry_msgs::msg::PoseStamped>(
-            "/goal_pose", 10, std::bind(&GoalBridge::goalCb, this, std::placeholders::_1));
+            perRobot("/goal_pose"), 10, std::bind(&GoalBridge::goalCb, this, std::placeholders::_1));
         odom_sub_ = create_subscription<nav_msgs::msg::Odometry>(
-            "/ODOM_relayed", 10, std::bind(&GoalBridge::odomCb, this, std::placeholders::_1));
+            perRobot("/ODOM_relayed"), 10, std::bind(&GoalBridge::odomCb, this, std::placeholders::_1));
+        RCLCPP_INFO(get_logger(), "Goals on %s", goal_sub_->get_topic_name());
         if (queue_mode_) {
             RCLCPP_INFO(get_logger(), "Queue mode — draw arrows in RViz2, then press ENTER");
             std::thread([this]() {
@@ -319,9 +327,9 @@ int main(int argc, char* argv[]) {
         }
 
         rclcpp::init(argc, argv);
-        auto node = std::make_shared<rclcpp::Node>("patrol_node");
+        auto node = std::make_shared<rclcpp::Node>(perRobot("patrol_node"));
         auto odom_sub = node->create_subscription<nav_msgs::msg::Odometry>(
-            "/ODOM_relayed", 10,
+            perRobot("/ODOM_relayed"), 10,
             [](const nav_msgs::msg::Odometry::SharedPtr msg) {
                 std::lock_guard<std::mutex> lk(g_pos_mutex);
                 g_cur_x   = msg->pose.pose.position.x;

@@ -22,6 +22,10 @@
   "source=${localWorkspaceFolder},target=/root/ros2_ws/src/nav_cmd_bridge,type=bind"
   ],
   "runArgs": ["--network=host"],
+  "initializeCommand": "xhost +SI:localuser:root || true",
+  "containerEnv": {
+    "QT_X11_NO_MITSHM": "1"
+  },
   "workspaceFolder": "/root/ros2_ws/src/nav_cmd_bridge",
   "postCreateCommand": "rosdep update"
 }
