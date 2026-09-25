@@ -5,16 +5,16 @@
 #include <cstring>
 #include <cstdio>
 #include <cstdlib>
+#include <iostream>
 #include <string>
-#include <sstream>
 #include <vector>
-#include <queue>
 #include <mutex>
 #include <thread>
 
 #include "rclcpp/rclcpp.hpp"
 #include "geometry_msgs/msg/pose_stamped.hpp"
 #include "nav_msgs/msg/odometry.hpp"
+#include "visualization_msgs/msg/marker_array.hpp"
 
 #include "nav_cmd_bridge/nav_bridge.hpp"
 
@@ -29,8 +29,6 @@ static unsigned short g_msg_id = 0;
 static double g_cur_x = 0, g_cur_y = 0, g_cur_yaw = 0;
 static bool g_pos_valid = false;
 static std::mutex g_pos_mutex;
-static std::queue<Waypoint> g_wp_queue;
-static std::mutex g_queue_mutex;
 
 // Must match the suffix relays.launch.py applies on the robot, so export the same
 // ROBOT_ID on both machines. Unset on both sides gives the single-robot name.
@@ -73,15 +71,13 @@ static double quatToYaw(double x, double y, double z, double w) {
     return std::atan2(2.0 * (w * z + x * y), 1.0 - 2.0 * (y * y + z * z));
 }
 
-static bool parseWaypoint(const std::string& s, Waypoint& wp) {
-    std::stringstream ss(s);
-    std::string tok;
-    std::vector<double> v;
-    while (std::getline(ss, tok, ','))
-        v.push_back(std::atof(tok.c_str()));
-    if (v.size() < 2) return false;
-    wp.x = v[0]; wp.y = v[1]; wp.yaw = v.size() >= 3 ? v[2] : 0.0;
-    return true;
+static void storeOdom(const nav_msgs::msg::Odometry::SharedPtr msg) {
+    std::lock_guard<std::mutex> lk(g_pos_mutex);
+    g_cur_x   = msg->pose.pose.position.x;
+    g_cur_y   = msg->pose.pose.position.y;
+    g_cur_yaw = quatToYaw(msg->pose.pose.orientation.x, msg->pose.pose.orientation.y,
+                          msg->pose.pose.orientation.z, msg->pose.pose.orientation.w);
+    g_pos_valid = true;
 }
 
 static int sendUDP(const char* json) {
@@ -182,53 +178,102 @@ static void executeWaypoint(int num, int total, double gx, double gy, double gya
     printf("[WP %d/%d] %s — actual x=%.4f y=%.4f\n", num, total, arrived ? "ARRIVED" : "TIMEOUT", ax, ay);
 }
 
+// Immediate: each arrow is driven to at once. Queue: arrows are collected and
+// driven once on ENTER. Patrol: arrows are collected and looped on ENTER until Ctrl+C.
+enum class Mode { Immediate, Queue, Patrol };
+
 class GoalBridge : public rclcpp::Node {
 public:
-    GoalBridge(bool queue_mode) : Node(perRobot("goal_bridge")), wp_count_(0), queue_mode_(queue_mode) {
+    GoalBridge(Mode mode) : Node(perRobot("goal_bridge")), mode_(mode) {
         heartbeat_timer_ = create_wall_timer(std::chrono::seconds(1), [this]() {
             sendUDP(R"({"PatrolDevice":{"Type":100,"Command":100,"Time":"2025-01-01 00:00:00","Items":{}}})");
+            publishMarkers();  // re-sent so a MarkerArray display added later still shows the route
         });
         goal_sub_ = create_subscription<geometry_msgs::msg::PoseStamped>(
             perRobot("/goal_pose"), 10, std::bind(&GoalBridge::goalCb, this, std::placeholders::_1));
-        odom_sub_ = create_subscription<nav_msgs::msg::Odometry>(
-            perRobot("/ODOM_relayed"), 10, std::bind(&GoalBridge::odomCb, this, std::placeholders::_1));
-        RCLCPP_INFO(get_logger(), "Goals on %s", goal_sub_->get_topic_name());
-        if (queue_mode_) {
+        odom_sub_ = create_subscription<nav_msgs::msg::Odometry>(perRobot("/ODOM_relayed"), 10, storeOdom);
+        marker_pub_ = create_publisher<visualization_msgs::msg::MarkerArray>(perRobot("/waypoint_markers"), 10);
+        RCLCPP_INFO(get_logger(), "Goals on %s, waypoint arrows on %s",
+                    goal_sub_->get_topic_name(), marker_pub_->get_topic_name());
+        if (mode_ == Mode::Queue)
             RCLCPP_INFO(get_logger(), "Queue mode — draw arrows in RViz2, then press ENTER");
-            std::thread([this]() {
-                printf("\n>>> Draw arrows in RViz2, press ENTER to execute <<<\n\n");
-                std::cin.get();
-                executeQueue();
-            }).detach();
-        } else {
+        else if (mode_ == Mode::Patrol)
+            RCLCPP_INFO(get_logger(), "Patrol mode — draw arrows in RViz2, press ENTER to loop them until Ctrl+C");
+        else
             RCLCPP_INFO(get_logger(), "Bridge mode — draw arrow in RViz2 to navigate");
+    }
+
+    // Queue/patrol only; blocks on stdin, so run it on its own thread.
+    void runRoute() {
+        const bool patrol = mode_ == Mode::Patrol;
+        const size_t min_wps = patrol ? 2 : 1;
+        std::string line;
+        while (rclcpp::ok()) {
+            printf("\n>>> Draw arrows in RViz2, press ENTER to %s <<<\n\n", patrol ? "start patrol" : "execute");
+            if (!std::getline(std::cin, line)) return;
+            std::vector<Waypoint> wps;
+            {
+                std::lock_guard<std::mutex> lk(wps_mutex_);
+                if (wps_.size() < min_wps) {
+                    printf("[BRIDGE] Need at least %zu waypoint(s), have %zu\n", min_wps, wps_.size());
+                    continue;
+                }
+                wps = wps_;
+                running_ = true;
+            }
+            int total = wps.size();
+            printf("\n[BRIDGE] Executing %d waypoints%s\n", total, patrol ? " in a loop — Ctrl+C to stop" : "");
+            for (int lap = 1; rclcpp::ok(); lap++) {
+                if (patrol) printf("\n[PATROL] Lap %d\n", lap);
+                for (int i = 0; i < total && rclcpp::ok(); i++) {
+                    setActive(i);
+                    executeWaypoint(i + 1, total, wps[i].x, wps[i].y, wps[i].yaw);
+                }
+                if (!patrol) break;
+            }
+            printf("[BRIDGE] Done — %d waypoints\n\n", total);
+            {
+                std::lock_guard<std::mutex> lk(wps_mutex_);
+                wps_.clear();
+                active_ = -1;
+                running_ = false;
+            }
+            publishMarkers();
         }
     }
 
 private:
-    int  wp_count_;
-    bool queue_mode_;
+    Mode mode_;
+    int  wp_count_ = 0;
 
-    void odomCb(const nav_msgs::msg::Odometry::SharedPtr msg) {
-        std::lock_guard<std::mutex> lk(g_pos_mutex);
-        g_cur_x   = msg->pose.pose.position.x;
-        g_cur_y   = msg->pose.pose.position.y;
-        g_cur_yaw = quatToYaw(msg->pose.pose.orientation.x, msg->pose.pose.orientation.y,
-                              msg->pose.pose.orientation.z, msg->pose.pose.orientation.w);
-        g_pos_valid = true;
-    }
+    std::mutex wps_mutex_;           // guards the four members below
+    std::vector<Waypoint> wps_;      // route drawn in RViz2, drawn back as markers
+    std::string frame_ = "map";
+    int  active_ = -1;               // index in wps_ currently being driven to
+    bool running_ = false;
 
     void goalCb(const geometry_msgs::msg::PoseStamped::SharedPtr msg) {
         double x   = msg->pose.position.x;
         double y   = msg->pose.position.y;
         double yaw = quatToYaw(msg->pose.orientation.x, msg->pose.orientation.y,
                                msg->pose.orientation.z, msg->pose.orientation.w);
-        if (queue_mode_) {
-            std::lock_guard<std::mutex> lk(g_queue_mutex);
-            g_wp_queue.push({x, y, yaw});
-            RCLCPP_INFO(get_logger(), "Queued WP %zu: x=%.3f y=%.3f yaw=%.1fdeg",
-                        g_wp_queue.size(), x, y, yaw * 180.0 / M_PI);
-        } else {
+        {
+            std::lock_guard<std::mutex> lk(wps_mutex_);
+            frame_ = msg->header.frame_id;
+            if (mode_ == Mode::Immediate) {
+                wps_.assign(1, {x, y, yaw});
+                active_ = 0;
+            } else if (running_) {
+                RCLCPP_WARN(get_logger(), "Route already running — goal ignored");
+                return;
+            } else {
+                wps_.push_back({x, y, yaw});
+                RCLCPP_INFO(get_logger(), "Queued WP %zu: x=%.3f y=%.3f yaw=%.1fdeg",
+                            wps_.size(), x, y, yaw * 180.0 / M_PI);
+            }
+        }
+        publishMarkers();
+        if (mode_ == Mode::Immediate) {
             int num = ++wp_count_;
             std::thread([num, x, y, yaw]() {
                 executeWaypoint(num, num, x, y, yaw);
@@ -236,27 +281,61 @@ private:
         }
     }
 
-    void executeQueue() {
-        std::vector<Waypoint> wps;
+    void setActive(int i) {
         {
-            std::lock_guard<std::mutex> lk(g_queue_mutex);
-            if (g_wp_queue.empty()) { printf("[BRIDGE] Queue is empty\n"); return; }
-            while (!g_wp_queue.empty()) { wps.push_back(g_wp_queue.front()); g_wp_queue.pop(); }
+            std::lock_guard<std::mutex> lk(wps_mutex_);
+            active_ = i;
         }
-        int total = wps.size();
-        printf("\n[BRIDGE] Executing %d waypoints\n", total);
-        for (int i = 0; i < total; i++)
-            executeWaypoint(i + 1, total, wps[i].x, wps[i].y, wps[i].yaw);
-        printf("[BRIDGE] Done — %d waypoints\n\n", total);
+        publishMarkers();
+    }
+
+    // One arrow + number per waypoint; the current target is green, the rest orange.
+    void publishMarkers() {
+        visualization_msgs::msg::MarkerArray arr;
+        arr.markers.emplace_back();
+        arr.markers.back().action = visualization_msgs::msg::Marker::DELETEALL;
+        {
+            std::lock_guard<std::mutex> lk(wps_mutex_);
+            for (size_t i = 0; i < wps_.size(); i++) {
+                visualization_msgs::msg::Marker arrow;
+                arrow.header.frame_id = frame_;
+                arrow.ns = "arrows";
+                arrow.id = i;
+                arrow.type = visualization_msgs::msg::Marker::ARROW;
+                arrow.pose.position.x = wps_[i].x;
+                arrow.pose.position.y = wps_[i].y;
+                arrow.pose.orientation.z = std::sin(wps_[i].yaw / 2.0);
+                arrow.pose.orientation.w = std::cos(wps_[i].yaw / 2.0);
+                arrow.scale.x = 0.6; arrow.scale.y = 0.1; arrow.scale.z = 0.1;
+                bool active = static_cast<int>(i) == active_;
+                arrow.color.r = active ? 0.1 : 1.0;
+                arrow.color.g = active ? 0.9 : 0.5;
+                arrow.color.b = 0.1;
+                arrow.color.a = 1.0;
+                arr.markers.push_back(arrow);
+
+                visualization_msgs::msg::Marker label = arrow;
+                label.ns = "labels";
+                label.type = visualization_msgs::msg::Marker::TEXT_VIEW_FACING;
+                label.text = std::to_string(i + 1);
+                label.pose.position.z = 0.4;
+                label.scale.z = 0.3;
+                label.color.r = label.color.g = label.color.b = 1.0;
+                arr.markers.push_back(label);
+            }
+        }
+        marker_pub_->publish(arr);
     }
 
     rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr goal_sub_;
     rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odom_sub_;
+    rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr marker_pub_;
     rclcpp::TimerBase::SharedPtr heartbeat_timer_;
 };
 
 struct Config {
     std::string robot_ip = "192.168.8.101";
+    bool wait = false;
     std::vector<std::string> args;
 };
 
@@ -266,6 +345,7 @@ static Config parseArgs(int argc, char* argv[]) {
         std::string a = argv[i];
         if (a == "--ros-args") break;
         if (a == "--ip" && i + 1 < argc) cfg.robot_ip = argv[++i];
+        else if (a == "--wait") cfg.wait = true;
         else cfg.args.push_back(a);
     }
     return cfg;
@@ -286,9 +366,14 @@ int main(int argc, char* argv[]) {
     const auto& args = cfg.args;
 
     if (args.empty() || args[0] == "bridge") {
-        bool queue = args.size() >= 2 && args[1] == "queue";
+        const std::string sub = args.size() >= 2 ? args[1] : "";
+        Mode mode = sub == "queue" ? Mode::Queue : sub == "patrol" ? Mode::Patrol : Mode::Immediate;
         rclcpp::init(argc, argv);
-        rclcpp::spin(std::make_shared<GoalBridge>(queue));
+        auto node = std::make_shared<GoalBridge>(mode);
+        // The thread holds its own reference: at Ctrl+C it can still be mid-waypoint.
+        if (mode != Mode::Immediate)
+            std::thread([node]() { node->runRoute(); }).detach();
+        rclcpp::spin(node);
         rclcpp::shutdown();
         close(g_fd);
         return 0;
@@ -297,64 +382,33 @@ int main(int argc, char* argv[]) {
     const std::string cmd = args[0];
 
     if (cmd == "nav") {
-        if (args.size() < 3) { printf("Usage: nav <x> <y> [yaw]\n"); close(g_fd); return 1; }
+        if (args.size() < 3) { printf("Usage: nav <x> <y> [yaw] [--wait]\n"); close(g_fd); return 1; }
         double x   = std::atof(args[1].c_str());
         double y   = std::atof(args[2].c_str());
         double yaw = args.size() > 3 ? std::atof(args[3].c_str()) : 0.0;
-        printf("Target: x=%.4f y=%.4f yaw=%.4f\n", x, y, yaw);
-        sendUDP(R"({"PatrolDevice":{"Type":100,"Command":100,"Time":"2025-01-01 00:00:00","Items":{}}})");
-        usleep(300000);
-        sendUDP(R"({"PatrolDevice":{"Type":1101,"Command":5,"Time":"2025-01-01 00:00:00","Items":{"Mode":1}}})");
-        usleep(1000000);
-        char buf[BUFFER_SIZE];
-        snprintf(buf, sizeof(buf),
-            R"({"PatrolDevice":{"Type":1003,"Command":1,"Time":"2025-01-01 00:00:00","Items":{"Value":1,"MapID":0,"PosX":%.6f,"PosY":%.6f,"PosZ":0.0,"AngleYaw":%.6f,"PointInfo":1,"Gait":12290,"Speed":1,"Manner":0,"ObsMode":0,"NavMode":1}}})",
-            x, y, yaw);
-        sendUDP(buf);
-        listenResponses(5);
-    }
-
-    else if (cmd == "patrol") {
-        if (args.size() < 2) { printf("Usage: patrol <x,y,yaw> ...\n"); close(g_fd); return 1; }
-        std::vector<Waypoint> wps;
-        for (size_t i = 1; i < args.size(); i++) {
-            Waypoint wp;
-            if (!parseWaypoint(args[i], wp)) {
-                printf("[ERROR] Bad waypoint: %s\n", args[i].c_str());
-                close(g_fd); return 1;
-            }
-            wps.push_back(wp);
+        if (cfg.wait) {
+            // Blocks until arrival or timeout, tracked on /ODOM_relayed (used by benchmark.py)
+            rclcpp::init(argc, argv);
+            auto node = std::make_shared<rclcpp::Node>(perRobot("nav_node"));
+            auto odom_sub = node->create_subscription<nav_msgs::msg::Odometry>(
+                perRobot("/ODOM_relayed"), 10, storeOdom);
+            std::thread ros_thread([&node]() { rclcpp::spin(node); });
+            executeWaypoint(1, 1, x, y, yaw);
+            rclcpp::shutdown();
+            ros_thread.join();
+        } else {
+            printf("Target: x=%.4f y=%.4f yaw=%.4f\n", x, y, yaw);
+            sendUDP(R"({"PatrolDevice":{"Type":100,"Command":100,"Time":"2025-01-01 00:00:00","Items":{}}})");
+            usleep(300000);
+            sendUDP(R"({"PatrolDevice":{"Type":1101,"Command":5,"Time":"2025-01-01 00:00:00","Items":{"Mode":1}}})");
+            usleep(1000000);
+            char buf[BUFFER_SIZE];
+            snprintf(buf, sizeof(buf),
+                R"({"PatrolDevice":{"Type":1003,"Command":1,"Time":"2025-01-01 00:00:00","Items":{"Value":1,"MapID":0,"PosX":%.6f,"PosY":%.6f,"PosZ":0.0,"AngleYaw":%.6f,"PointInfo":1,"Gait":12290,"Speed":1,"Manner":0,"ObsMode":0,"NavMode":1}}})",
+                x, y, yaw);
+            sendUDP(buf);
+            listenResponses(5);
         }
-
-        rclcpp::init(argc, argv);
-        auto node = std::make_shared<rclcpp::Node>(perRobot("patrol_node"));
-        auto odom_sub = node->create_subscription<nav_msgs::msg::Odometry>(
-            perRobot("/ODOM_relayed"), 10,
-            [](const nav_msgs::msg::Odometry::SharedPtr msg) {
-                std::lock_guard<std::mutex> lk(g_pos_mutex);
-                g_cur_x   = msg->pose.pose.position.x;
-                g_cur_y   = msg->pose.pose.position.y;
-                g_cur_yaw = quatToYaw(msg->pose.pose.orientation.x,
-                                      msg->pose.pose.orientation.y,
-                                      msg->pose.pose.orientation.z,
-                                      msg->pose.pose.orientation.w);
-                g_pos_valid = true;
-            });
-        std::thread ros_thread([&node]() { rclcpp::spin(node); });
-
-        sendUDP(R"({"PatrolDevice":{"Type":100,"Command":100,"Time":"2025-01-01 00:00:00","Items":{}}})");
-        usleep(300000);
-        sendUDP(R"({"PatrolDevice":{"Type":1101,"Command":5,"Time":"2025-01-01 00:00:00","Items":{"Mode":1}}})");
-        usleep(1000000);
-
-        int total = wps.size();
-        for (int i = 0; i < total; i++)
-            executeWaypoint(i + 1, total, wps[i].x, wps[i].y, wps[i].yaw);
-
-        printf("\n[PATROL] Done — %d waypoints\n", total);
-
-        rclcpp::shutdown();
-        ros_thread.join();
     }
 
     else if (cmd == "estop") {
@@ -377,8 +431,9 @@ int main(int argc, char* argv[]) {
 
     else {
         printf("Unknown command: %s\n", cmd.c_str());
-        printf("Commands: nav, patrol, bridge, bridge queue, estop, cancel, standup\n");
-        printf("Flags:    --ip <addr>  (default 10.21.31.103)\n");
+        printf("Commands: nav, bridge, bridge queue, bridge patrol, estop, cancel, standup\n");
+        printf("Flags:    --ip <addr>  (default 192.168.8.101)\n");
+        printf("          --wait       (nav only: block until arrival)\n");
         close(g_fd); return 1;
     }
 

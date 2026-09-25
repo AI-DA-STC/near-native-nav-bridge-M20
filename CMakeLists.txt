@@ -17,6 +17,7 @@ find_package(nav_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(tf2_msgs REQUIRED)
+find_package(visualization_msgs REQUIRED)
 
 include_directories(include)
 
@@ -25,6 +26,7 @@ ament_target_dependencies(nav_cmd_bridge
   rclcpp
   geometry_msgs
   nav_msgs
+  visualization_msgs
 )
 
 add_executable(odom_relay src/odom_relay_node.cpp)
@@ -80,7 +82,7 @@ install(DIRECTORY include/
   DESTINATION include/
 )
 
-install(PROGRAMS scripts/benchmark.py
+install(PROGRAMS scripts/benchmark.py scripts/fleet_goals.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

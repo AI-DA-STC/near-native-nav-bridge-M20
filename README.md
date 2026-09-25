@@ -109,24 +109,24 @@ rviz2 --ros-args -r /tf:=/tf_relayed -r /tf_static:=/tf_static_relayed -r /goal_
 ```
 Set Fixed Frame to `map`. Per robot id, enable /ALIGNED_POINTS_relayed_<id>, /ODOM_relayed_<id> and
 /NAV_POINTS_relayed_<id>, plus one /GRID_MAP_relayed_<id>, and add a "2D Goal Pose" tool with topic /goal_pose_<id>.
+The goal arrow disappears once drawn, so the bridge publishes the waypoints back: Add → By topic →
+/waypoint_markers_<id> → MarkerArray. Each waypoint shows as a numbered arrow, green while it is the current target.
 - Step 6 : Before you run any nav commands, on the robot controller, standup the robot from controller
 - Step 7 : In one terminal per robot, `export ROBOT_ID=<id>` and run any of the following nav bridge commands with that robot's `--ip`
 (goals come from /goal_pose_<id>)
 
 ```bash
-# Single waypoint
+# Single waypoint (add --wait to block until arrival)
 ros2 run nav_cmd_bridge nav_cmd_bridge nav <x> <y> [yaw_rad]
-
-# Multiple waypoints in sequence
-ros2 run nav_cmd_bridge nav_cmd_bridge patrol <x,y,yaw> <x,y,yaw> ...
-#preprogrammed waypoints for demo through door
-ros2 run nav_cmd_bridge nav_cmd_bridge patrol --ip <robot_ip> -3.20162,-3.81141,-0.0404694 -1.72499,-3.88239,0.0412739 0.200177,-1.78368,0.00477056
 
 # RViz2 bridge — draw a 2D Goal Pose arrow to navigate immediately (USE THIS ONE)
 ros2 run nav_cmd_bridge nav_cmd_bridge bridge --ip <robot_ip> 
 
-# RViz2 bridge — queue mode: collect arrows, execute all on ENTER
+# RViz2 bridge — queue mode: collect arrows, execute all once on ENTER
 ros2 run nav_cmd_bridge nav_cmd_bridge bridge queue --ip <robot_ip> 
+
+# RViz2 bridge — patrol mode: collect 2+ arrows, on ENTER loop 1 → N → 1 … until Ctrl+C
+ros2 run nav_cmd_bridge nav_cmd_bridge bridge patrol --ip <robot_ip> 
 
 # Robot emergency stop commands
 ros2 run nav_cmd_bridge nav_cmd_bridge estop --ip <robot_ip> 

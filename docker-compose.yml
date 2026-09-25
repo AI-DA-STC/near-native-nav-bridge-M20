@@ -3,3 +3,7 @@ services:
     image: m20-bridge:foxy
     network_mode: host
     command: bash -c "source install/setup.bash && tail -f /dev/null"
+    environment:
+      - FASTRTPS_DEFAULT_PROFILES_FILE=/root/fastdds_relay.xml
+    volumes:
+      - /home/user/fastdds_relay.xml:/root/fastdds_relay.xml:ro
