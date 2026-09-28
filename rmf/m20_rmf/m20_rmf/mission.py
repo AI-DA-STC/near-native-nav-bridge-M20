@@ -186,8 +186,8 @@ def main(argv=None):
         Runner(fleet).run_steps(mission['steps'])
         fleet._say('mission complete')
     except KeyboardInterrupt:
-        fleet._say('mission aborted by operator: cancelling all tasks')
-        fleet.cancel()
+        fleet._say('mission aborted by operator: stopping all robots')
+        fleet.stop()
     finally:
         fleet.rmf.close()
 

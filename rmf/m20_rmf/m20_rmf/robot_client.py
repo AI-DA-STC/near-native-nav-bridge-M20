@@ -35,6 +35,7 @@ class Goal:
         self.resends = 0
         self.robot_complete = False
         self.error = None
+        self.final_yaw = None      # set on the walk leg of a walk-then-turn goal
 
 
 class NavState:
@@ -129,6 +130,14 @@ class M20Client:
             self._msg_id = (self._msg_id + 1) & 0xFFFF
         self._sock.sendto(packet, self.addr)
 
+    # The M20 holds a goal's final heading *while* it walks, so a goal whose heading
+    # differs from the direction of travel makes it walk backwards or strafe (seen on 834,
+    # 2026-09-28). With face_travel (default on, per-robot `nav: {face_travel: false}` to
+    # disable) such a goal is split: walk there facing the travel direction, then turn in
+    # place to the final heading.
+    FACE_TRAVEL_MIN_DIST = 0.4                  # m; shorter moves go as one goal
+    FACE_TRAVEL_MIN_ANGLE = math.radians(30)    # heading mismatch that triggers a split
+
     def go_to(self, x, y, yaw, check_yaw=False, **overrides):
         """Send a navigation goal and start tracking it. Replaces any active goal."""
         params = {**self.nav_params, **overrides}
@@ -137,15 +146,29 @@ class M20Client:
                 # The robot rejects a new goal while one runs (0xA341).
                 self.send(protocol.cancel_nav())
                 time.sleep(0.3)
-            self._value += 1
-            self._goal = Goal(self._value, x, y, yaw, params, check_yaw)
-            if self._pose is not None:
-                # Baseline for stall detection: progress is measured from here.
-                self._goal.best_dist = math.hypot(self._pose[0] - x, self._pose[1] - y)
-            self._state = NavState.NAVIGATING
+            final_yaw = None
+            p = self._pose
+            if params.get('face_travel', True) and p is not None:
+                dist = math.hypot(x - p[0], y - p[1])
+                travel = math.atan2(y - p[1], x - p[0])
+                if dist > self.FACE_TRAVEL_MIN_DIST and \
+                        abs(wrap(yaw - travel)) > self.FACE_TRAVEL_MIN_ANGLE:
+                    final_yaw, yaw = yaw, travel
+            self._start_leg(x, y, yaw, check_yaw, params)
+            self._goal.final_yaw = final_yaw
+        suffix = f', then turn to {final_yaw:.2f}' if final_yaw is not None else ''
+        self.on_event(self.name, f'goal #{self._value} -> ({x:.2f}, {y:.2f}, {yaw:.2f}){suffix}')
+
+    def _start_leg(self, x, y, yaw, check_yaw, params):
+        """Make (x, y, yaw) the active goal and send it (caller holds the lock)."""
+        self._value += 1
+        self._goal = Goal(self._value, x, y, yaw, params, check_yaw)
+        if self._pose is not None:
+            # Baseline for stall detection: progress is measured from here.
+            self._goal.best_dist = math.hypot(self._pose[0] - x, self._pose[1] - y)
+        self._state = NavState.NAVIGATING
         # Non-blocking: callers are RMF callbacks and the mission runner.
         threading.Thread(target=self._send_goal, daemon=True).start()
-        self.on_event(self.name, f'goal #{self._value} -> ({x:.2f}, {y:.2f}, {yaw:.2f})')
 
     def _send_goal(self):
         g = self._goal
@@ -201,6 +224,11 @@ class M20Client:
             in_tol = dist <= self.xy_tolerance and yaw_ok
             if (in_tol and (g.robot_complete or self.settled())) or \
                     (g.robot_complete and dist <= 3 * self.xy_tolerance):
+                if g.final_yaw is not None:
+                    # Walk leg done: turn in place to the requested heading.
+                    self.on_event(self.name, f'goal #{g.value} reached, turning to {g.final_yaw:.2f}')
+                    self._start_leg(g.x, g.y, g.final_yaw, True, g.params)
+                    return NavState.NAVIGATING
                 self._state = NavState.ARRIVED
                 self.on_event(self.name, f'arrived at goal #{g.value} (err {dist:.2f} m)')
                 return self._state

@@ -30,7 +30,8 @@ cancelled first (RMF queues robot tasks otherwise — a patrol would never end).
 | return_home   | go_to each robot's home                                          |
 | relocalize    | direct /initialpose_set_relayed_<id> (works while RMF says lost) |
 | cancel        | cancel_task_request for everything the robot has                 |
-| estop         | /m20/estop via adapter AND direct UDP (independent of RMF)       |
+| stop          | safe stop, robot stays standing: UDP cancel + adapter + RMF tasks |
+| estop         | vendor e-stop, robot DROPS; requires drop=True                    |
 | signal        | event on /m20/events (lights/sound/dashboard hook)               |
 | trigger       | publish /m20/trigger (releases wait_for_event actions)           |
 | wait_trigger  | mission-side wait for ENTER, a /m20/events trigger, or seconds   |
@@ -272,18 +273,40 @@ class Fleet:
             if not quiet:
                 self._say(f'{r}: cancelled {len(tids)} task(s)')
 
-    def estop(self, robots=None):
-        """Vendor e-stop through the adapter *and* straight over UDP, so it works even
-        when RMF or the adapter is down."""
-        robots = self._robots(robots)
+    def _udp_to(self, robots, payload, repeats=3):
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         for r in robots:
-            from std_msgs.msg import String
-            self.rmf.publish_once(self.rmf.estop_pub, String(data=r), wait=0.5)
             cfg = self.site.robots[r]
-            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            s.sendto(protocol.encode(protocol.estop(), 0), (cfg['ip'], int(cfg.get('port', 30000))))
-            s.close()
-        self._say(f'E-STOP {robots}')
+            for i in range(repeats):
+                s.sendto(protocol.encode(payload, i), (cfg['ip'], int(cfg.get('port', 30000))))
+        s.close()
+
+    def stop(self, robots=None):
+        """Stop robots where they stand, without dropping them.
+
+        1. cancel navigation straight over UDP (works with RMF/adapter down),
+        2. tell the adapter to drop its running action and current task,
+        3. cancel every RMF task the robots have, so nothing re-sends a goal,
+        4. cancel over UDP once more in case a goal slipped in meanwhile.
+        """
+        from std_msgs.msg import String
+        robots = self._robots(robots)
+        self._udp_to(robots, protocol.cancel_nav())
+        for r in robots:
+            self.rmf.publish_once(self.rmf.stop_pub, String(data=r), wait=0.5)
+        try:
+            self.cancel(robots, quiet=True)
+        finally:
+            self._udp_to(robots, protocol.cancel_nav())
+        self._say(f'STOP {robots}: navigation and tasks cancelled (robots stay standing)')
+
+    def estop(self, robots=None, drop=False):
+        """Vendor e-stop: the robot DROPS to the ground. Needs drop=True; use stop()."""
+        if not drop:
+            raise ValueError('the vendor e-stop drops the robot; use stop(), or pass drop=True')
+        robots = self._robots(robots)
+        self._udp_to(robots, protocol.estop(), repeats=1)
+        self._say(f'E-STOP (robot drops) {robots}')
 
     def signal(self, event, data=None):
         self.rmf.event(f'signal {event}', signal=event, data=data)

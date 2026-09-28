@@ -1,6 +1,7 @@
 """Unit tests that need neither ROS nor RMF running (pytest rmf/m20_rmf/test)."""
 
 import json
+import math
 import os
 import socket
 import threading
@@ -142,6 +143,7 @@ class FakeRobot:
         self.port = self.sock.getsockname()[1]
         self.goal_errors = list(goal_errors)
         self.received = []
+        self.goals = []          # (x, y, yaw) of every 1003 goal
         self.running = True
         threading.Thread(target=self._loop, daemon=True).start()
 
@@ -154,6 +156,8 @@ class FakeRobot:
             d = protocol.decode(data)['PatrolDevice']
             self.received.append((d['Type'], d['Command']))
             if d['Type'] == 1003:
+                it = d['Items']
+                self.goals.append((it['PosX'], it['PosY'], it['AngleYaw']))
                 err = self.goal_errors.pop(0) if self.goal_errors else 0
                 self.sock.sendto(protocol.encode({'PatrolDevice': {
                     'Type': 1003, 'Command': 1, 'Items': {'ErrorCode': err}}}, 0), peer)
@@ -183,6 +187,48 @@ def test_arrival_requires_settling():
     c.update_pose(0.95, 0.0, 0.0)          # no motion for > settle_time
     assert c.nav_state() == NavState.ARRIVED
     c.close()
+
+
+def test_face_travel_walks_then_turns():
+    bot = FakeRobot()
+    c = M20Client('t', '127.0.0.1', bot.port, settle_time=0.2, heartbeat_period=10)
+    c.update_pose(0, 0, 0)
+    c.go_to(2.0, 0.0, math.pi)                       # end facing back: split it
+    assert _wait(lambda: len(bot.goals) == 1)
+    assert abs(bot.goals[0][2]) < 1e-6, 'walk leg must face the travel direction (+x)'
+    c.update_pose(2.0, 0.0, 0.0)
+    time.sleep(0.3)
+    c.update_pose(2.0, 0.0, 0.0)
+    assert c.nav_state() == NavState.NAVIGATING      # walk leg done -> turn leg starts
+    assert _wait(lambda: len(bot.goals) == 2)
+    assert abs(bot.goals[1][2] - math.pi) < 1e-6
+    c.update_pose(2.0, 0.0, 0.1)                     # not turned yet
+    time.sleep(0.3)
+    c.update_pose(2.0, 0.0, 0.1)
+    assert c.nav_state() == NavState.NAVIGATING
+    c.update_pose(2.0, 0.0, 3.1)                     # turned
+    time.sleep(0.3)
+    c.update_pose(2.0, 0.0, 3.1)
+    assert c.nav_state() == NavState.ARRIVED
+    c.close()
+
+
+def test_face_travel_off_or_aligned_sends_one_goal():
+    bot = FakeRobot()
+    c = M20Client('t', '127.0.0.1', bot.port, heartbeat_period=10,
+                  nav_params={'face_travel': False})
+    c.update_pose(0, 0, 0)
+    c.go_to(2.0, 0.0, math.pi)
+    assert _wait(lambda: len(bot.goals) == 1)
+    assert abs(bot.goals[0][2] - math.pi) < 1e-6     # disabled: sent as asked
+    c.close()
+    bot2 = FakeRobot()
+    c2 = M20Client('t', '127.0.0.1', bot2.port, heartbeat_period=10)
+    c2.update_pose(0, 0, 0)
+    c2.go_to(2.0, 0.1, 0.0)                          # heading already matches travel
+    assert _wait(lambda: len(bot2.goals) == 1)
+    assert c2.goal.final_yaw is None
+    c2.close()
 
 
 def test_busy_error_triggers_cancel_then_resend():

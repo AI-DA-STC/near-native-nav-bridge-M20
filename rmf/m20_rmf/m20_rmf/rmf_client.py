@@ -43,7 +43,7 @@ class RmfClient:
             QoSProfile(depth=100, reliability=ReliabilityPolicy.RELIABLE,
                        durability=DurabilityPolicy.TRANSIENT_LOCAL))
         self.node.create_subscription(String, '/m20/robot_status', self._on_robot_status, 10)
-        self.estop_pub = self.node.create_publisher(String, '/m20/estop', 10)
+        self.stop_pub = self.node.create_publisher(String, '/m20/stop', 10)
         self.trigger_pub = self.node.create_publisher(String, '/m20/trigger', 10)
         self.events_pub = self.node.create_publisher(String, '/m20/events', 50)
         self.inspect_result_pub = self.node.create_publisher(String, '/m20/inspect/result', 10)

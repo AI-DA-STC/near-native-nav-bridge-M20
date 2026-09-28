@@ -1,0 +1,41 @@
+# Real-robot test site for dog 834, 2026-09-28 (second position): a straight 2 m
+# corridor in front of where 834 stood, standing, at (-2.092, -6.490), heading -0.05 rad
+# (map +x). The operator confirmed ~2.5 m clear ahead. Everything stays inside the
+# corridor: moves along it plus turns in place. Same names as lab_834_test.yaml, so
+# missions/test_834_corridor.yaml runs against either.
+
+map_name: L1
+
+places:
+  home_834: [-2.092, -6.490, -0.05]
+  fwd_1:    [-1.093, -6.540, -0.05]     # 1 m ahead
+  fwd_2:    [-0.095, -6.590, -0.05]     # 2 m ahead
+
+lanes:
+  - [home_834, fwd_1, fwd_2]
+
+routes:
+  corridor: [fwd_2, home_834]
+
+formations:
+  line:
+    slots: [fwd_1]
+    assign: fixed
+
+zones:
+  corridor_probe:
+    entry: fwd_1
+    dwell: 2.0
+    tracks:
+      - [[-0.594, -6.565, -0.05], [-0.095, -6.590, 3.0916]]   # 1.5 m ahead, then 2 m facing back
+
+targets:
+  box_right:
+    approach: fwd_2
+    look_at: [-0.145, -7.589]    # 1 m to the robot's right at fwd_2 -> ~90 deg turn in place
+    dwell: 3.0
+    timeout: 15.0
+    label: test box
+
+robots:
+  "834": {ip: 192.168.123.102, home: home_834, route: corridor}

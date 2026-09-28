@@ -13,7 +13,7 @@ ROS interface (besides RMF's own topics):
   sub  /ODOM_relayed_<id>          nav_msgs/Odometry    robot pose
   pub  /m20/events                 std_msgs/String      JSON event log
   pub  /m20/robot_status           std_msgs/String      JSON per-robot status, 2 Hz
-  sub  /m20/estop                  std_msgs/String      robot id or "all" -> vendor e-stop
+  sub  /m20/stop                   std_msgs/String      robot id or "all" -> cancel nav + task
   pub  /m20/inspect/request        std_msgs/String      JSON, from the inspect action
   sub  /m20/inspect/result         std_msgs/String      JSON {"id": ..., ...}
   sub  /m20/trigger                std_msgs/String      event name, for wait_for_event
@@ -305,13 +305,24 @@ def main(argv=sys.argv):
         for rid in wanted
     }
 
-    def on_estop(msg):
+    # Safe stop (robot keeps standing): cancel the robot's navigation over UDP, drop any
+    # running action, and cancel its current RMF task so RMF does not re-send a goal.
+    # The vendor e-stop (which drops the robot) is deliberately not reachable from ROS.
+    def on_stop(msg):
         target = msg.data.strip()
         for rid, r in robots.items():
-            if target in ('all', '', rid):
-                r.client.estop()
-                bus.event(rid, 'E-STOP requested')
-    node.create_subscription(String, '/m20/estop', on_estop, 10)
+            if target not in ('all', '', rid):
+                continue
+            with r.lock:
+                r._abort_action('operator stop')
+                r.execution = None
+            r.client.cancel()
+            if r.update_handle is not None:
+                tid = r.update_handle.more().current_task_id()
+                if tid:
+                    r.update_handle.more().cancel_task(tid, ['m20 stop'], lambda ok: None)
+            bus.event(rid, 'STOP requested: navigation cancelled, current task cancelled')
+    node.create_subscription(String, '/m20/stop', on_stop, 10)
 
     def update_loop():
         while rclpy.ok():

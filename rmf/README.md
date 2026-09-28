@@ -81,6 +81,34 @@ m20 go 834 fwd_1
 The robot must be **standing** (controller) before it will walk; `m20 status`
 shows `"asleep": true` until then and the adapter warns on every command.
 
+## Running tests on real robots (operator runbook)
+
+**Robot motion is always started by a person at the robot's side, from their own
+terminal**, never from an automated session: whoever runs it must be able to stop it.
+
+Terminals: (1) Foxy devcontainer — `laptop_bridge.launch.py`; (2) Jazzy — the
+`m20_rmf.launch.py` stack; (3) Jazzy — `m20 events` (live log of every command sent);
+(4) Jazzy — your commands. Check `m20 status` shows `registered: true`,
+`pose_source: odom`, `asleep: false` before moving anything. Go one step at a time
+(`m20 go 834 <place>`) before running a whole mission.
+
+**Stopping**, gentlest first — none of these drops the robot:
+
+1. **Ctrl-C** in the terminal running `m20 mission` / `m20 go …` — stops the robots.
+2. **`m20 stop 834`** (or `m20 stop` for all) from any Jazzy terminal — cancels the
+   goal straight over UDP, drops the adapter's action, cancels all RMF tasks.
+3. **`ros2 run nav_cmd_bridge nav_cmd_bridge cancel --ip <robot ip>`** from the Foxy
+   devcontainer — works with RMF and the adapter down.
+4. **The handheld controller** — take over or sit the robot down.
+
+Stopping the RMF launch alone does **not** stop a robot: it keeps walking to its last
+goal until cancelled. `m20 estop --drop` is the vendor e-stop and **drops the robot**.
+
+Goals are sent walk-then-turn: the M20 holds a goal's final heading while it walks
+(so a goal whose heading differs from the travel direction made 834 walk backwards or
+strafe), so the adapter walks there facing the travel direction, then turns in place.
+Per-robot `nav: {face_travel: false}` in the site file restores single goals.
+
 ## Localization without `ssh -X`
 
 `launch/relays.launch.py` now also relays laptop `/initialpose_set_relayed_<id>` →
@@ -143,7 +171,8 @@ background, then `wait_tasks`).
 | `return_home` | every robot to its home | `m20 home` |
 | `relocalize` | set SLAM pose at a place / pose (direct, works while RMF says lost) | `m20 relocalize 834 home_834` |
 | `cancel` | cancel all of a robot's RMF tasks | `m20 cancel [834\|all]` |
-| `estop` | vendor e-stop via the adapter **and** straight over UDP | `m20 estop [834\|all]` |
+| `stop` | **stop where they stand, no drop**: UDP cancel + adapter + RMF task cancel | `m20 stop [834\|all]` |
+| `estop` | vendor e-stop — **the robot drops**; needs an explicit flag | `m20 estop --drop 834` |
 | `signal` | event on `/m20/events` (lights, sound, dashboard hooks) | — |
 | `trigger` | publish `/m20/trigger` (releases `wait_trigger` / `wait_for_event`) | `m20 trigger start` |
 | `wait_trigger` | pause for ENTER, a trigger event, and/or seconds | — |
@@ -205,7 +234,7 @@ fail the goal immediately.
 | `/m20/task_states` | String (JSON) | monitor (latched) |
 | `/m20/inspect/request` / `result` | String (JSON, matched by `id`; `"latest"` matches any) | adapter ↔ vision |
 | `/m20/trigger` | String | operators → waits |
-| `/m20/estop` | String (robot id or `all`) | operators → adapter |
+| `/m20/stop` | String (robot id or `all`) | operators → adapter (safe stop) |
 | `/initialpose_set_relayed_<id>` | PoseWithCovarianceStamped | laptop → robot relay |
 
 `m20 events` tails the event stream.

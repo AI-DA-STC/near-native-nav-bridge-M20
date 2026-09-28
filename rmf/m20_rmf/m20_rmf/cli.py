@@ -22,7 +22,9 @@ list), default all robots in the site.
 
   Control
     m20 cancel [834|all]                   cancel RMF tasks
-    m20 estop [834|all]                    vendor e-stop (adapter + direct UDP)
+    m20 stop [834|all]                     STOP where they stand (no drop): UDP cancel +
+                                           RMF task cancel. Use this.
+    m20 estop --drop [834|all]             vendor e-stop: the robot DROPS to the ground
     m20 trigger start                      release wait_for_event / wait_trigger
     m20 inspect-result <id|latest> '{"verdict": "empty"}'
     m20 status                             robots + recent tasks
@@ -122,8 +124,8 @@ def _run(a, fn):
     try:
         return fn(f)
     except KeyboardInterrupt:
-        print('interrupted: cancelling')
-        f.cancel()
+        print('interrupted: stopping the robots')
+        f.stop(f.robots)
     finally:
         f.rmf.close()
 
@@ -229,9 +231,14 @@ def main(argv=None):
     add('cancel', lambda a: _run(a, lambda f: f.cancel(None if a.which in (None, 'all')
                                                         else a.which.split(','))),
         (('which',), {'nargs': '?'}))
-    add('estop', lambda a: _run(a, lambda f: f.estop(None if a.which in (None, 'all')
-                                                      else a.which.split(','))),
+    add('stop', lambda a: _run(a, lambda f: f.stop(None if a.which in (None, 'all')
+                                                    else a.which.split(','))),
         (('which',), {'nargs': '?'}))
+    add('estop', lambda a: _run(a, lambda f: f.estop(None if a.which in (None, 'all')
+                                                      else a.which.split(','), drop=a.drop)),
+        (('which',), {'nargs': '?'}),
+        (('--drop',), {'action': 'store_true',
+                       'help': 'required: acknowledges the robot will drop'}))
     add('trigger', lambda a: _run(a, lambda f: f.trigger(a.event)),
         (('event',), {'nargs': '?', 'default': 'go'}))
     add('inspect-result', cmd_inspect_result, (('id',), {}), (('json',), {'nargs': '?'}))
