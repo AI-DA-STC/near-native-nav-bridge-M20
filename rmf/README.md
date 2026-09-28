@@ -7,8 +7,16 @@ than a fleet manager.
 
 It runs on **ROS 2 Jazzy on the laptop only**. The robots are untouched (Foxy, vendor
 SLAM/nav): commands go over the vendor UDP API (the same packets as
-`nav_cmd_bridge`), and pose comes from `/ODOM_relayed_<id>` or, when that is absent,
-from the robot's own UDP status stream.
+`nav_cmd_bridge`), and pose, battery, sleep and nav state come from the robot's own
+UDP status stream (or `/ODOM_relayed_<id>` when it is on the RMF domain).
+
+> **Never run anything Jazzy on `ROS_DOMAIN_ID=0`.** The robots' relays are Foxy; the
+> moment a Jazzy participant can reach them, every relay dies with
+> `Deserialization of data failed` → `std::bad_alloc` (reproduced four times on 834,
+> 2026-09-28). This includes `ros2 topic list/echo/hz` from this container. The RMF
+> devcontainer therefore defaults to **domain 10**, and the adapter, CLI, mission
+> runner and launch file refuse domain 0 unless given `--allow-robot-domain` /
+> `allow_robot_domain:=true`. Inspect the robots' topics from the **Foxy** devcontainer.
 
 ```
  mission YAML / m20 CLI / your script
@@ -38,10 +46,11 @@ m20 mission /repo/rmf/m20_rmf/missions/visitor_demo.yaml      # second terminal
 m20 trigger start                                             # third: release the wait
 ```
 
-**Real robots** (domain 0, relay optional but preferred):
+**Real robots** (RMF domain 10, robots reached over UDP only; the relays can stay up on
+domain 0 for the Foxy RViz):
 
 ```bash
-export ROS_DOMAIN_ID=0 M20_SITE=/repo/rmf/m20_rmf/sites/<your_site>.yaml
+export M20_SITE=/repo/rmf/m20_rmf/sites/<your_site>.yaml     # ROS_DOMAIN_ID=10 already
 ros2 launch m20_rmf m20_rmf.launch.py site:=$M20_SITE robots:=834
 m20 status                     # pose source, localized, asleep, battery, activity
 m20 go 834 fwd_1
@@ -55,10 +64,13 @@ shows `"asleep": true` until then and the adapter warns on every command.
 `launch/relays.launch.py` now also relays laptop `/initialpose_set_relayed_<id>` →
 robot `/initialpose` (the topic the on-robot RViz tool publishes). Then either
 
-* `m20 relocalize 834 home_834` (a site place) or `m20 relocalize 834 x y yaw`, or
-* laptop RViz on the relayed TF, "2D Pose Estimate" remapped:
+* laptop RViz (**Foxy** devcontainer, domain 0) on the relayed TF, "2D Pose Estimate" remapped:
   `rviz2 --ros-args -r /tf:=/tf_relayed -r /tf_static:=/tf_static_relayed -r /initialpose:=/initialpose_set_relayed_834`
   and judge the fit against `/ALIGNED_POINTS_relayed_834` over `/GRID_MAP_relayed_834`.
+
+`m20 relocalize` publishes the same message but from Jazzy, so it only reaches a robot
+when a Foxy forwarder bridges the RMF domain (not built yet); until then use RViz.
+The `relocalize` action is kept for that setup.
 
 Robots running an image built before this change can start the extra relay by hand
 inside the relay container, no rebuild:
@@ -132,6 +144,25 @@ table at the top of `m20_rmf/actions.py`. Off-graph actions announce their path 
 the RMF traffic schedule and, by default, walk back to where they started so RMF
 can resume routing. To add one: subclass `Action`, register it in `ACTIONS`, add the
 name to `sitefile.ADAPTER_ACTIONS`.
+
+## Relay profile on the robot
+
+Without a profile, Foxy's Fast DDS on the robot advertises only the internal
+`10.21.x` addresses (never the Wi-Fi one), so the laptop hears the relays but can never
+connect: no `_<id>` topics. With a profile that pins unicast to the Wi-Fi address but
+drops shared memory, the relays read the DeepRobotics nodes over UDP and crash. What
+works is both: pinned UDP locators **and** SHM (the robot-side
+`/root/fastdds_relay.xml` on 834):
+
+```xml
+<transport_descriptors>
+  <transport_descriptor><transport_id>relay_udp</transport_id><type>UDPv4</type></transport_descriptor>
+  <transport_descriptor><transport_id>relay_shm</transport_id><type>SHM</type></transport_descriptor>
+</transport_descriptors>
+<!-- participant: metatraffic multicast 239.255.0.1; metatraffic + default unicast
+     <robot wifi ip> and 10.21.33.103; userTransports relay_shm, relay_udp;
+     useBuiltinTransports false -->
+```
 
 ## Robot link details (learned on 834, fw "PRO")
 

@@ -28,6 +28,8 @@ import websockets
 
 
 def main(argv=sys.argv):
+    from . import domain_guard
+    domain_guard.check(argv=argv)
     rclpy.init(args=argv)
     args_ = rclpy.utilities.remove_ros_args(argv)
     p = argparse.ArgumentParser(prog='m20_monitor')

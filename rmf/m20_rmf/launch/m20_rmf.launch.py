@@ -18,6 +18,12 @@ from ament_index_python.packages import get_package_share_directory
 
 
 def _nodes(context):
+    allow = LaunchConfiguration('allow_robot_domain').perform(context).lower() == 'true'
+    if os.environ.get('ROS_DOMAIN_ID', '0') in ('', '0') and not allow:
+        # Every node here is a Jazzy participant; on the robots' domain they crash the
+        # Foxy relays (see m20_rmf/domain_guard.py).
+        raise RuntimeError('ROS_DOMAIN_ID is 0, the robots\' domain: Jazzy nodes there crash '
+                           'the Foxy relays. export ROS_DOMAIN_ID=10 (or allow_robot_domain:=true).')
     site = LaunchConfiguration('site').perform(context)
     robots = LaunchConfiguration('robots').perform(context)
     from m20_rmf.sitefile import Site
@@ -25,19 +31,20 @@ def _nodes(context):
     fleet = s.fleet['name']
     footprint = float(s.fleet['profile']['footprint'])
     ws = 'ws://localhost:7878'
+    guard = ['--allow-robot-domain'] if allow else []
     out = [
         # Monitor first: the dispatcher and adapter connect to its websocket on start.
-        Node(package='m20_rmf', executable='monitor', output='both'),
+        Node(package='m20_rmf', executable='monitor', output='both', arguments=guard),
         Node(package='rmf_traffic_ros2', executable='rmf_traffic_schedule', output='both'),
         Node(package='rmf_traffic_ros2', executable='rmf_traffic_blockade', output='both'),
         Node(package='rmf_task_ros2', executable='rmf_task_dispatcher', output='both',
              parameters=[{'bidding_time_window': 2.0, 'server_uri': ws}]),
         Node(package='m20_rmf', executable='fleet_adapter', output='both',
-             arguments=['--site', site, '--robots', robots, '--server-uri', ws]),
+             arguments=['--site', site, '--robots', robots, '--server-uri', ws] + guard),
     ]
     if LaunchConfiguration('sim').perform(context).lower() == 'true':
         out.append(Node(package='m20_rmf', executable='mock_robot', output='both',
-                        arguments=['--site', site, '--robots', robots]))
+                        arguments=['--site', site, '--robots', robots] + guard))
     if LaunchConfiguration('viz').perform(context).lower() == 'true':
         out += [
             Node(package='rmf_visualization_schedule', executable='schedule_visualizer_node',
@@ -60,6 +67,8 @@ def generate_launch_description():
         DeclareLaunchArgument('robots', default_value='', description='comma list; default all'),
         DeclareLaunchArgument('sim', default_value='false', description='start mock robots'),
         DeclareLaunchArgument('viz', default_value='false', description='RMF visualizers + RViz'),
+        DeclareLaunchArgument('allow_robot_domain', default_value='false',
+                              description='permit ROS_DOMAIN_ID=0 (only if no Foxy relay can see us)'),
         DeclareLaunchArgument('rviz_config', default_value=os.path.join(share, 'rviz', 'm20_rmf.rviz')),
         OpaqueFunction(function=_nodes),
     ])

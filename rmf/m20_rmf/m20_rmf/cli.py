@@ -178,7 +178,10 @@ def cmd_inspect_result(a):
 
 def main(argv=None):
     import rclpy
-    argv = rclpy.utilities.remove_ros_args(argv or sys.argv)[1:]
+    from . import domain_guard
+    argv = list(argv or sys.argv)
+    domain_guard.check(argv=argv)
+    argv = rclpy.utilities.remove_ros_args(argv)[1:]
     p = argparse.ArgumentParser(prog='m20', description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument('--site')

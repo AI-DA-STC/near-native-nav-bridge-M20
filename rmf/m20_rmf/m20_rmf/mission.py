@@ -154,6 +154,9 @@ def check(mission, site):
 
 def main(argv=None):
     import rclpy
+    from . import domain_guard
+    argv = list(argv or sys.argv)
+    domain_guard.check(argv=argv)
     p = argparse.ArgumentParser(prog='m20_mission')
     p.add_argument('mission')
     p.add_argument('--site', required=True)

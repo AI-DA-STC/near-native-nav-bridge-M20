@@ -41,6 +41,7 @@ import rmf_adapter
 from rmf_adapter import Adapter
 import rmf_adapter.easy_full_control as rmf_easy
 
+from . import domain_guard
 from .actions import make_action
 from .robot_client import M20Client, NavState
 from .sitefile import Site
@@ -246,6 +247,7 @@ class Bus:
 
 
 def main(argv=sys.argv):
+    domain_guard.check(argv=argv)
     rclpy.init(args=argv)
     rmf_adapter.init_rclcpp()
     args_ = rclpy.utilities.remove_ros_args(argv)

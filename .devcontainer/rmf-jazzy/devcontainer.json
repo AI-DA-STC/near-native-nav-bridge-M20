@@ -26,7 +26,7 @@
   "containerEnv": {
     "DISPLAY": "${localEnv:DISPLAY}",
     "QT_X11_NO_MITSHM": "1",
-    "ROS_DOMAIN_ID": "0",
+    "ROS_DOMAIN_ID": "10",
     "FASTRTPS_DEFAULT_PROFILES_FILE": "/repo/fastdds_profile.xml"
   },
   "postCreateCommand": "bash /repo/rmf/build.sh"
