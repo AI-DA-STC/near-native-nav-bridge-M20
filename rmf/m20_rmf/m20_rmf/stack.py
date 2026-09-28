@@ -31,6 +31,16 @@ def find(path=None):
         d = parent
 
 
+def robots_for(site_path, cfg=None):
+    """Stack robots, but only when site_path is the stack's own site; another site
+    (e.g. the mock sim_lab.yaml) gets None = all robots of that site."""
+    cfg = load() if cfg is None else cfg
+    if site_path and cfg.get('site') and \
+            os.path.realpath(site_path) == os.path.realpath(cfg['site']):
+        return cfg.get('robots') or None
+    return None
+
+
 def load(path=None):
     """Return the stack settings (empty dict if no file), with absolute paths."""
     path = find(path)

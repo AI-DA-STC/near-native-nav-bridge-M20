@@ -28,7 +28,8 @@ def _nodes(context):
     cfg = stack.load()
     site = LaunchConfiguration('site').perform(context) or cfg.get('site') or \
         os.path.join(get_package_share_directory('m20_rmf'), 'sites', 'sim_lab.yaml')
-    robots = LaunchConfiguration('robots').perform(context) or ','.join(cfg.get('robots', []))
+    robots = LaunchConfiguration('robots').perform(context) or \
+        ','.join(stack.robots_for(site, cfg) or [])
     from m20_rmf.sitefile import Site
     s = Site.load(site)     # fail fast on a bad site file, before anything starts
     fleet = s.fleet['name']
@@ -69,7 +70,7 @@ def generate_launch_description():
         DeclareLaunchArgument('site', default_value='',
                               description='site YAML; default: site: in m20_stack.yaml'),
         DeclareLaunchArgument('robots', default_value='',
-                              description='comma list; default: robots: in m20_stack.yaml, else all'),
+                              description='comma list; default: robots: in m20_stack.yaml when using its site, else all robots of the site'),
         DeclareLaunchArgument('sim', default_value='false', description='start mock robots'),
         DeclareLaunchArgument('viz', default_value='false', description='RMF visualizers + RViz'),
         DeclareLaunchArgument('allow_robot_domain', default_value='false',

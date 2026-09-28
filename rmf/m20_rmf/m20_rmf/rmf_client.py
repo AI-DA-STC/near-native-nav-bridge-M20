@@ -91,8 +91,10 @@ class RmfClient:
             while rid not in self._responses:
                 left = deadline - time.monotonic()
                 if left <= 0:
-                    raise TaskError(f'no response to {payload.get("type")} within {timeout}s — '
-                                    'is the fleet adapter / dispatcher running?')
+                    who = f' for robot {payload["robot"]}' if 'robot' in payload else ''
+                    raise TaskError(f'no response to {payload.get("type")}{who} within {timeout}s: '
+                                    'is the fleet adapter running, and does it serve that '
+                                    'robot (RMF ignores requests for robots it does not know)?')
                 self._lock.wait(left)
             return self._responses.pop(rid)
 

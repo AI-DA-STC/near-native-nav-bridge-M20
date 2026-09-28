@@ -58,7 +58,7 @@ def _site(a):
 
 def _robots(a):
     r = a.robots or os.environ.get('M20_ROBOTS', '')
-    return [x for x in r.split(',') if x] or stack.load().get('robots') or None
+    return [x for x in r.split(',') if x] or stack.robots_for(_site_path(a))
 
 
 def _fleet(a):

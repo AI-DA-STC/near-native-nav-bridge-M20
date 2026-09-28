@@ -1,0 +1,66 @@
+# Building blocks for demos, runnable on the mock robots of sites/sim_lab.yaml:
+#   ros2 launch m20_rmf m20_rmf.launch.py site:=/repo/rmf/m20_rmf/sites/sim_lab.yaml sim:=true
+#   m20 --site /repo/rmf/m20_rmf/sites/sim_lab.yaml mission /repo/rmf/m20_rmf/missions/examples.yaml
+# (use a spare ROS_DOMAIN_ID, e.g. export ROS_DOMAIN_ID=42, so real robots are never involved)
+#
+# Every step is `- primitive: {arguments}`; names (places, routes, zones, targets,
+# formations) come from the site file. `m20 mission <file> --check` validates them.
+name: examples
+steps:
+  # --- 1. Graph moves: RMF plans the route along the site's lanes and keeps robots
+  #        apart. Ends at the place's own heading (yaw in the site file).
+  - log: "1. go to places"
+  - go_to: {robot: "834", place: door_a}
+  - go_to: {robot: "834", place: door_b, yaw: 1.57}        # override the final heading
+
+  # --- 2. A path of your own, off the graph: any list of poses [x, y, yaw] or place
+  #        names, with a pause at each and optional laps. The robot walks back to
+  #        where it started at the end (return: false to stay at the last pose).
+  - log: "2. custom path (square, 2 laps)"
+  - action:
+      robot: "834"
+      category: waypoints
+      description:
+        poses: [[-2.2, -3.0, 0.0], [-1.2, -3.0, 1.57], [-1.2, -2.0, 3.14], [-2.2, -2.0, -1.57]]
+        dwell: 1.0
+        loops: 2
+
+  # --- 3. Patrols: a route from the site, N rounds. wait: true blocks until done;
+  #        the default (false) leaves it running in the background.
+  - log: "3. patrol once, blocking"
+  - patrol: {robots: ["834"], route: patrol_834, rounds: 1, wait: true}
+
+  # --- 4. Several robots at once, each doing something different, then continue
+  #        when all are done (missing robots are skipped or substituted).
+  - log: "4. parallel: different robots, different jobs"
+  - parallel:
+      - go_to: {robot: "741", place: muster_1}
+      - go_to: {robot: "665", place: muster_3}
+      - action: {robot: "834", category: turn_to, description: {yaw: 3.14}}
+
+  # --- 5. Staggered start: things in a parallel block can have their own delays.
+  - log: "5. staggered"
+  - parallel:
+      - go_to: {robot: "834", place: hall_w}
+      - repeat: {times: 1, steps: [{sleep: 3}, {go_to: {robot: "741", place: door_a}}]}
+
+  # --- 6. Waiting for the operator or a timer: ENTER in the mission terminal,
+  #        `m20 trigger next` from another shell, or give up after 30 s.
+  - log: "6. waiting (ENTER, m20 trigger next, or 30 s)"
+  - wait_trigger: {prompt: "Continue?", event: next, seconds: 30}
+
+  # --- 7. Headings and pauses without moving.
+  - turn_to: {robot: "834", look_at: [0.2, 0.5]}           # face a point
+  - hold: {robots: ["834"], seconds: 3}                    # stand still inside RMF
+
+  # --- 8. Loops of steps.
+  - log: "8. repeat a small sequence twice"
+  - repeat:
+      times: 2
+      steps:
+        - go_to: {robot: "834", place: door_c}
+        - go_to: {robot: "834", place: door_b}
+
+  # --- 9. Announce things (lights/sound/dashboard hooks listen on /m20/events).
+  - signal: {event: examples_done, data: {note: "all blocks ran"}}
+  - return_home: {}
