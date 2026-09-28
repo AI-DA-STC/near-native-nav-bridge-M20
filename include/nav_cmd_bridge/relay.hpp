@@ -5,8 +5,10 @@
 #include <memory>
 #include <stdexcept>
 #include <string>
+#include <thread>
 #include <vector>
 
+#include <rcl/init_options.h>
 #include <rclcpp/rclcpp.hpp>
 
 namespace nav_cmd_bridge
@@ -79,7 +81,60 @@ void prefix_frames(T & msg, const FramePrefix & fp)
   prefix_poses(msg, fp, 0);
 }
 
+// A node on another DDS domain: its own context, spun on a private thread.
+//
+// Lets one relay read the robot's internal domain (0, fixed by DeepRobotics) and
+// publish on a separate laptop domain, so relayed topics never mix with other
+// robots or other people's domain-0 traffic. Foxy has no public API for this: the
+// domain is set on the context's rcl init options and on the node's cached rcl
+// node options (which rclcpp otherwise fills from ROS_DOMAIN_ID).
+class DomainNode
+{
+public:
+  DomainNode(const std::string & name, size_t domain_id)
+  {
+    rclcpp::InitOptions init_options;
+    init_options.auto_initialize_logging(false);
+    if (rcl_init_options_set_domain_id(
+        const_cast<rcl_init_options_t *>(init_options.get_rcl_init_options()),
+        domain_id) != RCL_RET_OK)
+    {
+      throw std::runtime_error("could not set domain id " + std::to_string(domain_id));
+    }
+    context_ = std::make_shared<rclcpp::Context>();
+    context_->init(0, nullptr, init_options);
+
+    rclcpp::NodeOptions options;
+    options.context(context_);
+    options.start_parameter_services(false);
+    const_cast<rcl_node_options_t *>(options.get_rcl_node_options())->domain_id = domain_id;
+    node_ = std::make_shared<rclcpp::Node>(name, options);
+
+    rclcpp::ExecutorOptions exec_options;
+    exec_options.context = context_;
+    executor_ = std::make_shared<rclcpp::executors::SingleThreadedExecutor>(exec_options);
+    executor_->add_node(node_);
+    thread_ = std::thread([this]() {executor_->spin();});
+  }
+
+  ~DomainNode()
+  {
+    context_->shutdown("relay exiting");
+    if (thread_.joinable()) {thread_.join();}
+  }
+
+  rclcpp::Node::SharedPtr node() const {return node_;}
+
+private:
+  rclcpp::Context::SharedPtr context_;
+  rclcpp::Node::SharedPtr node_;
+  rclcpp::executors::SingleThreadedExecutor::SharedPtr executor_;
+  std::thread thread_;
+};
+
 // Subscribes to <input_topic> and republishes on <output_topic>.
+// The subscription lives on this node's domain (ROS_DOMAIN_ID); if <output_domain>
+// is set (>= 0) and differs, the publisher lives on that domain instead.
 // Both topic names and QoS are read from ROS parameters.
 template <typename MsgT>
 class Relay : public rclcpp::Node
@@ -102,7 +157,14 @@ public:
       declare_parameter<std::string>("frame_prefix", ""),
       declare_parameter<std::vector<std::string>>("shared_frames", {"map"})};
 
-    pub_ = create_publisher<MsgT>(out_topic, qos);
+    const auto out_domain = declare_parameter<int>("output_domain", -1);
+    if (out_domain >= 0 && static_cast<size_t>(out_domain) != get_domain_id()) {
+      out_side_ = std::make_unique<DomainNode>(
+        std::string(get_name()) + "_out", static_cast<size_t>(out_domain));
+      pub_ = out_side_->node()->create_publisher<MsgT>(out_topic, qos);
+    } else {
+      pub_ = create_publisher<MsgT>(out_topic, qos);
+    }
     sub_ = create_subscription<MsgT>(
       in_topic, qos,
       [this, fp](typename MsgT::SharedPtr msg) {
@@ -110,10 +172,21 @@ public:
         pub_->publish(*msg);
       });
 
-    RCLCPP_INFO(get_logger(), "Relay: %s -> %s", in_topic.c_str(), out_topic.c_str());
+    RCLCPP_INFO(
+      get_logger(), "Relay: %s (domain %zu) -> %s (domain %zu)", in_topic.c_str(),
+      get_domain_id(), out_topic.c_str(),
+      out_side_ ? static_cast<size_t>(out_domain) : get_domain_id());
   }
 
 private:
+  size_t get_domain_id()
+  {
+    size_t id = 0;
+    rcl_node_get_domain_id(get_node_base_interface()->get_rcl_node_handle(), &id);
+    return id;
+  }
+
+  std::unique_ptr<DomainNode> out_side_;   // before pub_: destroyed after it
   typename rclcpp::Subscription<MsgT>::SharedPtr sub_;
   typename rclcpp::Publisher<MsgT>::SharedPtr    pub_;
 };

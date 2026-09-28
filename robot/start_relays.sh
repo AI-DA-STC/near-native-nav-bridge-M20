@@ -2,6 +2,8 @@
 # Start all relays for this robot in the background (logs in /tmp/relays*.log).
 #   /root/start_relays.sh          start (restarts if running)
 #   /root/start_relays.sh stop
+# Optional: LAPTOP_DOMAIN_ID=<n> publishes relayed topics on domain n instead of 0
+# (the robot's own nodes stay on 0); unset = everything on domain 0 as before.
 ROBOT_ID=${ROBOT_ID:-834}
 source /opt/ros/foxy/setup.bash
 source /root/ros2_ws/install/setup.bash

@@ -13,6 +13,14 @@ ROBOT_ID = os.environ.get('ROBOT_ID', '').strip()
 SUFFIX = f'_{ROBOT_ID}' if ROBOT_ID else ''
 SHARED_TOPICS = ('/tf_relayed', '/tf_static_relayed')
 
+# Optional: the DDS domain the laptops use for this robot's relayed topics. The robot's
+# own AOS nodes are fixed on ROS_DOMAIN_ID (0); when LAPTOP_DOMAIN_ID is set and
+# differs, each relay reads on one domain and publishes on the other (see DomainNode
+# in relay.hpp), so relayed topics and point clouds never enter domain 0, where other
+# robots and other people's tools live. Unset keeps everything on ROS_DOMAIN_ID.
+ROBOT_DOMAIN = os.environ.get('ROS_DOMAIN_ID', '0').strip() or '0'
+LAPTOP_DOMAIN = os.environ.get('LAPTOP_DOMAIN_ID', '').strip() or ROBOT_DOMAIN
+
 
 # Only the cross-machine side of each pair gets the suffix, and that side is always
 # the one ending in '_relayed'. The other side is a fixed name owned by the robot's
@@ -30,12 +38,21 @@ def relay_node(executable, name, in_topic, out_topic, qos_overrides=None):
         params['frame_prefix'] = ROBOT_ID
     if qos_overrides:
         params.update(qos_overrides)
+    to_laptop = out_topic.endswith('_relayed')
+    env = None
+    if LAPTOP_DOMAIN != ROBOT_DOMAIN:
+        # AOS -> laptop: subscribe on the robot domain, publish on the laptop domain.
+        # laptop -> AOS: the reverse, so the node itself lives on the laptop domain.
+        params['output_domain'] = int(LAPTOP_DOMAIN if to_laptop else ROBOT_DOMAIN)
+        if not to_laptop:
+            env = {'ROS_DOMAIN_ID': LAPTOP_DOMAIN}
     return Node(
         package='nav_cmd_bridge',
         executable=executable,
         name=name + SUFFIX,
         output='screen',
         parameters=[params],
+        additional_env=env,
     )
 
 
