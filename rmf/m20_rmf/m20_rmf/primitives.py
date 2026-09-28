@@ -126,8 +126,13 @@ class Fleet:
             self._say(f'{r} patrolling {rname} x{rounds} ({tid})')
         return self._finish(tids, wait, timeout, 'patrol')
 
-    def go_to(self, robot, place, yaw=None, wait=True, queue=False, timeout=None):
-        self.site.place(place)
+    def go_to(self, robot, place, yaw=None, face='place', wait=True, queue=False, timeout=None):
+        """Go to a place. It ends facing the place's own yaw from the site file
+        (face='place', default), the direction it arrived from (face='travel', RMF's
+        default), or `yaw` if given."""
+        x, y, place_yaw = self.site.place(place)
+        if yaw is None and face == 'place':
+            yaw = place_yaw
         tids = [self._start(r, [{'category': 'go_to_place', 'description': self._place(place, yaw)}],
                             f'go_to:{place}', queue) for r in self._robots(robot)]
         self._say(f'{robot} -> {place}')

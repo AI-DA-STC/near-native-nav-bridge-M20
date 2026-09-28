@@ -211,9 +211,13 @@ def main(argv=None):
     add('capture', cmd_capture, rob, (('name',), {}), (('--out',), {}))
     add('relocalize', cmd_relocalize, rob, (('where',), {'nargs': '+'}))
     add('graph', cmd_graph, (('--out',), {}))
-    add('go', lambda a: _run(a, lambda f: f.go_to(a.robot, a.place, yaw=a.yaw, wait=not a.no_wait,
-                                                   queue=a.queue)),
-        rob, (('place',), {}), (('--yaw',), {'type': float}), wait, queue)
+    add('go', lambda a: _run(a, lambda f: f.go_to(a.robot, a.place, yaw=a.yaw,
+                                                   face='travel' if a.face_travel else 'place',
+                                                   wait=not a.no_wait, queue=a.queue)),
+        rob, (('place',), {}), (('--yaw',), {'type': float}),
+        (('--face-travel',), {'action': 'store_true',
+                              'help': 'end facing the arrival direction, not the place yaw'}),
+        wait, queue)
     add('pose-goal', lambda a: _run(a, lambda f: f.go_to_pose(
         a.robot, [a.x, a.y, a.yaw], wait=not a.no_wait, queue=a.queue)),
         rob, (('x',), {'type': float}), (('y',), {'type': float}), (('yaw',), {'type': float}),

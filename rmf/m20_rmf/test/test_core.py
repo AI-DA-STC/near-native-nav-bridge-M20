@@ -227,8 +227,32 @@ def test_face_travel_off_or_aligned_sends_one_goal():
     c2.update_pose(0, 0, 0)
     c2.go_to(2.0, 0.1, 0.0)                          # heading already matches travel
     assert _wait(lambda: len(bot2.goals) == 1)
-    assert c2.goal.final_yaw is None
+    assert c2._legs == []                            # one leg only
     c2.close()
+
+
+def test_face_travel_turns_first_when_facing_away():
+    # 834, 2026-09-28: facing +x, sent back to home (-x); it turned while walking.
+    bot = FakeRobot()
+    c = M20Client('t', '127.0.0.1', bot.port, settle_time=0.2, heartbeat_period=10)
+    c.update_pose(0, 0, 0.0)                         # facing +x
+    c.go_to(-2.0, 0.0, 0.0)                          # go back, end facing +x again
+    assert _wait(lambda: len(bot.goals) == 1)
+    x, y, yaw = bot.goals[0]
+    assert (x, y) == (0.0, 0.0) and abs(abs(yaw) - math.pi) < 1e-6, 'first: turn in place'
+    assert [round(abs(leg[2]), 3) for leg in c._legs] == [round(math.pi, 3), 0.0]
+
+    def settle_at(px, py, pyaw):
+        c.update_pose(px, py, pyaw)
+        time.sleep(0.3)
+        c.update_pose(px, py, pyaw)
+        return c.nav_state()
+    assert settle_at(0.0, 0.0, math.pi) == NavState.NAVIGATING    # turned -> walk leg
+    assert _wait(lambda: len(bot.goals) == 2) and bot.goals[1][:2] == (-2.0, 0.0)
+    assert settle_at(-2.0, 0.0, math.pi) == NavState.NAVIGATING   # walked -> final turn
+    assert _wait(lambda: len(bot.goals) == 3) and abs(bot.goals[2][2]) < 1e-6
+    assert settle_at(-2.0, 0.0, 0.0) == NavState.ARRIVED
+    c.close()
 
 
 def test_busy_error_triggers_cancel_then_resend():

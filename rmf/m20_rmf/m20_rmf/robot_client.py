@@ -35,7 +35,6 @@ class Goal:
         self.resends = 0
         self.robot_complete = False
         self.error = None
-        self.final_yaw = None      # set on the walk leg of a walk-then-turn goal
 
 
 class NavState:
@@ -70,6 +69,7 @@ class M20Client:
         self._msg_id = 0
         self._value = 0
         self._goal = None
+        self._legs = []            # remaining legs of the current move
         self._state = NavState.IDLE
         self._pose = None          # (x, y, yaw)
         self._pose_stamp = 0.0
@@ -130,13 +130,14 @@ class M20Client:
             self._msg_id = (self._msg_id + 1) & 0xFFFF
         self._sock.sendto(packet, self.addr)
 
-    # The M20 holds a goal's final heading *while* it walks, so a goal whose heading
-    # differs from the direction of travel makes it walk backwards or strafe (seen on 834,
-    # 2026-09-28). With face_travel (default on, per-robot `nav: {face_travel: false}` to
-    # disable) such a goal is split: walk there facing the travel direction, then turn in
-    # place to the final heading.
+    # The M20 turns towards a goal's heading *while* it walks: a goal whose heading
+    # differs from the direction of travel, or a start facing away from it, makes it walk
+    # backwards or strafe (seen on 834, 2026-09-28). With face_travel (default on;
+    # per-robot `nav: {face_travel: false}` to disable) a move becomes up to three legs:
+    # turn in place to face the travel direction, walk straight there, turn in place to
+    # the requested heading.
     FACE_TRAVEL_MIN_DIST = 0.4                  # m; shorter moves go as one goal
-    FACE_TRAVEL_MIN_ANGLE = math.radians(30)    # heading mismatch that triggers a split
+    FACE_TRAVEL_MIN_ANGLE = math.radians(30)    # heading mismatch that adds a turn
 
     def go_to(self, x, y, yaw, check_yaw=False, **overrides):
         """Send a navigation goal and start tracking it. Replaces any active goal."""
@@ -146,18 +147,35 @@ class M20Client:
                 # The robot rejects a new goal while one runs (0xA341).
                 self.send(protocol.cancel_nav())
                 time.sleep(0.3)
-            final_yaw = None
-            p = self._pose
-            if params.get('face_travel', True) and p is not None:
-                dist = math.hypot(x - p[0], y - p[1])
-                travel = math.atan2(y - p[1], x - p[0])
-                if dist > self.FACE_TRAVEL_MIN_DIST and \
-                        abs(wrap(yaw - travel)) > self.FACE_TRAVEL_MIN_ANGLE:
-                    final_yaw, yaw = yaw, travel
-            self._start_leg(x, y, yaw, check_yaw, params)
-            self._goal.final_yaw = final_yaw
-        suffix = f', then turn to {final_yaw:.2f}' if final_yaw is not None else ''
-        self.on_event(self.name, f'goal #{self._value} -> ({x:.2f}, {y:.2f}, {yaw:.2f}){suffix}')
+            legs = self._plan_legs(x, y, yaw, check_yaw, params)
+            self._legs = legs[1:]
+            self._start_leg(*legs[0], params)
+        plan = ' -> '.join(self._describe(leg) for leg in legs)
+        self.on_event(self.name, f'goal #{self._value}: {plan}')
+
+    def _plan_legs(self, x, y, yaw, check_yaw, params):
+        """[(x, y, yaw, check_yaw), ...] for one move; see FACE_TRAVEL_* above."""
+        p = self._pose
+        if not params.get('face_travel', True) or p is None:
+            return [(x, y, yaw, check_yaw)]
+        dist = math.hypot(x - p[0], y - p[1])
+        if dist <= self.FACE_TRAVEL_MIN_DIST:
+            return [(x, y, yaw, check_yaw)]
+        travel = math.atan2(y - p[1], x - p[0])
+        legs = []
+        if abs(wrap(p[2] - travel)) > self.FACE_TRAVEL_MIN_ANGLE:
+            legs.append((p[0], p[1], travel, True))          # turn to face the way
+        legs.append((x, y, travel, False))                    # walk straight
+        if abs(wrap(yaw - travel)) > self.FACE_TRAVEL_MIN_ANGLE:
+            legs.append((x, y, yaw, True))                    # turn to the final heading
+        elif check_yaw:
+            legs[-1] = (x, y, yaw, True)
+        return legs
+
+    @staticmethod
+    def _describe(leg):
+        x, y, yaw, check_yaw = leg
+        return f'({x:.2f}, {y:.2f}, {yaw:.2f}{" turn" if check_yaw else ""})'
 
     def _start_leg(self, x, y, yaw, check_yaw, params):
         """Make (x, y, yaw) the active goal and send it (caller holds the lock)."""
@@ -189,6 +207,7 @@ class M20Client:
 
     def cancel(self):
         with self._lock:
+            self._legs = []
             self._goal = None
             self._state = NavState.IDLE
         self.send(protocol.cancel_nav())
@@ -199,6 +218,7 @@ class M20Client:
 
     def estop(self):
         with self._lock:
+            self._legs = []
             self._goal = None
             self._state = NavState.IDLE
         self.send(protocol.estop())
@@ -224,10 +244,11 @@ class M20Client:
             in_tol = dist <= self.xy_tolerance and yaw_ok
             if (in_tol and (g.robot_complete or self.settled())) or \
                     (g.robot_complete and dist <= 3 * self.xy_tolerance):
-                if g.final_yaw is not None:
-                    # Walk leg done: turn in place to the requested heading.
-                    self.on_event(self.name, f'goal #{g.value} reached, turning to {g.final_yaw:.2f}')
-                    self._start_leg(g.x, g.y, g.final_yaw, True, g.params)
+                if self._legs:
+                    # Next leg of the same move (turn / walk / turn).
+                    leg = self._legs.pop(0)
+                    self.on_event(self.name, f'goal #{g.value} done, next leg {self._describe(leg)}')
+                    self._start_leg(*leg, g.params)
                     return NavState.NAVIGATING
                 self._state = NavState.ARRIVED
                 self.on_event(self.name, f'arrived at goal #{g.value} (err {dist:.2f} m)')
