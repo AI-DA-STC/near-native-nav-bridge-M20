@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Fast DDS profile for the Jazzy (Open-RMF) container. Lets Jazzy share a domain with
+  the robots' Foxy relays.
+
+  Why: every ROS 2 participant publishes graph info on the hidden `ros_discovery_info`
+  topic (rmw_dds_common/ParticipantEntitiesInfo). Its GID field shrank from 24 to 16
+  bytes in Iron, so a Foxy participant that receives a Jazzy sample misreads it:
+  "Deserialization of data failed" -> std::bad_alloc -> the Foxy process dies. That
+  killed 834's relays whenever RMF joined their domain (reproduced over UDP on the
+  laptop 2026-09-28; fixed by this file with zero errors).
+
+  Fix: put Jazzy's ros_discovery_info writer and reader in their own DDS partition, so
+  they only match other Iron+ participants. Jazzy nodes still see each other's graph;
+  Foxy never receives the incompatible samples. All normal topics are unaffected.
+  Jazzy's rmw_fastrtps applies data_writer/data_reader profiles named after the topic
+  and keeps the partition (ROS QoS from code only overrides history/reliability/etc).
+-->
+<!--
+  UDP only: the Foxy bridge runs in another container on this laptop. Fast DDS would
+  pick shared memory between them (same host) but the containers do not share /dev/shm
+  (and Fast DDS 2.1 / 2.14 SHM formats differ), so samples would be silently lost.
+-->
+<profiles xmlns="http://www.eprosima.com/XMLSchemas/fastRTPS_Profiles">
+  <transport_descriptors>
+    <transport_descriptor><transport_id>jazzy_udp</transport_id><type>UDPv4</type></transport_descriptor>
+  </transport_descriptors>
+  <participant profile_name="jazzy_udp" is_default_profile="true">
+    <rtps>
+      <userTransports><transport_id>jazzy_udp</transport_id></userTransports>
+      <useBuiltinTransports>false</useBuiltinTransports>
+    </rtps>
+  </participant>
+  <data_writer profile_name="ros_discovery_info">
+    <qos><partition><names><name>ros_iron_plus</name></names></partition></qos>
+  </data_writer>
+  <data_reader profile_name="ros_discovery_info">
+    <qos><partition><names><name>ros_iron_plus</name></names></partition></qos>
+  </data_reader>
+</profiles>

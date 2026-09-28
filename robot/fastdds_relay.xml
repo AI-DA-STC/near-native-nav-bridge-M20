@@ -2,11 +2,13 @@
 <!-- Relay profile for one robot: copy into the relay container as /root/fastdds_relay.xml
      and replace 192.168.123.102 (robot 834) with the robot's own p2p0 address.
      Unicast locators must list every interface a peer needs to reach us on:
-       p2p0 192.168.123.102  laptop (Foxy only: Jazzy participants crash these relays)
+       p2p0 192.168.123.102  laptops (Foxy doesn't advertise it on its own)
        eth2 10.21.31.103     DeepRobotics hosts 10.21.31.104 / .106 (/ODOM etc.)
        eth1 10.21.32.103     DeepRobotics nodes on .32
        eth0 10.21.33.103     DeepRobotics nodes on .33
-     SHM is required too: over UDP only the relays fail to deserialize and die. -->
+     SHM enabled as in the default Foxy setup. A UDP-only variant pinned to eth0 crashed
+     ("Deserialization of data failed" -> bad_alloc) while reachable on domain 0; start
+     with LAPTOP_DOMAIN_ID set so the relayed side stays off domain 0. -->
 <profiles xmlns="http://www.eprosima.com/XMLSchemas/fastRTPS_Profiles">
   <transport_descriptors>
     <transport_descriptor><transport_id>relay_udp</transport_id><type>UDPv4</type></transport_descriptor>

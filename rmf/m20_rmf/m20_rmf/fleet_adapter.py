@@ -146,8 +146,21 @@ class M20Robot:
         battery = self.client.battery if self.client.battery is not None else 1.0
         state = rmf_easy.RobotState(self.site.map_name, list(pose), battery)
         if self.update_handle is None:
+            now = time.monotonic()
+            if now - getattr(self, '_last_add_attempt', -1e9) < 5.0:
+                return
+            self._last_add_attempt = now
             self.update_handle = self.fleet_handle.add_robot(
                 self.id, state, self.robot_config, self.make_callbacks())
+            if self.update_handle is None:
+                near = self.site.nearest_place(pose[0], pose[1])
+                d = math.hypot(pose[0] - self.site.places[near][0],
+                               pose[1] - self.site.places[near][1])
+                self.bus.event(self.id, f'RMF refused to add robot at ({pose[0]:.2f}, '
+                               f'{pose[1]:.2f}); nearest place {near} is {d:.1f} m away. Robots '
+                               'must start on or near the nav graph (or relocalize). Retrying '
+                               'every 5 s.')
+                return
             f = self.site.fleet
             self.update_handle.set_max_merge_waypoint_distance(
                 float(f.get('merge_waypoint_distance', 0.5)))

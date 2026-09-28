@@ -7,18 +7,33 @@ than a fleet manager.
 
 It runs on **ROS 2 Jazzy on the laptop only**. The robots are untouched (Foxy, vendor
 SLAM/nav): commands go over the vendor UDP API (the same packets as
-`nav_cmd_bridge`), and pose, battery, sleep and nav state come from the robot's own
-UDP status stream (or `/ODOM_relayed_<id>` when it is on the RMF domain).
+`nav_cmd_bridge`), and pose comes from the relays' `/ODOM_relayed_<id>` (10 Hz), with
+the robot's own UDP status stream (~1 Hz; also battery, sleep and nav state) as the
+fallback when the relay is down.
 
-> **Never run anything Jazzy on `ROS_DOMAIN_ID=0`.** The robots' relays are Foxy; the
-> moment a Jazzy participant can reach them, every relay dies with
-> `Deserialization of data failed` → `std::bad_alloc` (reproduced four times on 834,
-> 2026-09-28). This includes `ros2 topic list/echo/hz` from this container. The RMF
-> devcontainer therefore defaults to **domain 10**, and the adapter, CLI, mission
-> runner and launch file refuse domain 0 unless given `--allow-robot-domain` /
-> `allow_robot_domain:=true`. Inspect the robots' topics from the **Foxy** devcontainer.
+> **Domains and the laptop bridge.** The robots are left exactly as the team runs them:
+> Foxy relays publishing `/<TOPIC>_relayed_<id>` on domain 0. Open-RMF never joins
+> domain 0. Instead `launch/laptop_bridge.launch.py` (Foxy package, run in the Foxy
+> devcontainer) copies the relayed topics from domain 0 to the RMF domain **20**, and
+> commands back. Only Foxy ever talks to the robots, and our traffic stays off the
+> domain other people use. The adapter, CLI, mission runner and launch file refuse
+> domain 0 unless given `--allow-robot-domain` / `allow_robot_domain:=true`.
+>
+> **Why Jazzy needs `rmf/fastdds_jazzy.xml`.** Every ROS 2 participant publishes graph
+> info on the hidden `ros_discovery_info` topic; its GID field shrank from 24 to 16
+> bytes in Iron, and a Foxy process that receives a Jazzy sample dies with
+> `Deserialization of data failed` → `std::bad_alloc` (it killed 834's relays twice on
+> 2026-09-28; reproduced on the laptop over UDP). The profile moves Jazzy's
+> `ros_discovery_info` into its own DDS partition so Foxy never receives it, and uses
+> UDP only because the Foxy and Jazzy containers do not share shared memory. With it,
+> the bridge ran with zero errors next to the full RMF stack. Humble would not need the
+> partition (still 24-byte GIDs) but lacks the EasyFullControl API used here.
 
 ```
+ laptop, Foxy devcontainer                    laptop, Jazzy devcontainer (this)
+ robots ─ domain 0 ─► laptop_bridge ─ domain 20 ─► Open-RMF + m20_rmf
+ (relays untouched)   (Foxy, both domains)          (fastdds_jazzy.xml)
+
  mission YAML / m20 CLI / your script
         │  primitives.py (Fleet): patrol, form_up, explore, inspect, ...
         ▼  rmf_task_msgs/ApiRequest JSON on /task_api_requests
@@ -46,11 +61,18 @@ m20 mission /repo/rmf/m20_rmf/missions/visitor_demo.yaml      # second terminal
 m20 trigger start                                             # third: release the wait
 ```
 
-**Real robots** (RMF domain 10, robots reached over UDP only; the relays can stay up on
-domain 0 for the Foxy RViz):
+**Real robots.** Robots' relays running as usual (domain 0). First, in the **Foxy**
+devcontainer, the bridge:
 
 ```bash
-export M20_SITE=/repo/rmf/m20_rmf/sites/<your_site>.yaml     # ROS_DOMAIN_ID=10 already
+export FASTRTPS_DEFAULT_PROFILES_FILE=$PWD/fastdds_profile.xml   # laptop profile
+ros2 launch nav_cmd_bridge laptop_bridge.launch.py robots:=834   # clouds:=true for point clouds
+```
+
+then here (ROS_DOMAIN_ID=20 and the Jazzy profile are preset by the devcontainer):
+
+```bash
+export M20_SITE=/repo/rmf/m20_rmf/sites/<your_site>.yaml
 ros2 launch m20_rmf m20_rmf.launch.py site:=$M20_SITE robots:=834
 m20 status                     # pose source, localized, asleep, battery, activity
 m20 go 834 fwd_1
@@ -149,20 +171,16 @@ name to `sitefile.ADAPTER_ACTIONS`.
 
 Without a profile, Foxy's Fast DDS on the robot advertises only the internal
 `10.21.x` addresses (never the Wi-Fi one), so the laptop hears the relays but can never
-connect: no `_<id>` topics. With a profile that pins unicast to the Wi-Fi address but
-drops shared memory, the relays read the DeepRobotics nodes over UDP and crash. What
-works is both: pinned UDP locators **and** SHM (the robot-side
-`/root/fastdds_relay.xml` on 834):
+connect: no `_<id>` topics. The profile must pin unicast locators to the Wi-Fi address
+**and** every internal address the DeepRobotics nodes reach the relays on (on 834
+`/ODOM` comes from hosts on `10.21.31.x`, so eth0's `10.21.33.103` alone gives no
+odometry), with SHM kept on. `robot/fastdds_relay.xml` is the profile 834 runs.
 
-```xml
-<transport_descriptors>
-  <transport_descriptor><transport_id>relay_udp</transport_id><type>UDPv4</type></transport_descriptor>
-  <transport_descriptor><transport_id>relay_shm</transport_id><type>SHM</type></transport_descriptor>
-</transport_descriptors>
-<!-- participant: metatraffic multicast 239.255.0.1; metatraffic + default unicast
-     <robot wifi ip> and 10.21.33.103; userTransports relay_shm, relay_udp;
-     useBuiltinTransports false -->
-```
+Observed on 834 (2026-09-28): whenever its relays are reachable over Wi-Fi on domain
+0, it sends ~180 KiB/s to the other robots and the workstation (.101, .160, .100) and
+its ping rises to 0.1–1.6 s; with the relays stopped it drops back to ~35 ms. That is
+the shared-domain-0 relay design, not the profile; worth a look before relying on
+834's link during a demo (its motion commands share it).
 
 ## Robot link details (learned on 834, fw "PRO")
 

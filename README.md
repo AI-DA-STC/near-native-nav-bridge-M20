@@ -72,23 +72,20 @@ rviz2
 If it is drifting, select "2D Pose Estimate", then click and extend the arrow to set the location and heading.
 - After the robot relozalises, close and save rviz
 
-  **Faster alternative (no `ssh -X`):** once the relay below is running, relocalize from the
-  laptop instead. The relay also forwards laptop `/initialpose_set_relayed_<robot_id>` to the
-  robot's `/initialpose`, so in the laptop RViz (Step 5 below) add
-  `-r /initialpose:=/initialpose_set_relayed_<robot_id>` and use "2D Pose Estimate" against
-  `/ALIGNED_POINTS_relayed_<id>` over `/GRID_MAP_relayed_<id>`.
+  **Checking localization without RViz:** from the Foxy devcontainer (domain 0, laptop
+  profile exported), `python3 scripts/localize.py <robot_id>` scores how well the live cloud
+  (`/ALIGNED_POINTS_relayed_<id>`) fits the map and searches ±1 m / ±20° for a better pose.
+  The robot must be standing (its lidar is idle while asleep).
 
-  **Without RViz:** from the Foxy devcontainer (domain 0, laptop profile exported),
-  `python3 scripts/localize.py <robot_id>` scores how well the live cloud fits the map and
-  searches ±1 m / ±20° for a better pose; `--apply` sends it, `--pose x y yaw` sets one by
-  hand. The robot must be standing (its lidar is idle while asleep).
+  **Setting the pose from the laptop** (`localize.py --apply` / `--pose`, or laptop RViz
+  "2D Pose Estimate" remapped to `/initialpose_set_relayed_<id>`) needs the
+  `initialpose_set` relay, which is in this branch's `relays.launch.py` but only reaches the
+  robots once their image is rebuilt from it. Until then use the on-robot RViz above.
 
-  **Relay setup that works (robot side):** `robot/fastdds_relay.xml` (set the robot's p2p0
-  address) and `robot/start_relays.sh`, copied into the relay container as
-  `/root/fastdds_relay.xml` and `/root/start_relays.sh`; then `ROBOT_ID=<id> /root/start_relays.sh`.
-  The profile must pin the Wi-Fi address *and* all three internal `10.21.3x.103` addresses,
-  with SHM enabled — see the comments in the file for what breaks otherwise. Never run
-  anything ROS 2 Jazzy on domain 0: it crashes these Foxy relays.
+  **Relay profile (robot side):** the relays need a Fast DDS profile that pins the Wi-Fi
+  address *and* all three internal `10.21.3x.103` addresses, with SHM enabled;
+  `robot/fastdds_relay.xml` is the one 834 runs (set the robot's own p2p0 address). Without
+  it the relays advertise only internal addresses and the laptop never sees them.
 
 - Step 4 : Run the relay node to convert DeepRobotics topics to ROS topics 
 
