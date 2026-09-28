@@ -105,7 +105,16 @@ Terminals: (1) Foxy devcontainer — `laptop_bridge.launch.py`; (2) Jazzy — th
 4. **The handheld controller** — take over or sit the robot down.
 
 Stopping the RMF launch alone does **not** stop a robot: it keeps walking to its last
-goal until cancelled. `m20 estop --drop` is the vendor e-stop and **drops the robot**.
+goal until cancelled.
+
+**Shared memory.** A Fast DDS process that is killed or crashes leaves its segments in
+`/dev/shm`; the Foxy devcontainer has only 64 MB there, and once full every new node
+logs `Failed to create segment ... SHM Transport is not supported`. The bridge launch
+removes stale ones before starting and runs its own nodes UDP-only, so it adds none.
+To clean by hand: `python3 scripts/shm_clean.py` in the Foxy devcontainer (only files
+no running process uses are removed; `--dry-run` to preview), or `sudo python3
+scripts/shm_clean.py` on the host. Stop nodes with Ctrl-C rather than `kill -9` so they
+clean up after themselves. `m20 estop --drop` is the vendor e-stop and **drops the robot**.
 
 Goals are sent walk-then-turn: the M20 holds a goal's final heading while it walks
 (so a goal whose heading differs from the travel direction made 834 walk backwards or

@@ -11,14 +11,25 @@ and nothing is installed on the robots.
 Settings (robots, both domains, the laptop DDS profile) come from m20_stack.yaml at the
 repo root, so nothing needs exporting; launch arguments override them.
 
+Shared memory: the bridge only talks over the network (robots over Wi-Fi, RMF over
+UDP), so its nodes get a UDP-only copy of the laptop profile (same interface
+whitelist) and create no /dev/shm segments; and before starting, stale Fast DDS files
+left in /dev/shm by killed or crashed processes are removed (scripts/shm_clean.py), so
+the container's 64 MB /dev/shm cannot fill up.
+
 Only Foxy talks to the robots' Foxy relays. The Jazzy RMF side meets only this bridge's
 domain-20 participants, and its own profile (rmf/fastdds_jazzy.xml) keeps Jazzy's
 incompatible ros_discovery_info away from them.
 """
 
 import os
+import subprocess
+import sys
+import tempfile
+import xml.etree.ElementTree as ET
 
 import yaml
+from ament_index_python.packages import get_package_prefix
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, OpaqueFunction
 from launch.substitutions import LaunchConfiguration
@@ -58,6 +69,66 @@ def _stack(path):
     return {}
 
 
+def _udp_only_profile(profile):
+    """Copy of a Fast DDS profile with its SHM transports removed; path of the copy.
+
+    Keeps everything else (the laptop's interface whitelist in particular). If the
+    profile relies on builtin transports (which include SHM), or there is no profile,
+    a plain UDPv4 transport is set instead.
+    """
+    ns = 'http://www.eprosima.com/XMLSchemas/fastRTPS_Profiles'
+    ET.register_namespace('', ns)
+    if profile:
+        tree = ET.parse(profile)
+        root = tree.getroot()
+    else:
+        root = ET.Element(f'{{{ns}}}profiles')
+        tree = ET.ElementTree(root)
+    q = root.tag[:root.tag.index('}') + 1] if root.tag.startswith('{') else ''
+
+    shm_ids = {(d.findtext(f'{q}transport_id') or '').strip()
+               for d in root.iter(f'{q}transport_descriptor')
+               if (d.findtext(f'{q}type') or '').strip().upper() == 'SHM'}
+    for user_transports in root.iter(f'{q}userTransports'):
+        for t in list(user_transports):
+            if (t.text or '').strip() in shm_ids:
+                user_transports.remove(t)
+
+    if not any(len(u) for u in root.iter(f'{q}userTransports')):
+        tds = root.find(f'{q}transport_descriptors')
+        if tds is None:
+            tds = ET.SubElement(root, f'{q}transport_descriptors')
+        td = ET.SubElement(tds, f'{q}transport_descriptor')
+        ET.SubElement(td, f'{q}transport_id').text = 'bridge_udp'
+        ET.SubElement(td, f'{q}type').text = 'UDPv4'
+        part = root.find(f'{q}participant')
+        if part is None:
+            part = ET.SubElement(root, f'{q}participant',
+                                 {'profile_name': 'bridge', 'is_default_profile': 'true'})
+        rtps = part.find(f'{q}rtps')
+        if rtps is None:
+            rtps = ET.SubElement(part, f'{q}rtps')
+        for tag in ('userTransports', 'useBuiltinTransports'):
+            old = rtps.find(f'{q}{tag}')
+            if old is not None:
+                rtps.remove(old)
+        ut = ET.SubElement(rtps, f'{q}userTransports')
+        ET.SubElement(ut, f'{q}transport_id').text = 'bridge_udp'
+        ET.SubElement(rtps, f'{q}useBuiltinTransports').text = 'false'
+
+    out = os.path.join(tempfile.gettempdir(), 'm20_bridge_fastdds.xml')
+    tree.write(out, xml_declaration=True, encoding='UTF-8')
+    return out
+
+
+def _clean_shm():
+    """Remove stale Fast DDS /dev/shm files before starting (never ones in use)."""
+    script = os.path.join(get_package_prefix('nav_cmd_bridge'), 'lib', 'nav_cmd_bridge',
+                          'shm_clean.py')
+    if os.path.exists(script):
+        subprocess.run([sys.executable, script], check=False)
+
+
 def _bridge(executable, topic, direction, extra, robots_domain, rmf_domain, profile):
     src, dst = (robots_domain, rmf_domain) if direction == 'up' else (rmf_domain, robots_domain)
     params = {'input_topic': topic, 'output_topic': topic, 'output_domain': int(dst)}
@@ -86,8 +157,12 @@ def _nodes(context):
     profile = arg('profile') or cfg.get('laptop_profile') or os.environ.get('FASTRTPS_DEFAULT_PROFILES_FILE', '')
     if profile and not os.path.exists(profile):
         raise RuntimeError(f'DDS profile {profile} not found')
+    _clean_shm()
+    source_profile = profile
+    profile = _udp_only_profile(profile)
     print(f'[laptop_bridge] robots {robots}, domain {robots_domain} -> {rmf_domain}, '
-          f'profile {profile or "(Fast DDS default)"}, clouds {clouds}')
+          f'profile {source_profile or "(Fast DDS default)"} (UDP only: {profile}), '
+          f'clouds {clouds}')
     out = [_bridge(*e, robots_domain, rmf_domain, profile) for e in SHARED]
     for rid in robots:
         for exe, topic, direction, extra in PER_ROBOT + (CLOUDS if clouds else []):

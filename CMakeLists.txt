@@ -80,7 +80,7 @@ install(DIRECTORY include/
   DESTINATION include/
 )
 
-install(PROGRAMS scripts/benchmark.py
+install(PROGRAMS scripts/benchmark.py scripts/shm_clean.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
