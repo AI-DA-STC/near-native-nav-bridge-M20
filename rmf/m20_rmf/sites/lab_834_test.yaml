@@ -1,0 +1,43 @@
+# First real-robot test site for dog 834: every place lies on a straight 2 m corridor
+# in front of where 834 stood on 2026-09-28 (8.196, -2.947, heading 1.473 rad), so
+# the whole pipeline (go_to, patrol, form_up, explore, inspect, turn_to) is exercised
+# without leaving that corridor. Poses come from 834's UDP LocationStatus.
+#
+# Copy this as the starting point for the real demo site and replace the places
+# with `m20 capture` output.
+
+map_name: L1
+
+places:
+  home_834: [8.196, -2.947, 1.4727]     # where it stood (lying down) at capture
+  fwd_1:    [8.294, -1.952, 1.4727]     # 1 m ahead
+  fwd_2:    [8.392, -0.957, 1.4727]     # 2 m ahead
+
+lanes:
+  - [home_834, fwd_1, fwd_2]
+
+routes:
+  corridor: [fwd_2, home_834]
+
+formations:
+  line:
+    slots: [fwd_1]
+    assign: fixed
+
+zones:
+  corridor_probe:
+    entry: fwd_1
+    dwell: 2.0
+    tracks:
+      - [[8.343, -1.454, 1.4727], [8.392, -0.957, -1.6689]]   # 1.5 m ahead, then 2 m facing back
+
+targets:
+  box_right:
+    approach: fwd_2
+    look_at: [9.387, -1.055]     # 1 m to the robot's right at fwd_2 -> ~90 deg turn in place
+    dwell: 3.0
+    timeout: 15.0
+    label: test box
+
+robots:
+  "834": {ip: 192.168.123.102, home: home_834, route: corridor}

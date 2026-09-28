@@ -62,6 +62,12 @@ RELAYS = [
     # laptop -> AOS: laptop publishes /goal_pose_relayed; this relay renames to /goal_pose
     # which nav_bridge_node already subscribes to.
     ('posestamped_relay',  'goal_pose_relay',         '/goal_pose_relayed',     '/goal_pose',                     None),
+
+    # laptop -> AOS: relocalize from the laptop. RViz "2D Pose Estimate" remapped to
+    # /initialpose_set_relayed_<id> (or `m20 relocalize`) lands on the robot's own
+    # /initialpose, the topic the on-robot RViz tool uses — no ssh -X needed. Named
+    # apart from /initialpose_relayed (AOS -> laptop above) so the two cannot loop.
+    ('posewithcov_relay',  'initialpose_set_relay',   '/initialpose_set_relayed', '/initialpose',                 None),
 ]
 
 def generate_launch_description():

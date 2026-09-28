@@ -1,0 +1,89 @@
+# Annotated site file. Every name a mission refers to is defined here.
+# Coordinates: the robots' shared SLAM `map` frame, metres / radians.
+# Record real poses with:  ros2 run m20_rmf m20 capture <robot> <place_name> --site <file>
+#
+# This one drives the mock robots (127.0.0.1:3000x) for offline rehearsal; the door
+# route points come from the README. Copy it for a real site and change robots.*.ip.
+
+map_name: L1
+
+# Graph waypoints RMF can route to. [x, y, yaw] or {pose: [...], parking/holding: true}.
+# A robot's `home` is automatically its RMF charger + parking spot.
+places:
+  home_741: [-4.5, -5.0, 0.0]
+  home_665: [-4.5, -3.8, 0.0]
+  home_834: [-4.5, -2.6, 0.0]
+  door_a:   [-3.20162, -3.81141, -0.0404694]
+  door_b:   [-1.72499, -3.88239, 0.0412739]
+  door_c:   [0.200177, -1.78368, 0.00477056]
+  hall_w:   [-3.2, -1.0, 0.0]
+  hall_e:   [0.2, 0.5, 0.0]
+  # formation slots (a line abreast, 1.2 m apart, facing +x)
+  muster_1: [-1.0, -2.2, 0.0]
+  muster_2: [-1.0, -1.0, 0.0]
+  muster_3: [-1.0, 0.2, 0.0]
+  # where robots leave the graph to explore the new area
+  new_area_gate: [1.5, -1.0, 0.0]
+  box_approach:  [1.5, 0.8, 1.5708]
+
+# Lanes are chains of places, bidirectional unless {path: [...], oneway: true}.
+lanes:
+  - [home_741, door_a]
+  - [home_665, door_a]
+  - [home_834, hall_w]
+  - [door_a, door_b, door_c, hall_e, hall_w, door_a]
+  - [door_b, muster_1, muster_2, muster_3, hall_e]
+  - [muster_2, hall_w]
+  - [muster_1, door_c]
+  - [muster_2, new_area_gate, box_approach, hall_e]
+  - [door_c, new_area_gate]
+
+# Patrol routes: place sequences for RMF's native patrol task.
+routes:
+  patrol_741: [door_a, door_b, door_c]
+  patrol_665: [door_c, hall_e, hall_w]
+  patrol_834: [hall_w, door_a, door_b]
+
+# Formations: slot places. assign: nearest = min total travel, fixed = robot order.
+# A formation's facing is each slot's yaw.
+formations:
+  muster:
+    slots: [muster_1, muster_2, muster_3]
+    assign: nearest
+
+# Exploration zones: off-graph poses the robots walk through (vendor nav plans the
+# path). `tracks` gives one pose list per robot; with `poses` the list is split
+# among however many robots explore. Robots enter from `entry` (a place) and
+# finish back at `exit` (defaults to entry) so RMF can put them back on the graph.
+zones:
+  new_area:
+    entry: new_area_gate
+    dwell: 1.0          # seconds paused at each pose (e.g. for mapping sweeps)
+    tracks:
+      - [[2.5, -2.0, 0.0], [3.5, -2.0, 1.57]]
+      - [[2.5, -1.0, 0.0], [3.5, -1.0, 1.57]]
+      - [[2.5,  0.0, 0.0], [3.5,  0.0, 1.57]]
+
+# Inspection targets. approach = graph place to go to first; standoff = optional
+# off-graph pose to inspect from; look_at = point to face. The adapter publishes an
+# inspect request (/m20/inspect/request) and waits up to `timeout` for a result on
+# /m20/inspect/result — the hook for the object-recognition model.
+targets:
+  box1:
+    approach: box_approach
+    standoff: [1.8, 1.6, 1.5708]
+    look_at: [1.8, 2.4]
+    dwell: 5.0
+    timeout: 20.0
+    label: suspicious box
+
+# Robots. `ip`/`port` = vendor UDP API; `home` = parking/charger place; `route` =
+# default patrol. `nav` overrides goal fields per robot (gait, speed, obs_mode).
+robots:
+  "741": {ip: 127.0.0.1, port: 30001, home: home_741, route: patrol_741}
+  "665": {ip: 127.0.0.1, port: 30002, home: home_665, route: patrol_665}
+  "834": {ip: 127.0.0.1, port: 30003, home: home_834, route: patrol_834}
+
+# Optional overrides of the RMF fleet parameters (see sitefile.FLEET_DEFAULTS).
+fleet:
+  limits: {linear: [0.6, 0.6], angular: [0.8, 1.5]}

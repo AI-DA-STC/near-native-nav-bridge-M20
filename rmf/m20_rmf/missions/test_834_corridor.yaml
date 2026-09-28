@@ -1,0 +1,16 @@
+# Real-robot pipeline test for one dog on sites/lab_834_test.yaml. Mirrors the shape
+# of visitor_demo.yaml (patrol -> form up -> explore -> inspect -> form up -> patrol)
+# inside a 2 m corridor.
+name: test_834_corridor
+steps:
+  - log: "patrol the corridor once"
+  - patrol: {robots: ["834"], rounds: 1, wait: true}
+  - log: "form up"
+  - form_up: {formation: line}
+  - log: "explore the probe zone"
+  - explore: {zone: corridor_probe}
+  - log: "inspect the test box (turn in place)"
+  - inspect: {target: box_right, robot: "834"}
+  - log: "regroup and go home"
+  - form_up: {formation: line}
+  - return_home: {}

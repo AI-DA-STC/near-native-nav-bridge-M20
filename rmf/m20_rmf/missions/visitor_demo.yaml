@@ -1,0 +1,31 @@
+# The visitor demo: patrol -> form up -> explore new area -> inspect box -> form up
+# -> resume patrol. Names refer to the site file passed with --site.
+#
+#   ros2 run m20_rmf m20 mission missions/visitor_demo.yaml --site sites/sim_lab.yaml
+#   (add --robots 834 to rehearse with one dog; --check to validate only)
+name: visitor_demo
+steps:
+  - log: "Phase 1: individual patrols"
+  - patrol: {}                                  # every robot on its own route, background
+  - wait_trigger: {prompt: "Patrolling. Start the scenario?", event: start, seconds: 600}
+
+  - log: "Phase 2: form up"
+  - form_up: {formation: muster}                # cancels patrols; barrier until all in slots
+  - parallel:
+      - signal: {event: formed_up}
+      - hold: {seconds: 3}
+
+  - log: "Phase 3: explore the new area"
+  - explore: {zone: new_area}                   # one track per robot, back to the gate
+
+  - log: "Phase 4: investigate the suspicious box"
+  - parallel:
+      - inspect: {target: box1, robot: "834"}
+      - hold: {robots: ["741", "665"], seconds: 20}   # the others stand by
+
+  - log: "Phase 5: regroup"
+  - form_up: {formation: muster}
+  - signal: {event: regrouped}
+
+  - log: "Phase 6: resume patrols"
+  - patrol: {}

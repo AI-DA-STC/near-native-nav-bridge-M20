@@ -72,6 +72,13 @@ rviz2
 If it is drifting, select "2D Pose Estimate", then click and extend the arrow to set the location and heading.
 - After the robot relozalises, close and save rviz
 
+  **Faster alternative (no `ssh -X`):** once the relay below is running, relocalize from the
+  laptop instead. The relay also forwards laptop `/initialpose_set_relayed_<robot_id>` to the
+  robot's `/initialpose`, so in the laptop RViz (Step 5 below) add
+  `-r /initialpose:=/initialpose_set_relayed_<robot_id>` and use "2D Pose Estimate" against
+  `/ALIGNED_POINTS_relayed_<id>` over `/GRID_MAP_relayed_<id>`; or, from the Open-RMF
+  container, `m20 relocalize <robot_id> <place | x y yaw>` (see `rmf/README.md`).
+
 - Step 4 : Run the relay node to convert DeepRobotics topics to ROS topics 
 
 ```bash
@@ -132,3 +139,9 @@ ros2 run nav_cmd_bridge nav_cmd_bridge bridge queue --ip <robot_ip>
 ros2 run nav_cmd_bridge nav_cmd_bridge estop --ip <robot_ip> 
 ros2 run nav_cmd_bridge nav_cmd_bridge cancel --ip <robot_ip> 
 ```
+# Fleet orchestration with Open-RMF (branch `dev-openrmf`)
+
+`rmf/` holds a ROS 2 Jazzy Open-RMF stack for the laptop: an M20 fleet adapter over the
+same UDP API as above, mission primitives (patrol, form up, explore, inspect, ...), a YAML
+mission runner and mock robots for rehearsal. Open the repo in the **"Open-RMF (ROS2
+Jazzy)"** dev container and start with [`rmf/README.md`](rmf/README.md).

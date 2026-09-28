@@ -1,0 +1,33 @@
+{
+  "name": "Open-RMF (ROS2 Jazzy)",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": "."
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-iot.vscode-ros"
+      ],
+      "settings": {
+        "terminal.integrated.defaultProfile.linux": "bash",
+        "ros.distro": "jazzy"
+      }
+    }
+  },
+  "workspaceMount": "source=${localWorkspaceFolder},target=/repo,type=bind",
+  "workspaceFolder": "/repo",
+  "runArgs": ["--network=host", "--ipc=host"],
+  "mounts": [
+    "source=/tmp/.X11-unix,target=/tmp/.X11-unix,type=bind"
+  ],
+  "initializeCommand": "xhost +SI:localuser:root || true",
+  "containerEnv": {
+    "DISPLAY": "${localEnv:DISPLAY}",
+    "QT_X11_NO_MITSHM": "1",
+    "ROS_DOMAIN_ID": "0",
+    "FASTRTPS_DEFAULT_PROFILES_FILE": "/repo/fastdds_profile.xml"
+  },
+  "postCreateCommand": "bash /repo/rmf/build.sh"
+}
