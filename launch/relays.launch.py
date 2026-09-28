@@ -63,6 +63,11 @@ RELAYS = [
     # which nav_bridge_node already subscribes to.
     ('posestamped_relay',  'goal_pose_relay',         '/goal_pose_relayed',     '/goal_pose',                     None),
 
+    # std_msgs/Float64MultiArray -- the localizer's own scan-to-map matching error,
+    # read by scripts/localize.py next to its own fit score
+    ('float64multiarray_relay', 'matching_error_relay', '/LOCATION_STATUS/MATCHING_ERROR',
+        '/LOCATION_STATUS/MATCHING_ERROR_relayed', None),
+
     # laptop -> AOS: relocalize from the laptop. RViz "2D Pose Estimate" remapped to
     # /initialpose_set_relayed_<id> (or `m20 relocalize`) lands on the robot's own
     # /initialpose, the topic the on-robot RViz tool uses — no ssh -X needed. Named
