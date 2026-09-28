@@ -1,0 +1,250 @@
+# Runbook — M20 fleet with Open-RMF (`dev-openrmf`, work in progress)
+
+How to set up, run, stop and extend the Open-RMF stack for the DeepRobotics M20s as it
+stands now. Changes are listed in [CHANGELOG.md](CHANGELOG.md); design notes and the
+full reference are in [README.md](README.md). This is not final.
+
+**Safety rule: robot motion is always started by a person standing by the robot, from
+their own terminal.** Never from an automated session — whoever starts it must be able
+to stop it.
+
+---
+
+## 1. What runs where
+
+```
+ robot (untouched)               laptop, Foxy devcontainer          laptop, Jazzy devcontainer
+ ┌───────────────────┐  domain 0  ┌──────────────────────┐ domain 20 ┌─────────────────────┐
+ │ relay container    │──────────►│ laptop_bridge        │──────────►│ Open-RMF + m20 CLI  │
+ │ /ODOM → /ODOM_     │  (Wi-Fi)   │ (copies *_relayed_*) │  (UDP)     │ fleet adapter       │
+ │   relayed_<id>     │           └──────────────────────┘           └──────────┬──────────┘
+ │ vendor nav + SLAM  │◄────────────────── UDP :30000 goals / status ───────────┘
+ └───────────────────┘
+```
+
+- **Robots** run their normal Foxy relays on domain 0. Only one config file is special
+  (the relay DDS profile, §2.3).
+- **Foxy devcontainer** (the team's `.devcontainer/`): the laptop bridge, domain 0 → 20.
+- **Jazzy devcontainer** (`.devcontainer/rmf-jazzy/`): Open-RMF, the M20 fleet adapter,
+  the `m20` CLI and missions, on domain 20. Commands reach the robots over the vendor
+  UDP API, not ROS.
+- Settings: **`m20_stack.yaml`** at the repo root.
+
+| Robot | IP | Notes |
+|---|---|---|
+| 741 | 192.168.123.100 | SSH key not installed yet |
+| 665 | 192.168.123.101 | SSH key not installed yet |
+| 834 | 192.168.123.102 | SSH key installed; relay profile set up |
+| laptop | 192.168.123.196 | in `fastdds_profile.xml` whitelist |
+
+---
+
+## 2. One-time setup
+
+### 2.1 Devcontainers
+Open the repo in VS Code once per container: **Dev Containers: Reopen in Container** →
+"ROS2 Foxy", and in a second window **Open Folder in Container…** → "Open-RMF (ROS2
+Jazzy)". After pulling changes to `.devcontainer/rmf-jazzy/`, rebuild that container.
+(`scripts/m20_stack.sh up` also starts them if they exist but are stopped.)
+
+### 2.2 Laptop DDS profile
+`fastdds_profile.xml` must whitelist the laptop's current Wi-Fi address
+(`ip -4 addr` → e.g. `192.168.123.196`).
+
+### 2.3 Each robot
+1. **Relay DDS profile** in the relay container as `/root/fastdds_relay.xml`: copy
+   `robot/fastdds_relay.xml` and set the robot's own Wi-Fi (p2p0) address. It must list
+   the Wi-Fi address *and* `10.21.31.103`, `10.21.32.103`, `10.21.33.103`, with SHM on;
+   otherwise the laptop sees no topics or no `/ODOM`. Edit the address in a copy first
+   (the file in the repo has 834's `192.168.123.102`), then:
+   ```bash
+   scp robot/fastdds_relay.xml user@<ip>:/tmp/ && ssh user@<ip> \
+     'docker cp /tmp/fastdds_relay.xml user-nav_cmd_bridge-1:/root/fastdds_relay.xml'
+   ```
+2. **SSH key** so the launcher can start the relay:
+   `ssh-copy-id -i ~/.ssh/id_m20.pub user@<ip>` (SETUP §6).
+3. Add the robot to the site file (`robots:` with `ip`, `home`, optional `route`) and to
+   `robots:` in `m20_stack.yaml`.
+
+---
+
+## 3. Before each session
+1. Robots on, joined to `near-robots-5G`, relay container up (`docker ps` on the robot).
+2. **Localized**: check with the on-robot RViz (laptop-side relocalization needs a newer
+   robot image, see CHANGELOG).
+3. Robots **placed near a place of the site** (RMF only accepts robots on/near the nav
+   graph) with the planned area clear.
+4. `m20_stack.yaml` points at the right `site:` and `robots:`.
+
+---
+
+## 4. Start the stack
+
+```bash
+scripts/m20_stack.sh up          # on the host, from the repo root
+```
+
+A tmux window opens with one pane per process (click to focus; `Ctrl-b d` detaches,
+`scripts/m20_stack.sh attach` returns):
+
+| Pane | What it is | Healthy when |
+|---|---|---|
+| `relay <id>` | SSH → robot container → relay (`robot_relay: odom` = odometry only) | prints `Relay: /ODOM -> /ODOM_relayed_<id>` |
+| `bridge` | Foxy: rebuild if needed, `shm_clean`, laptop bridge | `robots [...], domain 0 -> 20 ...`, then `Relay:` lines (2 shared + 4 per robot) |
+| `rmf` | Jazzy: rebuild if needed, Open-RMF + adapter | `[<id>] registered with RMF at (x, y)` |
+| `events` | live log of every command the adapter sends | — |
+| `operator` | shell for `m20 …` | prompt |
+
+Relays already running by hand? `M20_RELAY=none scripts/m20_stack.sh up`.
+
+**Check in the operator pane before any motion:**
+```bash
+m20 status
+```
+Expect for each robot: `"registered": true`, `"pose_source": "odom"`, a sensible
+`pose`, `"udp_link": true`. `"asleep": true` / `height` ≈ 0.08 means sitting — stand it
+up with the controller first.
+
+---
+
+## 5. Operate
+
+Always try one short step before a whole mission.
+
+```bash
+m20 go 834 fwd_2                  # to a place; ends at the place's heading
+m20 go 834 fwd_1 --yaw 1.57       # ... with a different final heading
+m20 action 834 turn_to '{"yaw": -1.57}'
+m20 pose-goal 834 x y yaw         # off-graph pose
+m20 patrol 834 --route corridor --rounds 1 --wait
+m20 form-up line
+m20 explore corridor_probe
+m20 inspect box_right 834
+m20 inspect-result latest '{"verdict": "empty"}'
+m20 home
+m20 mission /repo/rmf/m20_rmf/missions/test_834_corridor.yaml
+m20 trigger start                 # releases a mission waiting on `event: start`
+```
+Every move is **turn in place → walk straight → turn in place**.
+
+Information only: `m20 status`, `m20 pose 834`, `m20 events`, `m20 graph`,
+`m20 --help`.
+
+### Stopping — none of these drops the robot
+1. **Ctrl-C** in the terminal running `m20 go …` / `m20 mission …`.
+2. **`m20 stop 834`** (or `m20 stop` for all) from any Jazzy terminal.
+3. **`ros2 run nav_cmd_bridge nav_cmd_bridge cancel --ip <robot ip>`** from the Foxy
+   devcontainer — works with RMF down.
+4. **The handheld controller.**
+
+Stopping the RMF launch does **not** stop a robot (it keeps its last goal) — cancel it.
+`m20 estop --drop <id>` is the vendor e-stop and **drops the robot to the ground**.
+
+---
+
+## 6. Stop the stack
+```bash
+scripts/m20_stack.sh down        # Ctrl-C to every pane, then closes the session
+```
+Robots keep standing; sit them with the controller.
+
+---
+
+## 7. Build a demo
+
+Files:
+
+| File | Holds | After editing |
+|---|---|---|
+| `m20_stack.yaml` | active robots, domains, profile, which site | restart the stack |
+| `rmf/m20_rmf/sites/<name>.yaml` | places, lanes, routes, formations, zones, targets, robots | restart the `rmf` pane |
+| `rmf/m20_rmf/missions/<name>.yaml` | the script | nothing |
+
+Start from `sites/sim_lab.yaml` (fully commented) or `sites/lab_834_corridor.yaml`.
+
+1. **Record spots:** drive the robot there with the controller, then
+   `m20 capture 834 <name>` → appends to `<site>.captures.yaml`; paste under `places:`.
+2. **Connect them with `lanes`** (chains of places, two-way unless `oneway: true`). RMF
+   only routes along lanes.
+3. **`m20 graph`** — validates and warns about places closer than footprint + vicinity
+   (1.1 m): formation slots and homes must be further apart.
+4. **Write the mission**, then `m20 mission <file> --check`.
+5. **Rehearse on mock robots** (never real ones):
+   ```bash
+   export ROS_DOMAIN_ID=42
+   ros2 launch m20_rmf m20_rmf.launch.py site:=/repo/rmf/m20_rmf/sites/<site>.yaml sim:=true
+   m20 --site /repo/rmf/m20_rmf/sites/<site>.yaml mission /repo/rmf/m20_rmf/missions/<file>.yaml
+   ```
+   (mock robots need `ip: 127.0.0.1` and distinct `port`s — see `sim_lab.yaml`.)
+6. **On the robot:** single steps, then the mission, from the operator pane.
+
+Building blocks (runnable examples in `missions/examples.yaml`, full scenario in
+`missions/visitor_demo.yaml`):
+
+| Want | Site | Mission step |
+|---|---|---|
+| route along lanes | places, lanes | `go_to: {robot, place, yaw}` |
+| loop a route | `routes` | `patrol: {robots, route, rounds, wait}` |
+| any path shape | — | `action: {robot, category: waypoints, description: {poses, dwell, loops}}` |
+| form up | `formations` | `form_up: {formation}` |
+| sweep an area | `zones` (tracks) | `explore: {zone}` |
+| inspect | `targets` | `inspect: {target, robot}` |
+| turn / wait | — | `turn_to`, `hold` |
+| flow | — | `parallel`, `repeat`, `wait_trigger`, `sleep`, `log`, `signal` |
+
+New behaviours are code: robot-side actions in `rmf/m20_rmf/m20_rmf/actions.py`,
+mission steps in `primitives.py` (both documented at the top).
+
+---
+
+## 8. Without the launcher (manual)
+
+```bash
+# robot relay (laptop terminal)
+ssh -t user@192.168.123.102 'docker exec -it user-nav_cmd_bridge-1 bash'
+source /root/ros2_ws/install/setup.bash
+export ROBOT_ID=834 ROS_DOMAIN_ID=0 FASTRTPS_DEFAULT_PROFILES_FILE=/root/fastdds_relay.xml
+ros2 run nav_cmd_bridge odom_relay --ros-args -r __node:=odom_relay_834 \
+  -p input_topic:=/ODOM -p output_topic:=/ODOM_relayed_834 -p frame_prefix:="'834'"
+
+# Foxy devcontainer
+source /root/ros2_ws/install/setup.bash
+ros2 launch nav_cmd_bridge laptop_bridge.launch.py
+
+# Jazzy devcontainer (three terminals)
+ros2 launch m20_rmf m20_rmf.launch.py
+m20 events
+m20 status
+```
+
+---
+
+## 9. Troubleshooting
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| No `_<id>` topics on the laptop | relay profile missing / not pinning the Wi-Fi address | §2.3 profile |
+| Topics but no `/ODOM` data | profile lacks `10.21.31.103` (localizer hosts) | §2.3 profile |
+| Relays die: `Deserialization of data failed` → `bad_alloc` | a Jazzy process without `rmf/fastdds_jazzy.xml` reached them | keep Jazzy on domain 20 with that profile; never Jazzy on domain 0 |
+| `Failed to create segment … SHM Transport is not supported` | `/dev/shm` full of stale segments | `python3 scripts/shm_clean.py` (Foxy devcontainer); stop nodes with Ctrl-C, not `kill -9` |
+| `RMF refused to add robot … nearest place … m away` | robot too far from the nav graph | move it near a place, or add places/lanes |
+| `m20 go` does nothing | robot already at that place (within 0.5 m) | normal |
+| `m20 status` shows `pose_source: udp` | relayed odometry not arriving | check the relay and bridge panes |
+| `no response to robot_task_request for robot X` | the running adapter doesn't serve X | add X to `robots:` / the launch |
+| Robot won't walk, `asleep: true` | sitting | stand it up with the controller |
+| Robot ping 0.1–1.6 s, SSH resets | full relay set loading its Wi-Fi | `robot_relay: odom` |
+| `localized: false` while RViz looks right | the UDP `Location` flag's meaning is unconfirmed | trust RViz for now |
+| 3-robot site runs with one robot | CLI/launch robots default to `m20_stack.yaml` only with its own site | pass `--robots` / `robots:=` |
+
+---
+
+## 10. Reference
+
+| Item | Value |
+|---|---|
+| Domains | robots/relays 0 · Open-RMF + tools 20 · mock rehearsal 42 |
+| Vendor UDP | robot `:30000`, JSON over a 16-byte header (`protocol.py`) |
+| Task-state websocket | `ws://localhost:7878` (monitor) |
+| ROS topics | `/m20/events`, `/m20/robot_status`, `/m20/task_states`, `/m20/stop`, `/m20/trigger`, `/m20/inspect/request`, `/m20/inspect/result` |
+| Tests | `cd /repo/rmf/m20_rmf && python3 -m pytest -q test` (Jazzy devcontainer) |
+| Robot container | `user-nav_cmd_bridge-1`, workspace `/root/ros2_ws` |

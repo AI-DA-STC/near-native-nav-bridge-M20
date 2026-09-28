@@ -1,5 +1,9 @@
 # Open-RMF for the M20 fleet (`dev-openrmf`)
 
+> **[RUNBOOK.md](RUNBOOK.md)** — setup, running, stopping, building demos, troubleshooting.  
+> **[CHANGELOG.md](CHANGELOG.md)** — everything changed since branching off `dev-nav-relay`.  
+> Work in progress; this README is the design and reference detail.
+
 Open-RMF orchestration for the DeepRobotics M20s: an EasyFullControl fleet adapter,
 a library of mission primitives, and a YAML mission runner, so a demo like
 *patrol → form up → explore → inspect → regroup → patrol* is a short script rather
