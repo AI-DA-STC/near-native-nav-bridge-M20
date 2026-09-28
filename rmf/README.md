@@ -86,6 +86,16 @@ shows `"asleep": true` until then and the adapter warns on every command.
 
 ## Running tests on real robots (operator runbook)
 
+**One command:** `scripts/m20_stack.sh up` (on the host) starts both devcontainers if
+needed and opens a tmux window with a pane per process, all configured from
+`m20_stack.yaml`: `relay <id>` (SSHes into each robot with `ssh_key` and starts its relay
+in the robot's container; Ctrl-C there stops it on the robot), `bridge`, `rmf`,
+`events`, and an `operator` shell for `m20 …` commands. `scripts/m20_stack.sh down`
+Ctrl-Cs every pane and closes it; `status` and `attach` do what they say. Set
+`robot_relay: none` in the YAML (or `M20_RELAY=none`) if the relays are already running.
+The launcher never moves a robot. The manual steps below are what it automates.
+
+
 **Robot motion is always started by a person at the robot's side, from their own
 terminal**, never from an automated session: whoever runs it must be able to stop it.
 

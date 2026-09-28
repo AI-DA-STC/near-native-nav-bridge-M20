@@ -19,3 +19,12 @@ site: rmf/m20_rmf/sites/lab_834_corridor.yaml
 
 # Optional bridge extras
 bridge_clouds: false       # also bridge /ALIGNED_POINTS_relayed_<id> (heavy)
+
+# Robot side, used by scripts/m20_stack.sh to start each robot's relay over SSH (robot
+# IPs come from the site file). The robots' image and files are not modified.
+robot_relay: odom          # odom = odometry relay only (all RMF needs; light on Wi-Fi)
+                           # full = the image's relays.launch.py; none = start it yourself
+ssh_user: user
+ssh_key: ""                          # empty: the key from ~/.ssh/config (Host 192.168.123.*)
+robot_container: user-nav_cmd_bridge-1
+robot_profile: /root/fastdds_relay.xml # the relay DDS profile inside that container
