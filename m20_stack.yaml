@@ -1,0 +1,21 @@
+# Laptop-side settings for the M20 Open-RMF stack, read at launch so nothing needs
+# exporting by hand:
+#   - launch/laptop_bridge.launch.py   (Foxy devcontainer)
+#   - m20_rmf.launch.py and the `m20` CLI (Jazzy devcontainer)
+# Command-line arguments still override these (e.g. robots:=741,834, --site ...).
+# Paths are relative to this file.
+
+robots: ["834"]            # active robots (ids as in the site file)
+
+robots_domain: 0           # where the robots' relays publish /*_relayed_<id>
+rmf_domain: 20             # Open-RMF + our tools (the Jazzy devcontainer is preset to 20)
+
+# DDS profile for the Foxy bridge's participants (the laptop profile: whitelist the
+# laptop's Wi-Fi address in it).
+laptop_profile: fastdds_profile.xml
+
+# Site file for Open-RMF: places, lanes, routes, formations, zones, targets, robots.
+site: rmf/m20_rmf/sites/lab_834_corridor.yaml
+
+# Optional bridge extras
+bridge_clouds: false       # also bridge /ALIGNED_POINTS_relayed_<id> (heavy)

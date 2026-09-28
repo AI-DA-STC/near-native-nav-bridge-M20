@@ -61,19 +61,22 @@ m20 mission /repo/rmf/m20_rmf/missions/visitor_demo.yaml      # second terminal
 m20 trigger start                                             # third: release the wait
 ```
 
-**Real robots.** Robots' relays running as usual (domain 0). First, in the **Foxy**
-devcontainer, the bridge:
+**Real robots.** Settings live in **`m20_stack.yaml`** at the repo root (active robots,
+the robots' and RMF's domains, the laptop DDS profile, the site file); the bridge launch,
+the RMF launch and `m20` all read it, so nothing needs exporting. Command-line
+arguments override it (`robots:=834,741`, `site:=...`, `m20 --site ... --robots ...`).
+
+Robots' relays running as usual (domain 0). In the **Foxy** devcontainer:
 
 ```bash
-export FASTRTPS_DEFAULT_PROFILES_FILE=$PWD/fastdds_profile.xml   # laptop profile
-ros2 launch nav_cmd_bridge laptop_bridge.launch.py robots:=834   # clouds:=true for point clouds
+source /root/ros2_ws/install/setup.bash
+ros2 launch nav_cmd_bridge laptop_bridge.launch.py
 ```
 
-then here (ROS_DOMAIN_ID=20 and the Jazzy profile are preset by the devcontainer):
+then in the **Jazzy** devcontainer (domain 20 and the Jazzy profile are preset):
 
 ```bash
-export M20_SITE=/repo/rmf/m20_rmf/sites/<your_site>.yaml
-ros2 launch m20_rmf m20_rmf.launch.py site:=$M20_SITE robots:=834
+ros2 launch m20_rmf m20_rmf.launch.py
 m20 status                     # pose source, localized, asleep, battery, activity
 m20 go 834 fwd_1
 ```

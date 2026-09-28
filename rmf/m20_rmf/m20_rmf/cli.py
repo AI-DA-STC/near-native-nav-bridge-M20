@@ -1,6 +1,7 @@
 """`m20` — operator CLI over the mission primitives.
 
-Site file: --site, or $M20_SITE. Active robots: --robots, or $M20_ROBOTS (comma
+Site file: --site, $M20_SITE, or `site:` in m20_stack.yaml. Active robots: --robots,
+$M20_ROBOTS, or `robots:` in m20_stack.yaml (comma
 list), default all robots in the site.
 
   Setup / localization
@@ -40,19 +41,24 @@ import sys
 import tempfile
 import time
 
+from . import stack
 from .sitefile import Site
 
 
+def _site_path(a):
+    return a.site or os.environ.get('M20_SITE') or stack.load().get('site')
+
+
 def _site(a):
-    path = a.site or os.environ.get('M20_SITE')
+    path = _site_path(a)
     if not path:
-        sys.exit('no site: pass --site or set M20_SITE')
+        sys.exit('no site: pass --site, set M20_SITE, or set site: in m20_stack.yaml')
     return Site.load(path)
 
 
 def _robots(a):
     r = a.robots or os.environ.get('M20_ROBOTS', '')
-    return [x for x in r.split(',') if x] or None
+    return [x for x in r.split(',') if x] or stack.load().get('robots') or None
 
 
 def _fleet(a):
@@ -89,7 +95,7 @@ def cmd_pose(a):
 
 def cmd_capture(a):
     pose = _read_pose(a.robot)
-    site_path = a.site or os.environ.get('M20_SITE')
+    site_path = _site_path(a)
     out = a.out or (site_path + '.captures.yaml' if site_path else 'captures.yaml')
     line = f'  {a.name}: [{pose[0]}, {pose[1]}, {pose[2]}]   # robot {a.robot}, {time.strftime("%F %T")}\n'
     with open(out, 'a') as f:
@@ -252,8 +258,8 @@ def main(argv=None):
 
 def _mission(a):
     from . import mission
-    args = ['m20_mission', a.file, '--site', a.site or os.environ.get('M20_SITE', '')]
-    r = a.robots or os.environ.get('M20_ROBOTS', '')
+    args = ['m20_mission', a.file, '--site', _site_path(a) or '']
+    r = ','.join(_robots(a) or [])
     if r:
         args += ['--robots', r]
     if a.check:

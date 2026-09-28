@@ -24,8 +24,11 @@ def _nodes(context):
         # Foxy relays (see m20_rmf/domain_guard.py).
         raise RuntimeError('ROS_DOMAIN_ID is 0, the robots\' domain: Jazzy nodes there crash '
                            'the Foxy relays. export ROS_DOMAIN_ID=10 (or allow_robot_domain:=true).')
-    site = LaunchConfiguration('site').perform(context)
-    robots = LaunchConfiguration('robots').perform(context)
+    from m20_rmf import stack
+    cfg = stack.load()
+    site = LaunchConfiguration('site').perform(context) or cfg.get('site') or \
+        os.path.join(get_package_share_directory('m20_rmf'), 'sites', 'sim_lab.yaml')
+    robots = LaunchConfiguration('robots').perform(context) or ','.join(cfg.get('robots', []))
     from m20_rmf.sitefile import Site
     s = Site.load(site)     # fail fast on a bad site file, before anything starts
     fleet = s.fleet['name']
@@ -63,8 +66,10 @@ def _nodes(context):
 def generate_launch_description():
     share = get_package_share_directory('m20_rmf')
     return LaunchDescription([
-        DeclareLaunchArgument('site', default_value=os.path.join(share, 'sites', 'sim_lab.yaml')),
-        DeclareLaunchArgument('robots', default_value='', description='comma list; default all'),
+        DeclareLaunchArgument('site', default_value='',
+                              description='site YAML; default: site: in m20_stack.yaml'),
+        DeclareLaunchArgument('robots', default_value='',
+                              description='comma list; default: robots: in m20_stack.yaml, else all'),
         DeclareLaunchArgument('sim', default_value='false', description='start mock robots'),
         DeclareLaunchArgument('viz', default_value='false', description='RMF visualizers + RViz'),
         DeclareLaunchArgument('allow_robot_domain', default_value='false',
