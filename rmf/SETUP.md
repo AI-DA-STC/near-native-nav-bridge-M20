@@ -89,11 +89,13 @@ The Jazzy container comes preconfigured: `ROS_DOMAIN_ID=20`,
 **Rebuild it** (Dev Containers: Rebuild Container) whenever
 `.devcontainer/rmf-jazzy/` changes.
 
-Optional, for Open-RMF's own web dashboard (`rmf_web: true`, RUNBOOK §5): it is not in
-apt; pull its images once (about 2 GB, needs internet):
+The operator dashboard (RUNBOOK §5) is Open-RMF's rmf-web dashboard with our panels.
+Two things, once per laptop, with internet:
 ```bash
-docker pull ghcr.io/open-rmf/rmf-web/api-server:jazzy-nightly
-docker pull ghcr.io/open-rmf/rmf-web/demo-dashboard:jazzy-nightly
+docker pull ghcr.io/open-rmf/rmf-web/api-server:jazzy-nightly   # its API server, ~1.4 GB
+scripts/m20_stack.sh dashboard      # builds the page in the `web` devcontainer
+                                    # (.devcontainer/web, Node): clones rmf-web at a pinned
+                                    # commit, installs packages, writes dashboard/dist
 ```
 
 ## 5. Build the workspaces

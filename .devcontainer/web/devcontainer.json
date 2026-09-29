@@ -1,0 +1,14 @@
+{
+  // Builds the operator dashboard (rmf/m20_rmf/dashboard): Open-RMF's
+  // rmf-dashboard-framework + our mission panels. Node + pnpm (via corepack).
+  // Runs as `node` (uid 1000), so files it writes into the repo belong to you.
+  "name": "M20 dashboard (Node)",
+  "image": "node:22-bookworm",
+  "workspaceMount": "source=${localWorkspaceFolder},target=/repo,type=bind",
+  "workspaceFolder": "/repo/rmf/m20_rmf/dashboard",
+  "runArgs": ["--network=host"],
+  "containerUser": "node",
+  "remoteUser": "node",
+  "containerEnv": { "COREPACK_ENABLE_DOWNLOAD_PROMPT": "0" },
+  "customizations": { "vscode": { "extensions": ["dbaeumer.vscode-eslint"] } }
+}

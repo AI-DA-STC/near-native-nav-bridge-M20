@@ -89,7 +89,7 @@ scripts/m20_stack.sh up          # on the host, from the repo root
 
 A tmux window opens with one pane per process (click to focus; `Ctrl-b d` detaches,
 `scripts/m20_stack.sh attach` returns). It also grants the containers access to your
-display (for RViz) and opens RViz and the demo console (§5).
+display (for RViz) and opens RViz and the operator dashboard (§5).
 
 | Pane | What it is | Healthy when |
 |---|---|---|
@@ -97,7 +97,8 @@ display (for RViz) and opens RViz and the demo console (§5).
 | `bridge` | Foxy: rebuild if needed, `shm_clean`, laptop bridge | `robots [...], domain 0 -> 20 ...`, then `Relay:` lines (2 shared + 4 per robot) |
 | `rmf` | Jazzy: rebuild if needed, Open-RMF + adapter | `[<id>] registered with RMF at (x, y)` |
 | `events` | live log of every command the adapter sends | — |
-| `ui` | demo console (http://localhost:8080) + RViz markers + RViz | `m20 ui: http://localhost:8080` |
+| `ui` | the operator dashboard (http://localhost:8080) and its hub, RViz markers, RViz | `m20 ui: http://localhost:8080` |
+| `rmf-api` | Open-RMF's rmf-web API server (:8000, docker image), read by the dashboard's map / robots / tasks panels | its log ends with `started app` |
 | `mission` | `m20 mission-host`: runs the missions the GUI starts, printing every step. **Ctrl-C here aborts the mission and stops its robots** (standing), the fallback when the GUI is not usable; Ctrl-C when no mission runs quits it | `[host] mission host ready` |
 | `operator` | shell for `m20 …` | prompt |
 
@@ -118,38 +119,48 @@ up with the controller first.
 
 ---
 
-## 5. Demo console (GUI) and RViz
+## 5. The operator dashboard (GUI) and RViz
 
 Open **http://localhost:8080** (or `http://<laptop ip>:8080` from a tablet on the Wi-Fi).
-One screen, no scrolling: the **map** fills the window, the mission's phase and anything
-waiting for the operator float over its top edge, and the robots, signals and log sit in
-a sidebar on the right (below the map on narrow screens).
+It is **Open-RMF's own dashboard** (`rmf-dashboard-framework`, the one rmf-web ships)
+with our mission panels added to it: one page for the fleet as Open-RMF sees it and for
+the mission. The red **STOP ALL** button (bottom right) is on every tab.
 
-| Area | Shows / does |
+| Tab | Panels |
 |---|---|
-| header | mission picker + **Start** (the `mission` pane runs it), **STOP ALL** |
-| phase (over the map, top) | mission name, the current **phase**, elapsed time |
-| action card (under the phase) | only when needed: the mission's question with its button (e.g. *Begin scenario*, *Suspicious item at box 1*), or an inspection waiting for a verdict (**Clear** / **Threat**) |
-| map (the window) | the **RViz view** in the page: the SLAM map with the site (lanes, places, slots, tracks, targets) and each robot in its mode colour with its path. Scroll to zoom, drag to pan, double-click to fit the site again |
-| robot cards (sidebar) | one per robot: **mode** (colour + word), one detail line (route, zone, target), battery; per-robot **Stop** when no mission is running |
-| signal row | signals the mission offers at any time; pressing one early is fine, it shows **queued** until the mission uses it |
-| log (sidebar) | phases, signals, verdicts, stops, inspections that ended without a verdict |
+| **Operations** | **Mission** (ours): mission name, the current **phase**, elapsed time; the mission picker + **Start** when none runs; the mission's question with its button when it waits (e.g. *Explore the area*); an inspection's **Clear / Threat**; signal buttons (pressing one early is fine: *queued*); the log. **Fleet** (ours): one card per robot, its **mode** in colour, one detail line, battery; per-robot **Stop** when no mission runs. **Map** (Open-RMF's) |
+| **Robots** | Open-RMF's robot table (status, battery, level, task), our Fleet cards, the map |
+| **Tasks** | Open-RMF's task queue and history (every task missions and `m20` commands create; click one for its log), the map |
+| **Custom** | arrange any of these panels yourself (kept in this browser) |
 
-Modes (same colours in RViz): **PATROL** · **REGROUP** (forming up) · **EXPLORE** ·
-**INVESTIGATE** (+ "awaiting verdict") · **RETURN** · **MOVE** · **HOLD** · **IDLE** ·
-**SITTING** · **STOPPED** · **OFFLINE**. They come from the label of each robot's RMF task,
-computed once by the status hub (`/m20/fleet_view`) for both GUI and RViz.
+**New task** (top bar) is Open-RMF's form for a single task: a patrol through chosen
+places, or a raw composed task. It moves robots like Start does.
 
-The page's map and **RViz** show the same thing: the hub forwards RViz's own `/m20/viz`
-markers and `/m20/map` to the page. RViz is optional now (`M20_RVIZ=false
-scripts/m20_stack.sh up` skips it). They draw, over the robot's **SLAM map**: the site's lanes
-and places, formation slots, exploration tracks, targets, and each robot oriented in its
-mode colour with its remaining path. The map is the site's saved map (`map:` in the site
-file) or else the live relayed one. Save a map with `m20 map-save 834 <name>` (needs the
-relay and bridge up), then add the printed `map:` line to the site file.
+**The map** (Open-RMF's) draws the site's saved SLAM map, cut to the site, with the site
+drawn on it in the mode colours (lanes, formation slots, zones with their sweep, targets),
+and Open-RMF's places with their names and the robots. Scroll / buttons to zoom, drag to
+pan. It is fed by `viz`, which publishes the site as an Open-RMF `BuildingMap` on `/map`
+and redraws it when the site file changes.
 
-The GUI's buttons are the only way it moves robots: **Start** runs the chosen mission;
-everything else stops, signals or answers. Start a mission only with someone by the robots.
+Modes: **PATROL** · **REGROUP** (forming up) · **EXPLORE** · **INVESTIGATE** (+ "awaiting
+verdict") · **RETURN** · **MOVE** · **HOLD** · **IDLE** · **SITTING** · **STOPPED** ·
+**OFFLINE**, from the label of each robot's RMF task (the hub's `/m20/fleet_view`).
+
+**How it is put together:** Open-RMF's panels read the **rmf-web API server** (tmux pane
+`rmf-api`, docker image, :8000), which our task monitor forwards every RMF update to; our
+panels read the hub (the `ui` pane, which also serves the page). The page is built once
+per laptop into `rmf/m20_rmf/dashboard/dist` with `scripts/m20_stack.sh dashboard` (the
+`web` devcontainer; needs internet the first time); until then :8080 shows the older
+standalone console. Sources: `rmf/m20_rmf/dashboard/src/` (main.tsx: tabs and layout;
+mission-panel.tsx, fleet-panel.tsx: our panels; hub.ts: the hub connection).
+
+**RViz** (optional, `M20_RVIZ=false` skips it) shows the same site over the live or saved
+SLAM map, with each robot in its mode colour and its remaining path (`/m20/viz`,
+`/m20/map`). Save a map with `M20_RELAY=odom+map` relays running and
+`m20 map-save 834 <name>`, then add the printed `map:` line to the site file.
+
+The dashboard moves robots only through **Start** and **New task**; everything else
+stops, signals or answers. Start a mission only with someone by the robots.
 
 **There is one kind of stop.** STOP ALL (and per-robot Stop, `m20 stop`, Ctrl-C in the
 `mission` pane or in a terminal running `m20 mission`) always does the same thing: the
@@ -164,23 +175,8 @@ task, so press STOP ALL if needed. Start works again straight away.
 
 **If the GUI itself fails** (page frozen, hub crashed): Ctrl-C in the tmux `mission`
 pane — it stops the mission and its robots without the GUI. Then `m20 stop` in the
-operator pane, or the controller. The page shows a red banner while it has no
-connection to the hub.
-
-### Open-RMF's own dashboard (rmf-web), optional
-`rmf_web: true` in `m20_stack.yaml` (or `M20_RMF_WEB=true scripts/m20_stack.sh up`) adds a
-pane `rmf-web` running Open-RMF's web dashboard: **http://localhost:3000**. It shows the
-fleet as Open-RMF sees it: a Robots table (status, battery, level, last update), the
-task queue and history (every task our missions and `m20` commands create), the floor
-(the site's saved SLAM map) with the robots, and a **New task** form (patrol, go to
-place, …, among the site's places). It knows nothing of missions, phases, signals or
-verdicts: those stay in our console (:8080).
-
-How it is fed, with nothing drawn twice: our task monitor forwards every RMF update to its
-API server (`forward:=` in `m20_rmf.launch.py`), and `viz` publishes the site on `/map`
-as an Open-RMF `BuildingMap` (floor image, nav graph, walls around the site). Task
-history is kept in the docker volume `m20-rmf-web`. Its view starts zoomed out: use its
-zoom buttons. Images: `ghcr.io/open-rmf/rmf-web/{api-server,demo-dashboard}:jazzy-nightly`.
+operator pane, or the controller. The Mission panel shows a red message while it has
+no connection to the hub.
 
 ## 6. Operate from the terminal
 
@@ -392,13 +388,15 @@ m20 status
 | Everything on the laptop stalls (even the internet) while relays run | the robots' traffic fills the laptop's one Wi-Fi link | `scripts/m20_stack.sh netcheck` shows by what; keep `robot_relay: odom` (odometry only, best effort); the live map only with `odom+map` when needed |
 | `localized: false` while RViz looks right | the UDP `Location` flag's meaning is unconfirmed | trust RViz for now |
 | RViz: `could not connect to display` / "Authorization required" | X access for root containers lost after reboot | `xhost +SI:localuser:root` (the launcher does it on `up`) |
-| GUI page loads but stays empty | the `ui` pane is not running (or port 8080 taken) | check the `ui` pane; `pkill -f lib/m20_rmf/ui` in the Jazzy container |
+| GUI page does not load | the `ui` pane is not running (or port 8080 taken) | check the `ui` pane; `scripts/m20_stack.sh restart ui` |
+| Dashboard map / Robots / Tasks empty, Mission panel fine | the `rmf-api` pane is not running, or its image is missing | check that pane; `docker pull ghcr.io/open-rmf/rmf-web/api-server:jazzy-nightly` |
+| :8080 shows the older dark console | the dashboard is not built on this laptop | `scripts/m20_stack.sh dashboard` (internet once), then reload |
 | RViz has no map | robot relay without the map (`robot_relay: odom` includes it) or no `map:` in the site | `m20 map-save …` and add `map:` |
 | `relay <id>` pane: container not running | robot powered off and back on | the relay command now starts / recreates it; rerun `scripts/m20_stack.sh relay` |
 | GUI: *no mission host* on Start | the `mission` pane is not running | restart it: `m20 mission-host` in that pane (Jazzy container) |
 | `[host] another mission host is running` | two hosts would both run each mission | use the one already running, or Ctrl-C it first |
 | GUI: *Mission lost* | the mission's process died | STOP ALL if robots are still moving; start again |
-| GUI: red *No connection* banner | the `ui` pane (hub) stopped | stop from the `mission` pane (Ctrl-C) or `m20 stop`; restart the `ui` pane |
+| Mission panel: red *No connection to the M20 hub* | the `ui` pane (hub) stopped | stop from the `mission` pane (Ctrl-C) or `m20 stop`; restart the `ui` pane |
 | `relay <id>` pane: *ended (exit 255 …) Reconnecting* | Wi-Fi drop or robot rebooting | nothing: it reconnects by itself; Ctrl-C to give up |
 | 3-robot site runs with one robot | CLI/launch robots default to `m20_stack.yaml` only with its own site | pass `--robots` / `robots:=` |
 

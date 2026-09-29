@@ -44,10 +44,19 @@ def test_building_map_from_site_and_map():
     assert level.name == site.map_name
     im = level.images[0]
     res = grid['resolution']
-    # the image's top-left pixel sits at the map's top-left corner
-    assert math.isclose(im.x_offset, grid['origin'][0], abs_tol=1e-6)
-    assert math.isclose(im.y_offset, grid['origin'][1] + grid['height'] * res, abs_tol=1e-6)
-    assert math.isclose(im.scale, res, rel_tol=1e-6) and im.encoding == 'png'
+    # the image is the map cropped to the site; its top-left pixel is placed on the map
+    x0, y0, x1, y1 = buildingmap.site_bounds(site)
+    part = buildingmap.crop(grid, (x0, y0, x1, y1))
+    assert part['width'] < grid['width'] and part['height'] < grid['height']
+    assert math.isclose(im.x_offset, part['origin'][0], abs_tol=1e-6)
+    assert math.isclose(im.y_offset, part['origin'][1] + part['height'] * res, abs_tol=1e-6)
+    assert x0 - res <= im.x_offset <= x0 + res                    # cut at the site's edge
+    # cropping keeps cells where they are: a cell reads the same in both grids
+    c, r = 3, 4
+    col = c + int(round((part['origin'][0] - grid['origin'][0]) / res))
+    row = r + int(round((part['origin'][1] - grid['origin'][1]) / res))
+    assert part['data'][r * part['width'] + c] == grid['data'][row * grid['width'] + col]
+    assert math.isclose(im.scale, res / buildingmap.UPSCALE, rel_tol=1e-6) and im.encoding == 'png'
     g = level.nav_graphs[0]
     names = [v.name for v in g.vertices]
     assert set(names) == set(site.places)
@@ -70,3 +79,36 @@ def test_oneway_lane_stays_one_way():
     g = buildingmap.building_map(site).levels[0].nav_graphs[0]
     assert [(e.v1_idx, e.v2_idx, e.edge_type) for e in g.edges] == \
         [(0, 1, GraphEdge.EDGE_TYPE_UNIDIRECTIONAL)]
+
+
+def _png_rgb(png):
+    w, h = struct.unpack('>II', png[16:24])
+    assert png[25] == 2                                  # colour type: RGB
+    i, idat = 8, b''
+    while i < len(png):
+        n = struct.unpack('>I', png[i:i + 4])[0]
+        if png[i + 4:i + 8] == b'IDAT':
+            idat += png[i + 8:i + 8 + n]
+        i += 12 + n
+    raw = zlib.decompress(idat)
+    stride = w * 3 + 1
+    return w, h, lambda x, y: tuple(raw[y * stride + 1 + x * 3: y * stride + 4 + x * 3])
+
+
+def test_site_is_drawn_on_the_floor_image():
+    site = Site.load(CORRIDOR)
+    grid = mapfile.load(site.map_file)
+    w, h, pixel = _png_rgb(buildingmap.site_image(site, grid))
+    k, res = buildingmap.UPSCALE, grid['resolution']
+    assert (w, h) == (grid['width'] * k, grid['height'] * k)
+
+    def at(x, y):
+        return pixel(int((x - grid['origin'][0]) / res * k),
+                     int(h - (y - grid['origin'][1]) / res * k))
+    # halfway along the lane home_834 -> fwd_1: the lane colour, not the floor
+    (x0, y0, _), (x1, y1, _) = site.places['home_834'], site.places['fwd_1']
+    lane = at((x0 + x1) / 2, (y0 + y1) / 2)
+    assert sum(abs(a - b) for a, b in zip(lane, (0x33, 0x41, 0x55))) < 60, lane
+    # the test box target: a filled square in the INVESTIGATE colour
+    tx, ty = site.targets['box_right']['look_at']
+    assert at(tx, ty) == buildingmap._rgb(buildingmap.TARGET)

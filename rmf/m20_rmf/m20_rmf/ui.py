@@ -44,6 +44,7 @@ from . import protocol, stack, view
 from .sitefile import Site
 
 MISSIONS_DIRS = ('/repo/rmf/m20_rmf/missions',)
+DASHBOARD_DIRS = ('/repo/rmf/m20_rmf/dashboard/dist',)
 HOLD_LAST_MODE = 3.0        # s a robot keeps its last mode between consecutive tasks
 STOPPED_FOR = 15.0          # s a stopped robot shows STOPPED before it reads IDLE
 STALE = 4.0                 # s without a heartbeat before a mission / host counts as gone
@@ -340,6 +341,14 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
     def log_message(self, *args):
         pass
 
+    def do_GET(self):
+        # The dashboard is a single-page app: its tab addresses (/robots, /tasks) are
+        # the page itself, so a reload or a shared link to a tab still works.
+        name = self.path.split('?', 1)[0]
+        if not os.path.exists(self.translate_path(name)) and '.' not in os.path.basename(name):
+            self.path = '/index.html'
+        super().do_GET()
+
 
 async def serve_ws(hub, port, period):
     import websockets
@@ -450,7 +459,13 @@ def main(argv=None):
     hub = Hub(fleet, missions_dirs)
 
     from ament_index_python.packages import get_package_share_directory
-    root = os.path.join(get_package_share_directory('m20_rmf'), 'ui')
+    # The operator dashboard (Open-RMF's dashboard + our panels, dashboard/, built by
+    # scripts/m20_stack.sh dashboard); the older standalone console if it is not built.
+    root = next((d for d in DASHBOARD_DIRS if os.path.exists(os.path.join(d, 'index.html'))), None)
+    if root is None:
+        root = os.path.join(get_package_share_directory('m20_rmf'), 'ui')
+        print('m20 ui: dashboard not built (scripts/m20_stack.sh dashboard): serving the '
+              'older console', flush=True)
     threading.Thread(target=serve_http, args=(root, a.http_port), daemon=True).start()
     print(f'm20 ui: http://localhost:{a.http_port}  (robots {fleet.robots}, site {site_path})',
           flush=True)

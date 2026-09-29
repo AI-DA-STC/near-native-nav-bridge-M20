@@ -4,3 +4,7 @@ install/
 __pycache__/
 .pytest_cache/
 *.captures.yaml
+# dashboard build (rmf/m20_rmf/dashboard): sources are tracked, these are not
+rmf/m20_rmf/dashboard/node_modules/
+rmf/m20_rmf/dashboard/dist/
+rmf/m20_rmf/dashboard/rmf-web/

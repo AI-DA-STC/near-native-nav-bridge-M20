@@ -6,6 +6,8 @@
 #                                  `up` then leaves them alone
 #   scripts/m20_stack.sh attach    re-attach to it
 #   scripts/m20_stack.sh status    containers, panes, robots
+#   scripts/m20_stack.sh dashboard build the operator dashboard (web devcontainer; needs
+#                                  internet the first time), served by the ui pane
 #   scripts/m20_stack.sh netcheck  Wi-Fi load, each robot's relay traffic, ping, internet
 #                                  (run while the relays are up; needs nothing else)
 #   scripts/m20_stack.sh restart <pane>   Ctrl-C one pane and start it again, e.g.
@@ -20,8 +22,10 @@
 #   bridge      Foxy devcontainer: laptop_bridge.launch.py (domain 0 -> 20)
 #   rmf         Jazzy devcontainer: m20_rmf.launch.py (Open-RMF + M20 adapter)
 #   events      Jazzy devcontainer: m20 events (every command sent, live)
-#   ui          Jazzy devcontainer: demo GUI (http://localhost:8080) + RViz (M20_RVIZ=false: none)
-#   rmf-web     (rmf_web: true) Open-RMF's own dashboard, http://localhost:3000
+#   ui          Jazzy devcontainer: the operator dashboard http://localhost:8080 (Open-RMF's
+#               dashboard + our mission panels) and its hub; RViz (M20_RVIZ=false: none)
+#   rmf-api     Open-RMF's rmf-web API server (docker image), which the dashboard's
+#               map / robots / tasks panels read
 #   mission     Jazzy devcontainer: m20 mission-host, runs the missions the GUI starts.
 #               Ctrl-C here aborts the mission and stops its robots (standing) - the
 #               fallback when the GUI is not usable
@@ -67,7 +71,6 @@ out = {
     'ROBOTS_DOMAIN': str(c.get('robots_domain', 0)),
     'RMF_DOMAIN': str(c.get('rmf_domain', 20)),
     'SITE': site,
-    'RMF_WEB': 'true' if c.get('rmf_web') else 'false',
 }
 for rid in robots:
     out[f'IP_{rid}'] = ips.get(rid, '')
@@ -77,7 +80,6 @@ PY
 )"
   [ -n "$ROBOTS" ] || die "no robots: in $STACK"
   RELAY_MODE="${M20_RELAY:-$RELAY_MODE}"   # env override, e.g. M20_RELAY=none
-  RMF_WEB="${M20_RMF_WEB:-$RMF_WEB}"        # env override: M20_RMF_WEB=true
 }
 
 # --- devcontainers ----------------------------------------------------------------
@@ -194,27 +196,29 @@ foxy_cmd() {
   in_container "$FOXY" 'source /opt/ros/foxy/setup.bash && cd /root/ros2_ws && { colcon build --packages-select nav_cmd_bridge > /tmp/m20_build.log 2>&1 || { tail -20 /tmp/m20_build.log; exit 1; }; } && source install/setup.bash && ros2 launch nav_cmd_bridge laptop_bridge.launch.py'
 }
 
-rmf_cmd() {
-  local fwd=''
-  [ "$RMF_WEB" = true ] && fwd=' forward:=ws://localhost:8000/_internal'
-  in_container "$JAZZY" "bash /repo/rmf/build.sh > /tmp/m20_build.log 2>&1 || tail -20 /tmp/m20_build.log; source /ws/install/setup.bash; ros2 launch m20_rmf m20_rmf.launch.py$fwd"
+rmf_cmd() {   # the monitor also forwards RMF's updates to the rmf-web API server (rmf-api)
+  in_container "$JAZZY" 'bash /repo/rmf/build.sh > /tmp/m20_build.log 2>&1 || tail -20 /tmp/m20_build.log; source /ws/install/setup.bash; ros2 launch m20_rmf m20_rmf.launch.py forward:=ws://localhost:8000/_internal'
 }
 
-rmf_web_cmd() {   # Open-RMF's own web dashboard (rmf-web): API server :8000, dashboard :3000
-  # Its API server is a Jazzy node on the RMF domain: it gets our Jazzy DDS profile, like
-  # every Jazzy process here, so it cannot upset the Foxy bridge (see rmf/fastdds_jazzy.xml).
-  # Task history lives in the docker volume m20-rmf-web.
-  local img=ghcr.io/open-rmf/rmf-web
-  echo "trap 'docker stop -t 3 m20-rmf-web-api m20-rmf-web-dash >/dev/null 2>&1' EXIT; \
-docker rm -f m20-rmf-web-api m20-rmf-web-dash >/dev/null 2>&1; \
-echo '== rmf-web: dashboard http://localhost:3000  (API server :8000). Ctrl-C stops both.'; \
-docker run --rm --name m20-rmf-web-api --network host -e ROS_DOMAIN_ID=$RMF_DOMAIN \
+RMF_API_IMAGE=ghcr.io/open-rmf/rmf-web/api-server:jazzy-nightly
+
+rmf_api_cmd() {   # Open-RMF's rmf-web API server (:8000), read by the dashboard
+  # A Jazzy node on the RMF domain: it gets our Jazzy DDS profile, like every Jazzy
+  # process here, so it cannot upset the Foxy bridge (see rmf/fastdds_jazzy.xml). Task
+  # history lives in the docker volume m20-rmf-web.
+  echo "trap 'docker stop -t 3 m20-rmf-api >/dev/null 2>&1' EXIT; docker rm -f m20-rmf-api >/dev/null 2>&1; \
+docker run --rm --name m20-rmf-api --network host -e ROS_DOMAIN_ID=$RMF_DOMAIN \
   -e RMW_IMPLEMENTATION=rmw_fastrtps_cpp -e FASTRTPS_DEFAULT_PROFILES_FILE=/m20/fastdds_jazzy.xml \
-  -v $REPO/rmf/fastdds_jazzy.xml:/m20/fastdds_jazzy.xml:ro -v m20-rmf-web:/ws/run \
-  $img/api-server:jazzy-nightly & \
-docker run --rm --name m20-rmf-web-dash --network host -e RMF_SERVER_URL=http://localhost:8000 \
-  -e TRAJECTORY_SERVER_URL=ws://localhost:8006 $img/demo-dashboard:jazzy-nightly & \
-wait"
+  -v $REPO/rmf/fastdds_jazzy.xml:/m20/fastdds_jazzy.xml:ro -v m20-rmf-web:/ws/run $RMF_API_IMAGE"
+}
+
+WEB_CFG="$REPO/.devcontainer/web/devcontainer.json"
+DASHBOARD="$REPO/rmf/m20_rmf/dashboard"
+
+dashboard() {   # build the operator dashboard into rmf/m20_rmf/dashboard/dist
+  local w
+  w=$(ensure_container "$WEB_CFG" web)
+  docker exec -w /repo/rmf/m20_rmf/dashboard "$w" ./build.sh
 }
 
 events_cmd() {
@@ -263,6 +267,8 @@ up() {
   FOXY=$(ensure_container "$FOXY_CFG" Foxy)
   JAZZY=$(ensure_container "$JAZZY_CFG" Jazzy)
   echo "robots: $ROBOTS  relay: $RELAY_MODE  site: $SITE"
+  [ -f "$DASHBOARD/dist/index.html" ] || echo "NOTE: the operator dashboard is not built: scripts/m20_stack.sh dashboard (needs internet once); :8080 shows the older console meanwhile"
+  docker image inspect "$RMF_API_IMAGE" >/dev/null 2>&1 || echo "NOTE: no $RMF_API_IMAGE: docker pull it (needs internet), or the dashboard's map/robots/tasks stay empty"
 
   PANE_SESSION=$SESSION
   if tmux has-session -t "=$RELAY_SESSION" 2>/dev/null; then
@@ -275,7 +281,7 @@ up() {
   pane events "$(events_cmd)"
   pane ui "$(ui_cmd)"
   pane mission "$(mission_cmd)"
-  [ "$RMF_WEB" = true ] && pane rmf-web "$(rmf_web_cmd)"
+  pane rmf-api "$(rmf_api_cmd)"
   pane operator "$(operator_cmd)"
   tmux select-layout -t "$LAST_PANE" tiled >/dev/null
   echo "attach: scripts/m20_stack.sh attach   detach: Ctrl-b d   stop all: scripts/m20_stack.sh down"
@@ -323,7 +329,7 @@ restart() {   # $1 = pane title: rmf | ui | bridge | events | mission | operator
     bridge) cmd=$(foxy_cmd) ;;
     events) cmd=$(events_cmd) ;;
     mission) cmd=$(mission_cmd) ;;
-    rmf-web) cmd=$(rmf_web_cmd) ;;
+    rmf-api) cmd=$(rmf_api_cmd) ;;
     operator) cmd=$(operator_cmd) ;;
     "relay "*) cmd=$(relay_cmd "${name#relay }") ;;
     *) die "cannot restart '$name'" ;;
@@ -407,5 +413,6 @@ case "${1:-}" in
   status) status ;;
   restart) shift; restart "$@" ;;
   netcheck) netcheck ;;
+  dashboard) dashboard ;;
   *) sed -n '2,/^set -euo/p' "$0" | sed '$d'; exit 1 ;;
 esac

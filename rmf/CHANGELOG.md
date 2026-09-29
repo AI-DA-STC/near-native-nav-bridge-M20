@@ -12,6 +12,24 @@ with several real robots at once.
 
 ## Added
 
+### One GUI: Open-RMF's dashboard with our mission panels (2026-09-29 night)
+- **http://localhost:8080 is now Open-RMF's own dashboard** (`rmf-dashboard-framework`,
+  pinned rmf-web commit on `jazzy`) with our panels added as its micro-apps, instead of a
+  second web GUI: tab **Operations** = Mission (phase, Start, prompts, verdicts, signals,
+  log) + Fleet (mode cards) + Open-RMF's map; **Robots** and **Tasks** = Open-RMF's
+  panels; **Custom**; **STOP ALL** on every tab; Open-RMF's **New task**. Sources in
+  `rmf/m20_rmf/dashboard/src/`; built by `scripts/m20_stack.sh dashboard` in a new `web`
+  devcontainer (Node, runs as uid 1000); served by the hub with single-page routing.
+  The older console remains only as a fallback while the page is not built.
+- **Map:** the floor image is the saved SLAM map cut to the site, at 4x, with the site
+  drawn on it in the mode colours (lanes, slots, zones + sweep, targets); the dashboard
+  adds places with names (its waypoint layers are switched on) and robots.
+- **`rmf-api` pane** (rmf-web API server) is part of every `up`; the `rmf_web` switch and
+  Open-RMF's demo-dashboard container are gone.
+- Tested on mock 834 with `triangle_watch`: the prompt button released the explore
+  step; STOP ALL ended the mission (robot STOPPED, log). With the real stack config on
+  domain 20 the Foxy bridge was unaffected. Tests: 85 passing.
+
 ### Open-RMF's dashboard alongside ours (2026-09-29 evening)
 - **rmf-web** (Open-RMF's web dashboard, docker images `jazzy-nightly`) runs next to
   our stack: `rmf_web: true` in `m20_stack.yaml` adds a pane with its API server (:8000)
