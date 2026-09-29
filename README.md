@@ -132,3 +132,52 @@ ros2 run nav_cmd_bridge nav_cmd_bridge bridge patrol --ip <robot_ip>
 ros2 run nav_cmd_bridge nav_cmd_bridge estop --ip <robot_ip> 
 ros2 run nav_cmd_bridge nav_cmd_bridge cancel --ip <robot_ip> 
 ```
+
+# Multi-robot navigation (fleet_management.py)
+
+Sends every robot its own goal, or its own list of waypoints, at the same instant. First do the robot side
+(localization and relays, each robot with its own `ROBOT_ID`) and laptop Steps 1–4 and 6 for every robot. Every
+terminal below needs the Step 3 exports.
+
+- Step 1 : In one terminal per robot, start a plain bridge with that robot's id and ip (IPs from the table above)
+```bash
+export ROBOT_ID=741
+ros2 run nav_cmd_bridge nav_cmd_bridge bridge --ip 192.168.123.100
+```
+Likewise 665 with `--ip 192.168.123.101` and 834 with `--ip 192.168.123.102`.
+- Step 2 : Launch rviz with the "2D Goal Pose" tool publishing on /fleet_goal. No bridge listens there, so drawing
+an arrow never moves a robot by itself.
+```bash
+rviz2 --ros-args -r /tf:=/tf_relayed -r /tf_static:=/tf_static_relayed -r /goal_pose:=/fleet_goal
+```
+Set up the displays as in Step 5, but keep only the default "2D Goal Pose" tool: a tool set to /goal_pose_<id>
+moves that robot as soon as you draw. Also Add → By topic → /fleet_goal_markers → MarkerArray, which shows the
+arrows drawn but not yet sent, coloured per robot and labelled with its id.
+- Step 3 : In another terminal, start fleet_management with a mode and the robot ids in the order you will draw
+their arrows, then follow that mode below
+```bash
+python3 scripts/fleet_management.py single-waypoint 741 665 834
+python3 scripts/fleet_management.py multi-waypoint 741 665 834
+python3 scripts/fleet_management.py multi-waypoint-patrol 741 665 834
+```
+
+**single-waypoint** : Draw one arrow per robot in that order (1st arrow → 741, 2nd → 665, 3rd → 834), then press
+ENTER in the fleet_management terminal: the goals go out back to back and all robots set off together. `c` + ENTER
+clears the arrows so you can redraw them. Nothing is sent until every robot has an arrow and a bridge listening on
+/goal_pose_<id>. Once sent, the next arrows start again from the first robot.
+
+**multi-waypoint** : Like `bridge queue`, per robot. Draw 741's waypoints in order, `n` + ENTER, draw 665's,
+`n` + ENTER, draw 834's, then ENTER: every robot sets off for its first waypoint together and works through the rest
+on its own, without waiting for the others. A robot's next waypoint is sent once its /ODOM_relayed_<id> is within
+0.1 m of the current one, or after 125 s. `u` + ENTER drops the current robot's last arrow, `c` + ENTER clears all.
+Nothing is sent until every robot has a waypoint, a bridge listening, odometry, and has finished its previous route.
+The fleet_management terminal prints each ARRIVED / TIMEOUT and when a robot has finished; keep it running until
+then, since it sends the later waypoints.
+
+**multi-waypoint-patrol** : Like `bridge patrol`, per robot. Draw and send exactly as in multi-waypoint, but mark
+each robot's waypoints as a **closed shape**, at least 3, in order around it (e.g. the 4 corners of a square:
+WP1 → WP2 → WP3 → WP4). After its last waypoint a robot drives straight back to WP1 and loops, each robot at its own
+pace; the terminal prints each robot's lap. Do not redraw WP1 at the end: the closing leg (WP4 → WP1) is added for
+you, and /fleet_goal_markers draws it so you can check the shape before ENTER. `s` + ENTER stops the patrols: each
+robot stops at the waypoint it is driving to, and then a new plan can be sent. Ctrl+C in the fleet_management
+terminal also stops sending waypoints, but each robot still drives to the one it already has.

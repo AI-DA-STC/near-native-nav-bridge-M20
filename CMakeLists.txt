@@ -26,6 +26,7 @@ ament_target_dependencies(nav_cmd_bridge
   rclcpp
   geometry_msgs
   nav_msgs
+  std_msgs
   visualization_msgs
 )
 
@@ -82,7 +83,7 @@ install(DIRECTORY include/
   DESTINATION include/
 )
 
-install(PROGRAMS scripts/benchmark.py scripts/fleet_goals.py
+install(PROGRAMS scripts/benchmark.py scripts/fleet_management.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

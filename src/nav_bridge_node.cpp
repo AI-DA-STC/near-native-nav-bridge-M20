@@ -1,11 +1,14 @@
 #include <arpa/inet.h>
 #include <sys/socket.h>
 #include <unistd.h>
+#include <cerrno>
+#include <chrono>
 #include <cmath>
 #include <cstring>
 #include <cstdio>
 #include <cstdlib>
 #include <iostream>
+#include <set>
 #include <string>
 #include <vector>
 #include <mutex>
@@ -14,6 +17,7 @@
 #include "rclcpp/rclcpp.hpp"
 #include "geometry_msgs/msg/pose_stamped.hpp"
 #include "nav_msgs/msg/odometry.hpp"
+#include "std_msgs/msg/string.hpp"
 #include "visualization_msgs/msg/marker_array.hpp"
 
 #include "nav_cmd_bridge/nav_bridge.hpp"
@@ -29,6 +33,27 @@ static unsigned short g_msg_id = 0;
 static double g_cur_x = 0, g_cur_y = 0, g_cur_yaw = 0;
 static bool g_pos_valid = false;
 static std::mutex g_pos_mutex;
+static bool g_replies_tracked = false;
+
+// Latest goal (Type 1003) and mode switch (Type 1101) sent, so that bridge mode's reply
+// thread can print what the robot answers against the waypoint it belongs to.
+struct Sent {
+    int num = 0;               // waypoint number, as in the [WP n/..] lines; 0 = nothing sent yet
+    unsigned short id = 0;     // UDP message id
+    std::chrono::steady_clock::time_point at;
+    bool replied = false;
+    bool overdue = false;      // already reported as unanswered
+    int error_code = 0;
+};
+// Plain globals, not a map: detached waypoint threads can still send while the process exits.
+static Sent g_sent_goal, g_sent_mode;
+static std::mutex g_sent_mutex;
+static const double REPLY_TIMEOUT_S = 3.0;  // the robots answer a mode switch within 0.02 s
+static const int NAV_BUSY = 0xE008;
+
+static Sent* sentFor(int type) {
+    return type == 1003 ? &g_sent_goal : type == 1101 ? &g_sent_mode : nullptr;
+}
 
 // Must match the suffix relays.launch.py applies on the robot, so export the same
 // ROBOT_ID on both machines. Unset on both sides gives the single-robot name.
@@ -52,6 +77,7 @@ static const char* navErrorStr(int c) {
         case 0xA34B: return "Persistent obstacle stop";
         case 0xA34C: return "Global planning failure";
         case 57351:  return "No operation permission";
+        case NAV_BUSY: return "Has nav task, new task refused";
         default:     return "Unknown error";
     }
 }
@@ -80,7 +106,33 @@ static void storeOdom(const nav_msgs::msg::Odometry::SharedPtr msg) {
     g_pos_valid = true;
 }
 
-static int sendUDP(const char* json) {
+// Value of the first "key": field in payload, without quotes.
+static std::string jsonField(const std::string& payload, const std::string& key) {
+    std::string search = "\"" + key + "\":";
+    size_t pos = payload.find(search);
+    if (pos == std::string::npos) return "";
+    pos += search.length();
+    while (pos < payload.size() && (payload[pos] == ' ' || payload[pos] == '"')) pos++;
+    size_t end = pos;
+    while (end < payload.size() && payload[end] != ',' && payload[end] != '}' && payload[end] != '"') end++;
+    return payload.substr(pos, end - pos);
+}
+
+static double secondsSince(std::chrono::steady_clock::time_point t) {
+    return std::chrono::duration<double>(std::chrono::steady_clock::now() - t).count();
+}
+
+static void trackSent(int type, int num, unsigned short id) {
+    std::lock_guard<std::mutex> lk(g_sent_mutex);
+    Sent* last = sentFor(type);
+    if (!last) return;
+    if (last == &g_sent_goal && last->num && !last->replied && !last->overdue)
+        printf("[REPLY] WP %d goal: NO REPLY before the next goal was sent\n", last->num);
+    *last = Sent{num, id, std::chrono::steady_clock::now(), false, false};
+}
+
+// num > 0 tracks the message (see Sent) so the robot's reply is printed against waypoint num.
+static int sendUDP(const char* json, int num = 0) {
     udpMessage msg;
     memset(&msg, 0, sizeof(msg));
     msg.header[0] = 0xeb; msg.header[1] = 0x91;
@@ -92,21 +144,14 @@ static int sendUDP(const char* json) {
     msg.header[7] = (g_msg_id >> 8) & 0xFF;
     msg.header[8] = 0x01;
     memcpy(msg.data, json, len);
+    // before sending, so a fast reply can't arrive ahead of it
+    if (num > 0) trackSent(std::atoi(jsonField(json, "Type").c_str()), num, g_msg_id);
     g_msg_id++;
     return sendto(g_fd, &msg, len + 16, 0, (struct sockaddr*)&g_addr, sizeof(g_addr));
 }
 
 static void processResponse(const std::string& payload) {
-    auto get = [&](const std::string& key) -> std::string {
-        std::string search = "\"" + key + "\":";
-        size_t pos = payload.find(search);
-        if (pos == std::string::npos) return "";
-        pos += search.length();
-        while (pos < payload.size() && (payload[pos] == ' ' || payload[pos] == '"')) pos++;
-        size_t end = pos;
-        while (end < payload.size() && payload[end] != ',' && payload[end] != '}' && payload[end] != '"') end++;
-        return payload.substr(pos, end - pos);
-    };
+    auto get = [&](const std::string& key) { return jsonField(payload, key); };
     std::string typeStr = get("Type");
     if (typeStr.empty()) return;
     int type = std::atoi(typeStr.c_str());
@@ -137,8 +182,78 @@ static void listenResponses(int seconds) {
     }
 }
 
-static bool waitForArrival(double gx, double gy, int timeout_sec = 120) {
+// One line per message from the robot, against the waypoint it answers. The first message of
+// each Type/Command is also printed raw, to show what the robot actually sends.
+static void printReply(const std::string& payload, unsigned short reply_id,
+                       std::set<std::pair<int, int>>& seen, std::string& last_status) {
+    const int type = std::atoi(jsonField(payload, "Type").c_str());
+    const int cmd  = std::atoi(jsonField(payload, "Command").c_str());
+    std::lock_guard<std::mutex> lk(g_sent_mutex);
+    Sent* s = sentFor(type);
+    if (seen.insert({type, cmd}).second) {
+        char ours[32] = "";
+        if (s && s->num) snprintf(ours, sizeof(ours), ", ours was %u", s->id);
+        printf("[REPLY] First %d/%d message from the robot (msg id %u%s): %.300s\n",
+               type, cmd, reply_id, ours, payload.c_str());
+    }
+    const std::string code = jsonField(payload, "ErrorCode");
+    char err[80] = "no ErrorCode";
+    if (!code.empty()) {
+        const int e = std::atoi(code.c_str());
+        snprintf(err, sizeof(err), "ErrorCode=0x%X (%s)", e, navErrorStr(e));
+    }
+
+    if (type == 1007 && cmd == 1) {  // navigation status, printed when it changes
+        char status[160];
+        snprintf(status, sizeof(status), "point %s | %s | %s", jsonField(payload, "Value").c_str(),
+                 navStatusStr(std::atoi(jsonField(payload, "Status").c_str())), err);
+        if (last_status != status) printf("[REPLY] Status: %s\n", status);
+        last_status = status;
+        return;
+    }
+    if (!s || s->num == 0) return;  // e.g. heartbeat replies
+    const char* what = type == 1003 ? "goal" : "mode switch";
+    const std::string value = jsonField(payload, "Value");
+    if (!value.empty() && std::atoi(value.c_str()) != s->num) {
+        printf("[REPLY] WP %s %s (not the latest): %s\n", value.c_str(), what, err);
+        return;
+    }
+    if (s->replied)
+        printf("[REPLY] WP %d %s: another message %.1fs after sending, %s\n", s->num, what, secondsSince(s->at), err);
+    else
+        printf("[REPLY] WP %d %s: answered after %.2fs%s, %s\n", s->num, what, secondsSince(s->at),
+               s->overdue ? " (late)" : "", err);
+    s->replied = true;
+    s->error_code = std::atoi(code.c_str());
+}
+
+// Bridge mode only: reads everything the robot sends back. A mode switch the robot hasn't answered
+// within REPLY_TIMEOUT_S (lost on the WiFi either way, or ignored) is reported.
+static void printReplies() {
+    struct timeval tv = {0, 200000};  // wake up to check for unanswered mode switches
+    setsockopt(g_fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+    std::set<std::pair<int, int>> seen;
+    std::string last_status;
+    unsigned char buf[8192];
+    while (rclcpp::ok()) {
+        ssize_t n = recvfrom(g_fd, buf, sizeof(buf), 0, nullptr, nullptr);
+        if (n < 0 && errno != EAGAIN && errno != EWOULDBLOCK && errno != EINTR) break;
+        if (n > 16)
+            printReply(std::string((char*)buf + 16, n - 16), static_cast<unsigned short>(buf[6] | (buf[7] << 8)),
+                       seen, last_status);
+        std::lock_guard<std::mutex> lk(g_sent_mutex);
+        Sent& mode = g_sent_mode;
+        if (mode.num && !mode.replied && !mode.overdue && secondsSince(mode.at) > REPLY_TIMEOUT_S) {
+            printf("[REPLY] WP %d mode switch: NO REPLY within %.0fs (lost on the WiFi, or ignored by the robot)\n",
+                   mode.num, REPLY_TIMEOUT_S);
+            mode.overdue = true;
+        }
+    }
+}
+
+static const char* waitForArrival(int num, const char* goal, double gx, double gy, int timeout_sec = 120) {
     printf("[NAV] Moving to x=%.4f y=%.4f\n", gx, gy);
+    int at_goal_s = 0;
     for (int t = 0; t < timeout_sec; t++) {
         sleep(1);
         sendUDP(R"({"PatrolDevice":{"Type":100,"Command":100,"Time":"2025-01-01 00:00:00","Items":{}}})");
@@ -150,32 +265,52 @@ static bool waitForArrival(double gx, double gy, int timeout_sec = 120) {
         }
         double dist = std::sqrt((cx - gx) * (cx - gx) + (cy - gy) * (cy - gy));
         printf("[NAV] x=%.4f y=%.4f dist=%.4fm\n", cx, cy, dist);
-        if (dist <= 0.1) { printf("[NAV] Arrived (%.4fm)\n", dist); return true; }
+        at_goal_s = dist <= 0.1 ? at_goal_s + 1 : 0;
+        if (!g_replies_tracked) {
+            if (at_goal_s) { printf("[NAV] Arrived (%.4fm)\n", dist); return "ARRIVED"; }
+            continue;
+        }
+        Sent sent;
+        {
+            std::lock_guard<std::mutex> lk(g_sent_mutex);
+            sent = g_sent_goal;
+        }
+        if (sent.num != num) return "SUPERSEDED";
+        if (sent.replied && sent.error_code == NAV_BUSY) {
+            printf("[NAV] Robot still busy with its previous task, resending the goal\n");
+            sendUDP(goal, num);
+        } else if (sent.replied) {
+            return at_goal_s ? "ARRIVED" : "STOPPED SHORT";
+        } else if (at_goal_s >= 10) {
+            printf("[NAV] Within 0.1 m for 10 s but no answer from the robot (lost on the WiFi?)\n");
+            return "ARRIVED";
+        }
     }
     printf("[NAV] Timeout after %ds\n", timeout_sec);
-    return false;
+    return "TIMEOUT";
 }
 
-static void executeWaypoint(int num, int total, double gx, double gy, double gyaw) {
+static const char* executeWaypoint(int num, int total, double gx, double gy, double gyaw) {
     printf("\n[WP %d/%d] x=%.4f y=%.4f yaw=%.1fdeg\n", num, total, gx, gy, gyaw * 180.0 / M_PI);
 
     sendUDP(R"({"PatrolDevice":{"Type":100,"Command":100,"Time":"2025-01-01 00:00:00","Items":{}}})");
     usleep(300000);
-    sendUDP(R"({"PatrolDevice":{"Type":1101,"Command":5,"Time":"2025-01-01 00:00:00","Items":{"Mode":1}}})");
+    sendUDP(R"({"PatrolDevice":{"Type":1101,"Command":5,"Time":"2025-01-01 00:00:00","Items":{"Mode":1}}})", num);
     usleep(1000000);
 
     char buf[BUFFER_SIZE];
     snprintf(buf, sizeof(buf),
         R"({"PatrolDevice":{"Type":1003,"Command":1,"Time":"2025-01-01 00:00:00","Items":{"Value":%d,"MapID":0,"PosX":%.6f,"PosY":%.6f,"PosZ":0.0,"AngleYaw":%.6f,"PointInfo":1,"Gait":12290,"Speed":1,"Manner":0,"ObsMode":0,"NavMode":1}}})",
         num, gx, gy, gyaw);
-    sendUDP(buf);
-    bool arrived = waitForArrival(gx, gy);
+    sendUDP(buf, num);
+    const char* outcome = waitForArrival(num, buf, gx, gy);
     double ax, ay;
     {
         std::lock_guard<std::mutex> lk(g_pos_mutex);
         ax = g_cur_x; ay = g_cur_y;
     }
-    printf("[WP %d/%d] %s — actual x=%.4f y=%.4f\n", num, total, arrived ? "ARRIVED" : "TIMEOUT", ax, ay);
+    printf("[WP %d/%d] %s — actual x=%.4f y=%.4f\n", num, total, outcome, ax, ay);
+    return outcome;
 }
 
 // Immediate: each arrow is driven to at once. Queue: arrows are collected and
@@ -193,8 +328,9 @@ public:
             perRobot("/goal_pose"), 10, std::bind(&GoalBridge::goalCb, this, std::placeholders::_1));
         odom_sub_ = create_subscription<nav_msgs::msg::Odometry>(perRobot("/ODOM_relayed"), 10, storeOdom);
         marker_pub_ = create_publisher<visualization_msgs::msg::MarkerArray>(perRobot("/waypoint_markers"), 10);
-        RCLCPP_INFO(get_logger(), "Goals on %s, waypoint arrows on %s",
-                    goal_sub_->get_topic_name(), marker_pub_->get_topic_name());
+        result_pub_ = create_publisher<std_msgs::msg::String>(perRobot("/goal_result"), 10);
+        RCLCPP_INFO(get_logger(), "Goals on %s, results on %s, waypoint arrows on %s",
+                    goal_sub_->get_topic_name(), result_pub_->get_topic_name(), marker_pub_->get_topic_name());
         if (mode_ == Mode::Queue)
             RCLCPP_INFO(get_logger(), "Queue mode — draw arrows in RViz2, then press ENTER");
         else if (mode_ == Mode::Patrol)
@@ -275,8 +411,10 @@ private:
         publishMarkers();
         if (mode_ == Mode::Immediate) {
             int num = ++wp_count_;
-            std::thread([num, x, y, yaw]() {
-                executeWaypoint(num, num, x, y, yaw);
+            std::thread([num, x, y, yaw, pub = result_pub_]() {
+                std_msgs::msg::String result;
+                result.data = executeWaypoint(num, num, x, y, yaw);
+                pub->publish(result);
             }).detach();
         }
     }
@@ -330,6 +468,7 @@ private:
     rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr goal_sub_;
     rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odom_sub_;
     rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr marker_pub_;
+    rclcpp::Publisher<std_msgs::msg::String>::SharedPtr result_pub_;
     rclcpp::TimerBase::SharedPtr heartbeat_timer_;
 };
 
@@ -370,6 +509,8 @@ int main(int argc, char* argv[]) {
         Mode mode = sub == "queue" ? Mode::Queue : sub == "patrol" ? Mode::Patrol : Mode::Immediate;
         rclcpp::init(argc, argv);
         auto node = std::make_shared<GoalBridge>(mode);
+        g_replies_tracked = true;
+        std::thread(printReplies).detach();
         // The thread holds its own reference: at Ctrl+C it can still be mid-waypoint.
         if (mode != Mode::Immediate)
             std::thread([node]() { node->runRoute(); }).detach();
