@@ -56,6 +56,9 @@ class Fleet:
         self.site = site if isinstance(site, Site) else Site.load(site)
         self.robots = [str(r) for r in (robots or self.site.robot_ids())]
         for r in self.robots:
+            if r in self.site.unplaced:
+                raise ValueError(f'robot {r} has no home in the site yet: '
+                                 f'm20 robot set {r} --home <place>')
             if r not in self.site.robots:
                 raise ValueError(f'robot {r} is not in the site file')
         self.rmf = client or RmfClient(fleet=self.site.fleet['name'])

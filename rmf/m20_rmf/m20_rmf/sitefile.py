@@ -170,11 +170,14 @@ class Site:
                  'timeout': float(v.get('timeout', 30.0)),
                  'label': v.get('label', k)}
             self.targets[str(k)] = t
-        self.robots = {}
+        # Robots with a home are the fleet. One listed with only its ip is "not placed
+        # yet": the launcher runs its relay (it reads ips from this file), so its pose can
+        # be read to give it a home; RMF, missions and tools leave it out until then.
+        self.robots, self.unplaced = {}, {}
         for k, v in (data.get('robots') or {}).items():
             v = dict(v or {})
             v.setdefault('port', 30000)
-            self.robots[str(k)] = v
+            (self.robots if v.get('home') is not None else self.unplaced)[str(k)] = v
         self.fleet = copy.deepcopy(FLEET_DEFAULTS)
         _deep_update(self.fleet, data.get('fleet') or {})
         self.validate()
@@ -234,8 +237,11 @@ class Site:
             need(r.get('home'), f'robots.{k}.home')
             if r.get('route') is not None and r['route'] not in self.routes:
                 raise SiteError(f'robots.{k}.route: unknown route {r["route"]!r}')
-            if r.get('home') is None:
-                raise SiteError(f'robots.{k}: missing home (used as its RMF charger)')
+        for k, r in self.unplaced.items():
+            if 'ip' not in r:
+                raise SiteError(f'robots.{k}: missing ip')
+            if r.get('route') is not None and r['route'] not in self.routes:
+                raise SiteError(f'robots.{k}.route: unknown route {r["route"]!r}')
         connected = {a for a, _, _ in self.lanes} | {b for _, b, _ in self.lanes}
         for p in self.places:
             if p not in connected and len(self.places) > 1:

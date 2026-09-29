@@ -158,3 +158,17 @@ def test_new_site_loads_and_grows():
     s = load(ed.text(), '/tmp/new.yaml')
     assert set(s.places) == {'home_834', 'bay_1'} and s.routes == {'loop': ['bay_1', 'home_834']}
     assert '# Waypoints RMF can route to' in ed.text()     # comments kept
+
+
+def test_robot_added_unplaced_then_placed():
+    ed = SiteText(text())
+    ed.set_robot('665', {'ip': '192.168.123.101'})
+    s = load(ed.text())
+    assert list(s.robots) == ['834'] and s.unplaced['665']['ip'] == '192.168.123.101'
+    assert '"665": {ip: 192.168.123.101}' in ed.text()        # id quoted, one line
+    ed.set_place('home_665', [-2.0, -5.0, 0.0])
+    ed.add_lane(['home_665', 'home_834'])
+    ed.set_robot('665', {'ip': '192.168.123.101', 'home': 'home_665'})
+    s = load(ed.text())
+    assert set(s.robots) == {'834', '665'} and not s.unplaced
+    assert s.fleet_config()['rmf_fleet']['robots']['665'] == {'charger': 'home_665'}

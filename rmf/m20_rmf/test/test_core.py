@@ -109,7 +109,7 @@ def test_lanes_bidirectional_and_oneway():
     ({'lanes': [['a', 'zz']]}, 'unknown place'),
     ({'routes': {'r': ['a', 'nope']}}, 'unknown place'),
     ({'robots': {'1': {'home': 'a'}}}, 'missing ip'),
-    ({'robots': {'1': {'ip': 'x'}}}, 'missing home'),
+    ({'robots': {'1': {}}}, 'missing ip'),                     # not placed, still needs ip
     ({'places': {'a': [0, 0], 'b': [1, 0], 'c': [5, 5]}}, 'no lanes'),
     ({'zones': {'z': {'entry': 'a'}}}, 'needs tracks, poses or a boundary'),
     ({'formations': {'f': {'slots': ['a'], 'assign': 'random'}}}, 'nearest|fixed'),
@@ -481,3 +481,9 @@ def test_stack_robots_missing_from_the_site_are_left_out(tmp_path, monkeypatch, 
     assert stack.robots_for(str(tmp_path / 'site.yaml')) == ['834']
     assert '665, 741' in capsys.readouterr().err
     assert stack.robots_for('/elsewhere/sim.yaml') is None      # other sites: all theirs
+
+
+def test_robot_without_home_is_unplaced():
+    s = Site(_site(robots={'1': {'ip': '10.0.0.1', 'home': 'a'}, '2': {'ip': '10.0.0.2'}}))
+    assert list(s.robots) == ['1'] and list(s.unplaced) == ['2']
+    assert s.robot_ids() == ['1'] and list(s.fleet_config()['rmf_fleet']['robots']) == ['1']

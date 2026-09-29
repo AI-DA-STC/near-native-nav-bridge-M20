@@ -41,6 +41,12 @@ list), default all robots in the site.
                                            entry); a separate exit keeps the way back
                                            clear of robots going in
     m20 zone clear zone_b                  forget its corners (keeps entry/spacing)
+    m20 robot ls                           robots, their ip / home / route
+    m20 robot add 665 --ip 192.168.123.101 a robot not placed yet: relay + bridge run for
+                                           it (read its pose), RMF leaves it out
+    m20 robot set 665 --home home_665 [--route r] [--ip …]
+                                           place it (home = its RMF parking spot): after
+                                           restart rmf, it is part of the fleet
     m20 zone rm zone_b
     (each takes --dry-run; --force writes even if a mission would break.
      RMF uses the new graph after: scripts/m20_stack.sh restart rmf)
@@ -393,6 +399,48 @@ def cmd_zone_rm(a):
     _edit_site(a, change)
 
 
+def cmd_robot_ls(a):
+    site = _site(a)
+    for rid, r in list(site.robots.items()) + list(site.unplaced.items()):
+        state = f'home {r["home"]}' if r.get('home') else 'NOT PLACED (no home yet)'
+        print(f'  {rid}: {r["ip"]}:{r.get("port", 30000)}  {state}'
+              + (f', route {r["route"]}' if r.get('route') else ''))
+
+
+def _robot_raw(site, rid):
+    return dict((site.raw.get('robots') or {}).get(rid) or
+                (site.raw.get('robots') or {}).get(int(rid) if rid.isdigit() else rid) or {})
+
+
+def cmd_robot_add(a):
+    from .siteedit import EditError
+
+    def change(ed, site):
+        if a.id in site.robots or a.id in site.unplaced:
+            raise EditError(f'robot {a.id} is already in the site (m20 robot set)')
+        ed.set_robot(a.id, {'ip': a.ip, **({'port': a.port} if a.port else {})})
+        return (f'robot {a.id} ({a.ip}) added, not placed yet: its relay runs with the '
+                f'stack; then  m20 place set home_{a.id} --from {a.id} --link <place>  and  '
+                f'm20 robot set {a.id} --home home_{a.id}')
+    _edit_site(a, change)
+
+
+def cmd_robot_set(a):
+    from .siteedit import EditError
+
+    def change(ed, site):
+        if a.id not in site.robots and a.id not in site.unplaced:
+            raise EditError(f'no robot {a.id} (m20 robot add {a.id} --ip …)')
+        r = _robot_raw(site, a.id)
+        for key in ('ip', 'port', 'home', 'route'):
+            v = getattr(a, key)
+            if v is not None:
+                r[key] = v
+        ed.set_robot(a.id, r)
+        return f'robot {a.id}: {r}' + ('  (restart rmf to add it to the fleet)' if a.home else '')
+    _edit_site(a, change)
+
+
 def cmd_route_rm(a):
     from .siteedit import EditError
 
@@ -620,6 +668,13 @@ def main(argv=None):
                                (('--angle',), {'type': float, 'help': 'row direction, degrees'})]),
         ('clear', cmd_zone_clear, [name]),
         ('rm', cmd_zone_rm, [name]),
+    ])
+    group('robot', 'robots in the site: add, place (home), route', [
+        ('ls', cmd_robot_ls, []),
+        ('add', cmd_robot_add, [(('id',), {}), (('--ip',), {'required': True}),
+                                (('--port',), {'type': int})]),
+        ('set', cmd_robot_set, [(('id',), {}), (('--ip',), {}), (('--port',), {'type': int}),
+                                (('--home',), {}), (('--route',), {})]),
     ])
     group('route', 'set / remove patrol routes', [
         ('set', cmd_route_set, [name, (('places',), {'nargs': '+'})]),

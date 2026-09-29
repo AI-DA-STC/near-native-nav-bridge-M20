@@ -211,6 +211,18 @@ class SiteText:
     def remove_zone(self, name):
         self._del_map_entry('zones', name)
 
+    # --------------------------------------------------------------- robots
+    def set_robot(self, rid, value):
+        """Write a robot entry as one line, its id quoted ("834", not the number 834)."""
+        found = self._map_entry('robots', rid)
+        line = f'"{rid}": {_flow(value)}'
+        if found:
+            s, e = found
+            self.lines[s:e] = [' ' * _indent(self.lines[s]) + line + '\n']
+        else:
+            start, end = self._section('robots')
+            self.lines.insert(end, self._child_indent(start, end) + line + '\n')
+
     # --------------------------------------------------------------- routes
     def set_route(self, name, places, comment=''):
         self._put_map_entry('routes', name, _flow([str(p) for p in places]), comment)

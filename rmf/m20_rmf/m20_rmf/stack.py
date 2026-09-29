@@ -77,14 +77,16 @@ def robots_for(site_path, cfg=None):
         if robots:
             try:
                 with open(site_path) as f:
-                    listed = {str(r) for r in ((yaml.safe_load(f) or {}).get('robots') or {})}
+                    entries = (yaml.safe_load(f) or {}).get('robots') or {}
+                listed = {str(r) for r, v in entries.items() if (v or {}).get('home') is not None}
             except (OSError, yaml.YAMLError):
                 return robots
             missing = [r for r in robots if r not in listed]
             if missing:
                 import sys
-                print(f'[m20] robots {", ".join(missing)} are in m20_stack.yaml but not in '
-                      f'{os.path.basename(site_path)}: left out until the site lists them',
+                print(f'[m20] robots {", ".join(missing)} are in m20_stack.yaml but have no '
+                      f'home in {os.path.basename(site_path)} yet: relay and bridge only, '
+                      'left out of RMF until placed (m20 robot set <id> --home <place>)',
                       file=sys.stderr)
                 robots = [r for r in robots if r in listed] or None
         return robots
