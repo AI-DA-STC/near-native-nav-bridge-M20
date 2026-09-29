@@ -99,6 +99,9 @@ class _Fleet:
     def _say(self, text):
         pass
 
+    def check_abort(self):
+        pass
+
     def publish_mission(self, **kw):
         if 'phase' in kw:
             self.phases.append(kw['phase'])

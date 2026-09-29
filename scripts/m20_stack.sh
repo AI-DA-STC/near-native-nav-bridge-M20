@@ -11,15 +11,19 @@
 #   M20_RELAY=none|odom|full overrides robot_relay; M20_NO_ATTACH=1 starts detached.
 #
 # Panes (all settings from m20_stack.yaml, nothing to export):
-#   relay <id>  ssh into each robot, start its relay in the robot's container
+#   relay <id>  ssh into each robot, start its relay in the robot's container; stays in
+#               ssh showing the relay's output, reconnects if the link drops
 #   bridge      Foxy devcontainer: laptop_bridge.launch.py (domain 0 -> 20)
 #   rmf         Jazzy devcontainer: m20_rmf.launch.py (Open-RMF + M20 adapter)
 #   events      Jazzy devcontainer: m20 events (every command sent, live)
 #   ui          Jazzy devcontainer: demo GUI (http://localhost:8080) + RViz (M20_RVIZ=false: none)
+#   mission     Jazzy devcontainer: m20 mission-host, runs the missions the GUI starts.
+#               Ctrl-C here aborts the mission and stops its robots (standing) - the
+#               fallback when the GUI is not usable
 #   operator    Jazzy devcontainer: shell for m20 status / go / mission / stop
 #
-# This script never moves a robot; motion is only ever typed in the operator pane.
-# Stop a robot with `m20 stop <id>` (no drop) or Ctrl-C on the command that moves it.
+# This script never moves a robot; motion is only started from the GUI or the operator
+# pane. Stop: STOP in the GUI, Ctrl-C in the mission pane, `m20 stop` (none drop it).
 set -euo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -106,13 +110,14 @@ in_container() {   # $1 = container id, $2 = command (interactive bash env of th
 }
 
 relay_cmd() {   # $1 = robot id
-  local rid=$1 ip var="IP_$1" inner
+  local rid=$1 ip var="IP_$1" inner stale
   ip=${!var}
   [ -n "$ip" ] || { echo "echo 'robot $rid has no ip in the site file'"; return; }
   case "$RELAY_MODE" in
     odom) # odometry (all RMF needs) + the SLAM map (latched: sent once, light on Wi-Fi)
+          stale="[_]_node:=(odom|grid_map)_relay_$rid"
           inner="trap 'kill 0' EXIT; ros2 run nav_cmd_bridge occupancygrid_relay --ros-args -r __node:=grid_map_relay_$rid -p input_topic:=/GRID_MAP -p output_topic:=/GRID_MAP_relayed_$rid -p frame_prefix:=\"'$rid'\" & ros2 run nav_cmd_bridge odom_relay --ros-args -r __node:=odom_relay_$rid -p input_topic:=/ODOM -p output_topic:=/ODOM_relayed_$rid -p frame_prefix:=\"'$rid'\" & wait" ;;
-    full) inner="ros2 launch nav_cmd_bridge relays.launch.py" ;;
+    full) stale="[r]elays.launch.py"; inner="ros2 launch nav_cmd_bridge relays.launch.py" ;;
     none) echo "echo 'robot_relay: none -> start the relay on $rid yourself'"; return ;;
     *) die "robot_relay must be odom, full or none" ;;
   esac
@@ -131,14 +136,37 @@ if ! docker exec \$C test -f $ROBOT_PROFILE; then
   echo \"no relay profile in \$C: installing the repo's robot/fastdds_relay.xml for $ip\"
   docker cp /tmp/m20_relay_profile.xml \$C:$ROBOT_PROFILE
 fi
+# A dropped connection leaves the previous relay running inside the container (docker
+# exec does not hang up its process): end it, or the robot would publish twice.
+if docker exec \$C pkill -f '$stale'; then echo 'ended a relay left from a dropped connection'; sleep 1; fi
 exec docker exec -it \$C bash -c \"\$(echo $(b64 "$inner") | base64 -d)\""
-  local ssh="ssh -o ServerAliveInterval=5 -o ConnectTimeout=20" scp="scp -q -o ConnectTimeout=20"
+  local ssh="ssh -o ServerAliveInterval=5 -o ServerAliveCountMax=6 -o ConnectTimeout=10" scp="scp -q -o ConnectTimeout=10"
   if [ -n "$SSH_KEY" ] && [ -f "$SSH_KEY" ]; then
     ssh="$ssh -i $SSH_KEY -o IdentitiesOnly=yes"; scp="$scp -i $SSH_KEY -o IdentitiesOnly=yes"
   fi
   local prof="/tmp/m20_relay_profile_$rid.xml"
-  # -t so Ctrl-C in the pane reaches the relay on the robot.
-  echo "echo '== relay on $rid ($ip, $RELAY_MODE); Ctrl-C to stop'; sed 's/192\\.168\\.123\\.102/$ip/g' $REPO/robot/fastdds_relay.xml > $prof && $scp $prof $SSH_USER@$ip:/tmp/m20_relay_profile.xml; $ssh -t $SSH_USER@$ip \"bash -c \\\"\\\$(echo $(b64 "$remote") | base64 -d)\\\"\"; echo '== relay on $rid ended'"
+  # The pane stays in ssh with the relay's output. If the relay ends by itself or the
+  # link drops (Wi-Fi, robot reboot), it reconnects; Ctrl-C (-t: it reaches the relay on
+  # the robot) stops it for good. 130 = ended by Ctrl-C, 255 = ssh could not connect.
+  local loop="trap 'quit=1' INT
+quit=
+echo '== relay on $rid ($ip, $RELAY_MODE). Ctrl-C stops it.'
+sed 's/192\\.168\\.123\\.102/$ip/g' $REPO/robot/fastdds_relay.xml > $prof
+while :; do
+  if $scp $prof $SSH_USER@$ip:/tmp/m20_relay_profile.xml; then
+    $ssh -t $SSH_USER@$ip \"bash -c \\\"\\\$(echo $(b64 "$remote") | base64 -d)\\\"\"
+    code=\$?
+  else
+    code=255
+  fi
+  [ -n \"\$quit\" ] && break
+  [ \$code = 130 ] && { echo '== relay on $rid stopped (Ctrl-C)'; break; }
+  why=''; [ \$code = 255 ] && why=': robot unreachable or connection lost'
+  echo \"== relay on $rid ended (exit \$code\$why) at \$(date +%T). Reconnecting in 5 s, Ctrl-C to stop.\"
+  sleep 5
+  [ -n \"\$quit\" ] && { echo '== relay on $rid: not reconnecting'; break; }
+done"
+  echo "bash -c \"\$(echo $(b64 "$loop") | base64 -d)\""
 }
 
 foxy_cmd() {
@@ -157,8 +185,12 @@ ui_cmd() {       # demo console (hub + web GUI on :8080) + RViz markers + RViz
   in_container "$JAZZY" "sleep 10; ros2 launch m20_rmf demo.launch.py rviz:=${M20_RVIZ:-true}"
 }
 
+mission_cmd() {   # runs the missions started from the GUI; Ctrl-C = abort + stop
+  in_container "$JAZZY" 'sleep 8; m20 mission-host'
+}
+
 operator_cmd() {
-  in_container "$JAZZY" 'clear; echo "operator shell  |  m20 status  |  m20 go <robot> <place>  |  m20 mission <file>  |  m20 stop [robot]  (no drop)"; echo "Ctrl-C on a moving command stops that robot."; exec bash -i'
+  in_container "$JAZZY" 'clear; echo "operator shell  |  m20 status  |  m20 go <robot> <place>  |  m20 mission <file>  |  m20 stop [robot]  (no drop)"; echo "Ctrl-C on a moving command stops that robot. GUI missions: Ctrl-C in the mission pane."; exec bash -i'
 }
 
 # --- actions ----------------------------------------------------------------------
@@ -202,6 +234,7 @@ up() {
   pane rmf "$(rmf_cmd)"
   pane events "$(events_cmd)"
   pane ui "$(ui_cmd)"
+  pane mission "$(mission_cmd)"
   pane operator "$(operator_cmd)"
   tmux select-layout -t "$LAST_PANE" tiled >/dev/null
   echo "attach: scripts/m20_stack.sh attach   detach: Ctrl-b d   stop all: scripts/m20_stack.sh down"
@@ -253,5 +286,5 @@ case "${1:-}" in
   down) down ;;
   attach) exec tmux attach -t "=$SESSION" ;;
   status) status ;;
-  *) sed -n '2,20p' "$0"; exit 1 ;;
+  *) sed -n '2,/^set -euo/p' "$0" | sed '$d'; exit 1 ;;
 esac

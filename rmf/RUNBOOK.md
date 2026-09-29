@@ -90,11 +90,12 @@ display (for RViz) and opens RViz and the demo console (§5).
 
 | Pane | What it is | Healthy when |
 |---|---|---|
-| `relay <id>` | SSH → robot → relay container → odometry + SLAM-map relays | `Relay: /GRID_MAP -> …` and `Relay: /ODOM -> /ODOM_relayed_<id>` |
+| `relay <id>` | SSH → robot → relay container → odometry + SLAM-map relays. Stays in SSH showing the relay output; if the link drops or the relay ends, it says why and reconnects every 5 s (clearing any relay left behind). Ctrl-C stops it for good | `Relay: /GRID_MAP -> …` and `Relay: /ODOM -> /ODOM_relayed_<id>` |
 | `bridge` | Foxy: rebuild if needed, `shm_clean`, laptop bridge | `robots [...], domain 0 -> 20 ...`, then `Relay:` lines (2 shared + 4 per robot) |
 | `rmf` | Jazzy: rebuild if needed, Open-RMF + adapter | `[<id>] registered with RMF at (x, y)` |
 | `events` | live log of every command the adapter sends | — |
 | `ui` | demo console (http://localhost:8080) + RViz markers + RViz | `m20 ui: http://localhost:8080` |
+| `mission` | `m20 mission-host`: runs the missions the GUI starts, printing every step. **Ctrl-C here aborts the mission and stops its robots** (standing), the fallback when the GUI is not usable; Ctrl-C when no mission runs quits it | `[host] mission host ready` |
 | `operator` | shell for `m20 …` | prompt |
 
 **Relays on their own:** `scripts/m20_stack.sh relay` starts only the robots' relays (own
@@ -121,10 +122,10 @@ Open **http://localhost:8080** (or `http://<laptop ip>:8080` from a tablet on th
 
 | Area | Shows / does |
 |---|---|
-| header | mission picker + **Start** (runs it as `m20 mission`), **Abort** (stops it and every robot), **STOP ALL** (no-drop stop) |
+| header | mission picker + **Start** (the `mission` pane runs it), **STOP ALL** |
 | stage | mission name, the current **phase** in large type, elapsed time |
 | action card | only when needed: the mission's question with its button (e.g. *Begin scenario*, *Suspicious item at box 1*), or an inspection waiting for a verdict (**Clear** / **Threat**) |
-| robot cards | one per robot: **mode** (colour + word), one detail line (route, zone, target), battery, per-robot **Stop** |
+| robot cards | one per robot: **mode** (colour + word), one detail line (route, zone, target), battery; per-robot **Stop** when no mission is running |
 | signal row | signals the mission offers at any time; pressing one early is fine, it shows **queued** until the mission uses it |
 | log | the last few phases, signals, verdicts and stops |
 
@@ -141,6 +142,22 @@ relay and bridge up), then add the printed `map:` line to the site file.
 
 The GUI's buttons are the only way it moves robots: **Start** runs the chosen mission;
 everything else stops, signals or answers. Start a mission only with someone by the robots.
+
+**There is one kind of stop.** STOP ALL (and per-robot Stop, `m20 stop`, Ctrl-C in the
+`mission` pane or in a terminal running `m20 mission`) always does the same thing: the
+robots stop where they stand and **stay standing**, their RMF tasks are cancelled, and
+the running mission **ends** — it never carries on to its next step (so a stop no longer
+sends the robot home). The robots show **STOPPED** for 15 s, then IDLE; start a mission
+again to continue. The mission's state reads *Mission stopped* with who stopped it.
+
+If a mission's process dies (killed, crashed), the GUI shows **Mission lost** within a
+few seconds instead of *running* forever: the robots may still be finishing their last
+task, so press STOP ALL if needed. Start works again straight away.
+
+**If the GUI itself fails** (page frozen, hub crashed): Ctrl-C in the tmux `mission`
+pane — it stops the mission and its robots without the GUI. Then `m20 stop` in the
+operator pane, or the controller. The page shows a red banner while it has no
+connection to the hub.
 
 ## 6. Operate from the terminal
 
@@ -165,9 +182,31 @@ Every move is **turn in place → walk straight → turn in place**.
 Information only: `m20 status`, `m20 pose 834`, `m20 events`, `m20 graph`,
 `m20 --help`.
 
+### The corridor test (`missions/test_834_corridor.yaml`)
+A one-robot rehearsal of the demo's shape (patrol → form up → explore → inspect → form
+up → home) that never leaves a straight 2 m corridor in front of 834's start pose. Site
+`sites/lab_834_corridor.yaml`: three places on one line, `home_834` (start), `fwd_1`
+(1 m ahead), `fwd_2` (2 m ahead), all facing along the corridor. Needs ~2.5 m clear ahead.
+
+| # | Step | What 834 does | GUI mode |
+|---|---|---|---|
+| 1 | `patrol` route `corridor` = [fwd_2, home_834], 1 round | walks 2 m out to fwd_2, turns round, walks back to home (ends facing back down the corridor) | PATROL |
+| 2 | `form_up line` (one slot: fwd_1) | turns, walks 1 m to fwd_1, turns to face along the corridor | REGROUP |
+| 3 | `explore corridor_probe` | from fwd_1 walks to 1.5 m, pauses 2 s, on to fwd_2 (2 m), turns to face back, pauses 2 s | EXPLORE |
+| 4 | `inspect box_right` (approach fwd_2) | turns ~90° in place to look at a point 1 m to its right, holds 3 s, then waits up to 15 s for a verdict (GUI: Clear / Threat) | INVESTIGATE |
+| 5 | `form_up line` | back 1 m to fwd_1, facing along the corridor | REGROUP |
+| 6 | `return_home` | back 1 m to home_834, ending at its start heading | RETURN |
+
+Each walk is turn in place → straight line → turn in place, so the robot never cuts a
+corner. A STOP at any step ends the whole run (older builds went on to step 6, which is
+why a stop used to send it home).
+
 ### Stopping — none of these drops the robot
-1. **Ctrl-C** in the terminal running `m20 go …` / `m20 mission …`.
+1. **STOP ALL** in the GUI, or **Ctrl-C** in the `mission` pane (GUI missions) or in the
+   terminal running `m20 go …` / `m20 mission …`.
 2. **`m20 stop 834`** (or `m20 stop` for all) from any Jazzy terminal.
+
+Each also ends whatever mission is running (§5).
 3. **`ros2 run nav_cmd_bridge nav_cmd_bridge cancel --ip <robot ip>`** from the Foxy
    devcontainer — works with RMF down.
 4. **The handheld controller.**
@@ -275,6 +314,11 @@ m20 status
 | GUI page loads but stays empty | the `ui` pane is not running (or port 8080 taken) | check the `ui` pane; `pkill -f lib/m20_rmf/ui` in the Jazzy container |
 | RViz has no map | robot relay without the map (`robot_relay: odom` includes it) or no `map:` in the site | `m20 map-save …` and add `map:` |
 | `relay <id>` pane: container not running | robot powered off and back on | the relay command now starts / recreates it; rerun `scripts/m20_stack.sh relay` |
+| GUI: *no mission host* on Start | the `mission` pane is not running | restart it: `m20 mission-host` in that pane (Jazzy container) |
+| `[host] another mission host is running` | two hosts would both run each mission | use the one already running, or Ctrl-C it first |
+| GUI: *Mission lost* | the mission's process died | STOP ALL if robots are still moving; start again |
+| GUI: red *No connection* banner | the `ui` pane (hub) stopped | stop from the `mission` pane (Ctrl-C) or `m20 stop`; restart the `ui` pane |
+| `relay <id>` pane: *ended (exit 255 …) Reconnecting* | Wi-Fi drop or robot rebooting | nothing: it reconnects by itself; Ctrl-C to give up |
 | 3-robot site runs with one robot | CLI/launch robots default to `m20_stack.yaml` only with its own site | pass `--robots` / `robots:=` |
 
 ---
@@ -286,7 +330,7 @@ m20 status
 | Domains | robots/relays 0 · Open-RMF + tools 20 · mock rehearsal 42 |
 | Vendor UDP | robot `:30000`, JSON over a 16-byte header (`protocol.py`) |
 | Task-state websocket | `ws://localhost:7878` (monitor) |
-| ROS topics | `/m20/events`, `/m20/robot_status`, `/m20/task_states`, `/m20/mission`, `/m20/fleet_view`, `/m20/viz`, `/m20/map`, `/m20/stop`, `/m20/trigger`, `/m20/inspect/request`, `/m20/inspect/result` |
+| ROS topics | `/m20/events`, `/m20/robot_status`, `/m20/task_states`, `/m20/mission`, `/m20/mission_cmd`, `/m20/mission_host`, `/m20/fleet_view`, `/m20/viz`, `/m20/map`, `/m20/stop`, `/m20/trigger`, `/m20/inspect/request`, `/m20/inspect/result` |
 | Demo console | http://localhost:8080 (websocket :8081) |
 | Tests | `cd /repo/rmf/m20_rmf && python3 -m pytest -q test` (Jazzy devcontainer) |
 | Robot container | `user-nav_cmd_bridge-1`, workspace `/root/ros2_ws` |

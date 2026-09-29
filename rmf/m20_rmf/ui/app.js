@@ -4,22 +4,55 @@
 const $ = (id) => document.getElementById(id);
 let ws = null;
 let view = null;
+let nextId = 1;
+const shown = {};                     // section id -> key of what it shows
 
 function connect() {
   // the websocket listens on the page's port + 1 (8080 -> 8081)
   ws = new WebSocket(`ws://${location.hostname}:${Number(location.port || 80) + 1}`);
-  ws.onopen = () => $('link').classList.add('up');
-  ws.onclose = () => { $('link').classList.remove('up'); setTimeout(connect, 1500); };
+  ws.onopen = () => { $('link').classList.add('up'); toast(''); };
+  ws.onclose = () => {
+    $('link').classList.remove('up');
+    toast('No connection to the console hub. Stop robots from the tmux "mission" pane (Ctrl-C) or with `m20 stop`.');
+    setTimeout(connect, 1000);
+  };
   ws.onmessage = (e) => {
     const m = JSON.parse(e.data);
     if (m.type === 'view') { view = m.view; render(); }
     else if (m.type === 'missions') renderMissions(m.missions);
-    else if (m.type === 'reply' && m.error) alert(m.error);
+    else if (m.type === 'reply') {
+      document.querySelectorAll(`[data-cmd="${m.id}"]`).forEach((b) => b.classList.remove('busy'));
+      if (m.error) toast(m.error);
+    }
   };
 }
 
-function send(cmd) {
-  if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(cmd));
+function toast(text, kind = '') {
+  const t = $('toast');
+  t.hidden = !text;
+  t.textContent = text;
+  t.className = `toast ${kind}`;
+}
+$('toast').onclick = () => toast('');
+
+// Send a command; the button that sent it dims until the hub replies.
+function send(cmd, button) {
+  if (!ws || ws.readyState !== WebSocket.OPEN) {
+    toast('Not connected: command not sent.');
+    return;
+  }
+  cmd.id = nextId++;
+  if (button) { button.classList.add('busy'); button.dataset.cmd = cmd.id; }
+  ws.send(JSON.stringify(cmd));
+}
+
+// Rebuild a section only when what it shows changed: a node replaced under the
+// pointer would swallow the click.
+function renderIf(id, key, build) {
+  const k = JSON.stringify(key);
+  if (shown[id] === k) return;
+  shown[id] = k;
+  $(id).replaceChildren(...build());
 }
 
 function el(tag, attrs = {}, ...children) {
@@ -48,61 +81,76 @@ function renderMissions(list) {
 
 function render() {
   const m = view.mission || {};
-  const running = m.running || m.state === 'running';
+  const running = !!m.running;
+  const host = view.host || {};
 
   // Stage: mission name, the phase, elapsed. One line each, nothing else.
   $('mission-name').textContent = m.name || '';
   $('phase').textContent = running
     ? (m.phase || 'Starting…')
-    : ({ complete: 'Mission complete', aborted: 'Mission aborted', failed: 'Mission failed' }[m.state] || 'No mission running');
-  $('elapsed').textContent = running && m.started ? fmtElapsed(view.t - m.started) : (m.error || '');
+    : ({ complete: 'Mission complete', aborted: 'Mission stopped', failed: 'Mission failed',
+         lost: 'Mission lost' }[m.state] || 'No mission running');
+  $('elapsed').textContent = running && m.started ? fmtElapsed(view.t - m.started)
+    : (m.error || (m.state === 'aborted' && m.reason) || '');
   $('start').hidden = running;
   $('mission-file').hidden = running;
-  $('abort').hidden = !running;
+  $('start').disabled = !host.up;
+  $('start').title = host.up ? 'run the selected mission'
+    : 'no mission host: it runs in the tmux "mission" pane (m20 mission-host)';
 
   // Actions: only what needs the operator now.
-  const actions = [];
-  if (m.waiting) {
-    const w = m.waiting;
-    actions.push(el('div', { class: 'action' },
-      el('div', { class: 'text' }, w.prompt || w.label,
-        w.seconds ? el('div', { class: 'sub' }, `continues by itself in ${Math.max(0, Math.round(w.seconds - (view.t - w.since)))} s`) : null),
-      w.event
-        ? el('button', { class: 'btn primary', onclick: () => send({ cmd: 'signal', event: w.event, data: signalData(m, w.event) }) }, w.label)
-        : null));
-  }
-  for (const [id, ins] of Object.entries(view.inspections || {})) {
-    actions.push(el('div', { class: 'action' },
-      el('div', { class: 'text' }, `${ins.robot} is inspecting ${ins.label}`,
-        el('div', { class: 'sub' }, 'what does it find?')),
-      el('button', { class: 'btn', onclick: () => send({ cmd: 'verdict', id, verdict: 'clear' }) }, 'Clear'),
-      el('button', { class: 'btn primary', onclick: () => send({ cmd: 'verdict', id, verdict: 'threat' }) }, 'Threat')));
-  }
-  $('actions').replaceChildren(...actions);
+  const w = m.waiting;
+  const left = w && w.seconds ? Math.max(0, Math.round(w.seconds - (view.t - w.since))) : null;
+  renderIf('actions', [w, left, view.inspections], () => {
+    const actions = [];
+    if (w) {
+      actions.push(el('div', { class: 'action' },
+        el('div', { class: 'text' }, w.prompt || w.label,
+          left != null ? el('div', { class: 'sub' }, `continues by itself in ${left} s`) : null),
+        w.event
+          ? el('button', { class: 'btn primary', onclick: (e) => send({ cmd: 'signal', event: w.event, data: signalData(m, w.event) }, e.currentTarget) }, w.label)
+          : null));
+    }
+    for (const [id, ins] of Object.entries(view.inspections || {})) {
+      actions.push(el('div', { class: 'action' },
+        el('div', { class: 'text' }, `${ins.robot} is inspecting ${ins.label}`,
+          el('div', { class: 'sub' }, 'what does it find?')),
+        el('button', { class: 'btn', onclick: (e) => send({ cmd: 'verdict', id, verdict: 'clear' }, e.currentTarget) }, 'Clear'),
+        el('button', { class: 'btn primary', onclick: (e) => send({ cmd: 'verdict', id, verdict: 'threat' }, e.currentTarget) }, 'Threat')));
+    }
+    return actions;
+  });
 
   // Robots: one colour, one mode word, one detail line.
-  $('robots').replaceChildren(...view.robots.map((r) => el('div', { class: 'robot', style: { '--mode': r.color } },
+  // Per-robot Stop only outside a mission: a stop ends the mission, and so stops all of
+  // its robots, which is what STOP ALL already says.
+  const cards = view.robots.map((r) => ({ id: r.id, color: r.color, mode: r.mode, detail: prettyDetail(r),
+    battery: r.battery != null ? Math.round(r.battery * 100) : null, warning: r.warning || null,
+    stop: !running && r.mode !== 'OFFLINE' }));
+  renderIf('robots', cards, () => cards.map((r) => el('div', { class: 'robot', style: { '--mode': r.color } },
     el('div', { class: 'id' }, `M20 · ${r.id}`,
-      el('button', { class: 'btn small', title: 'stop this robot (no drop)', onclick: () => send({ cmd: 'stop', robot: r.id }) }, 'Stop')),
+      r.stop ? el('button', { class: 'btn small', title: 'stop this robot where it stands (no drop)',
+                              onclick: (e) => send({ cmd: 'stop', robot: r.id }, e.currentTarget) }, 'Stop') : null),
     el('div', { class: 'mode' }, r.mode),
-    el('div', { class: 'detail' }, prettyDetail(r)),
+    el('div', { class: 'detail' }, r.detail),
     el('div', { class: 'meta' },
-      r.battery != null ? el('span', {}, `${Math.round(r.battery * 100)}%`) : null,
+      r.battery != null ? el('span', {}, `${r.battery}%`) : null,
       r.warning ? el('span', { class: 'warn' }, `⚠ ${r.warning}`) : null))));
 
   // Signals the mission offers, except the one it is already asking for.
   // ...and not ones the mission has already used (unless it is waiting for one again).
   const offered = (running && m.signals || []).filter((s) =>
-    !(m.waiting && m.waiting.event === s.event) && !(m.used || []).includes(s.event));
+    !(w && w.event === s.event) && !(m.used || []).includes(s.event));
   $('signals').hidden = offered.length === 0;
-  $('signals').replaceChildren(
+  renderIf('signals', [offered, m.queued], () => [
     el('span', { class: 'label' }, 'Signal'),
     ...offered.map((s) => (m.queued || []).includes(s.event)
       ? el('button', { class: 'btn', disabled: true, title: 'sent; used when the mission gets there' }, `✓ ${s.label || s.event} (queued)`)
-      : el('button', { class: 'btn', onclick: () => send({ cmd: 'signal', event: s.event, data: s.data || {} }) }, s.label || s.event)));
+      : el('button', { class: 'btn', onclick: (e) => send({ cmd: 'signal', event: s.event, data: s.data || {} }, e.currentTarget) }, s.label || s.event))]);
 
   // Timeline: the last few things that happened.
-  $('timeline').replaceChildren(...[...(view.timeline || [])].reverse().slice(0, 6).map((e) =>
+  const recent = [...(view.timeline || [])].reverse().slice(0, 6);
+  renderIf('timeline', recent, () => recent.map((e) =>
     el('li', { class: `${e.kind}-k` }, el('time', {}, new Date(e.t * 1000).toLocaleTimeString([], { hour12: false })), e.text)));
 }
 
@@ -117,8 +165,7 @@ function prettyDetail(r) {
   return { PATROL: `route ${d}`, EXPLORE: `zone ${d}`, INVESTIGATE: d, REGROUP: `formation ${d}` }[r.mode] || d;
 }
 
-$('start').onclick = () => send({ cmd: 'start', file: $('mission-file').value });
-$('abort').onclick = () => send({ cmd: 'abort' });
-$('stop-all').onclick = () => send({ cmd: 'stop', robot: 'all' });
+$('start').onclick = (e) => send({ cmd: 'start', file: $('mission-file').value }, e.currentTarget);
+$('stop-all').onclick = (e) => send({ cmd: 'stop', robot: 'all' }, e.currentTarget);
 
 connect();

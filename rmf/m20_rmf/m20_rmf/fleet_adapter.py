@@ -347,7 +347,7 @@ def main(argv=sys.argv):
     def status_loop():
         while rclpy.ok():
             bus.status.publish(String(data=json.dumps([r.status() for r in robots.values()])))
-            time.sleep(0.5)
+            time.sleep(0.2)     # 5 Hz: the GUI and RViz follow the robot closely
 
     threading.Thread(target=update_loop, daemon=True).start()
     threading.Thread(target=status_loop, daemon=True).start()

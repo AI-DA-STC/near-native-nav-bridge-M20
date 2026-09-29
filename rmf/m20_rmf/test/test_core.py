@@ -321,6 +321,9 @@ class _FakeFleet:
     def _say(self, text):
         pass
 
+    def check_abort(self):
+        pass
+
     def inspect(self, **kw):
         self.calls.append(('inspect', kw))
 

@@ -12,8 +12,36 @@ with several real robots at once.
 
 ## Added
 
+### One stop, mission host, faster console (2026-09-29, after the first GUI test on 834)
+- **One stop.** The GUI's Abort is gone. STOP ALL, per-robot Stop, `m20 stop` and Ctrl-C
+  all do the same thing: the robots stop standing, their tasks are cancelled, and the
+  running mission **ends**. Before, a Stop cancelled the robot's task but the mission went
+  on to its next step (834 walked home), and Abort left the GUI stuck on *running*.
+- **Ctrl-C works during cleanup.** Our tools no longer install rclpy's signal handlers,
+  which shut ROS down on Ctrl-C before the mission could cancel its tasks
+  (`RCLError: publisher's context is invalid` — the cause of the stuck state).
+- **Mission host** (`m20 mission-host`, new tmux pane `mission`): runs the missions the
+  GUI starts, in view, where Ctrl-C aborts the mission and stops its robots; replaces the
+  GUI's hidden subprocess (`/tmp/m20_mission.log`). One host at a time (a second refuses
+  to start). Missions run on a worker thread and abort within ~0.2 s from any wait
+  (RMF task, signal, button, sleep, parallel branch); no new task starts after a stop.
+- **No soft-lock:** a running mission re-publishes its state every second; if it stops
+  doing so the GUI shows *Mission lost* and allows a new Start. STOPPED decays to IDLE
+  after 15 s. A mission that cannot start (bad file) shows *Mission failed* with why.
+- **Faster console:** the view is pushed 5×/s and immediately after any command or
+  mission change; the adapter publishes status at 5 Hz; STOP answers after the UDP stop
+  (RMF cancellations finish in the background); sections re-render only when they change
+  (a button no longer loses clicks to the refresh); buttons dim until the hub confirms;
+  errors appear as a banner (no browser alert); a red banner when the hub is unreachable.
+- **Prompt-only waits** (`wait_trigger: {prompt: …}`) get a GUI button (signal `continue`).
+- **Relay pane stays in SSH:** if the relay ends or the link drops it prints why (exit code,
+  time) and reconnects every 5 s, first ending any relay a dropped connection left running
+  in the robot's container; Ctrl-C stops it. SSH keep-alive tolerates 30 s of silence.
+- Tests: `test/test_abort.py` (abort from every kind of wait, final states, heartbeat,
+  stop semantics); 54 passing.
+
 ### Demo console and RViz (2026-09-29)
-- **Web GUI** (`m20_rmf ui`, http://localhost:8080): mission picker / Start / Abort,
+- **Web GUI** (`m20_rmf ui`, http://localhost:8080): mission picker / Start,
   **STOP ALL** and per-robot Stop (no drop), the mission **phase** in large type, one
   call-to-action card only when the mission waits for the operator or an inspection needs
   a verdict (Clear / Threat), one card per robot with a single colour-coded **mode**

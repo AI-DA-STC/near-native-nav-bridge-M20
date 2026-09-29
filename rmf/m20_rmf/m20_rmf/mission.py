@@ -29,6 +29,11 @@ count). A signal may carry data, used by later steps as `${event.key}`:
       - wait_trigger: {event: suspicious, label: "Report suspicious item"}
       - inspect: {target: "${suspicious.target}", robot: "834"}
 
+Stopping: any STOP (GUI, `m20 stop`, Ctrl-C in the mission's terminal) aborts the
+mission and stops its robots where they stand; nothing resumes by itself. Missions
+started from the GUI run in the mission host (`m20 mission-host`, the tmux "mission"
+pane), so that pane is where Ctrl-C works when the GUI does not.
+
 `robot` / `robots` may name robots that are not active in this run (e.g. a 3-robot
 mission tested with one dog): missing robots are dropped from lists, and a single
 `robot` falls back to the first active robot, with a notice. `--check` validates
@@ -36,12 +41,15 @@ every name against the site without touching RMF.
 """
 
 import argparse
+import json
+import os
 import sys
 import threading
 import time
 
 import yaml
 
+from .rmf_client import Aborted
 from .sitefile import Site
 
 CONTROL = {'parallel', 'repeat', 'log', 'sleep', 'phase'}
@@ -107,6 +115,7 @@ class Runner:
 
     def run_steps(self, steps, depth=0):
         for i, step in enumerate(steps):
+            self.fleet.check_abort()
             name, args = _split(step)
             prefix = '  ' * depth
             if name == 'log':
@@ -115,7 +124,7 @@ class Runner:
                 self.fleet._say(str(args))
                 self.fleet.publish_mission(phase=str(args))
             elif name == 'sleep':
-                time.sleep(float(args))
+                self.fleet.sleep(float(args))
             elif name == 'parallel':
                 errors = []
 
@@ -143,6 +152,8 @@ class Runner:
                 kwargs = self._fit_robots(name, self._resolve(kwargs))
                 if kwargs is None:
                     continue
+                if name == 'stop':
+                    kwargs.setdefault('end_mission', False)     # a planned stop step
                 self.log(f'{prefix}[mission] step: {name} {kwargs}')
                 result = fn(**kwargs)
                 if name == 'wait_trigger' and isinstance(result, dict):
@@ -187,7 +198,88 @@ def check(mission, site):
     return problems
 
 
+class MissionRun:
+    """One mission running on a worker thread. abort() may be called from any thread
+    (Ctrl-C, a STOP from the GUI or CLI): it stops the robots and the worker ends at
+    its next check, within ~0.2 s of whatever it was waiting on."""
+
+    HEARTBEAT = 1.0             # s between re-publishes of the state (GUI staleness)
+
+    def __init__(self, fleet, mission, file):
+        self.fleet = fleet
+        self.mission = mission
+        self.file = file
+        self.name = mission.get('name') or os.path.splitext(os.path.basename(file))[0]
+        self.done = threading.Event()
+        self._abort_lock = threading.Lock()
+        self.reason = None
+
+    def start(self):
+        f = self.fleet
+        f.rmf.on_trigger = f.publish_mission            # show queued signals in the GUI
+        f._say(f'mission {self.name} start, robots {f.robots}')
+        f.publish_mission(name=self.name, file=self.file, state='running',
+                          started=time.time(), phase='', waiting=None, ended=None,
+                          error=None, used=[], signals=self.mission.get('signals') or [],
+                          description=self.mission.get('description', ''))
+        threading.Thread(target=self._body, daemon=True, name='mission').start()
+        threading.Thread(target=self._heartbeat, daemon=True).start()
+        return self
+
+    def _heartbeat(self):
+        while not self.done.wait(self.HEARTBEAT):
+            self.fleet.publish_mission()
+
+    def _body(self):
+        f = self.fleet
+        try:
+            Runner(f).run_steps(self.mission['steps'])
+            f.check_abort()
+            f._say('mission complete')
+            f.publish_mission(state='complete', waiting=None, ended=time.time())
+        except Aborted:
+            pass                                # abort() published the state
+        except Exception as e:  # noqa: BLE001 - shown in the GUI and the terminal
+            if f.aborted.is_set():
+                pass
+            else:
+                f._say(f'mission failed: {e}')
+                f.publish_mission(state='failed', error=str(e), waiting=None,
+                                  ended=time.time())
+        finally:
+            self.done.set()
+
+    def abort(self, reason='operator'):
+        """Stop the robots and end the mission. Idempotent; returns at once when the
+        mission already ended."""
+        with self._abort_lock:
+            if self.done.is_set() or self.fleet.aborted.is_set():
+                return
+            self.fleet.aborted.set()
+            self.reason = reason
+        f = self.fleet
+        f.publish_mission(state='aborted', reason=reason, waiting=None, ended=time.time())
+        f._say(f'mission aborted ({reason}): stopping {f.robots}, robots stay standing')
+        try:
+            f.stop(end_mission=False)
+        finally:
+            f.publish_mission(state='aborted')
+
+    def wait(self, timeout=None):
+        return self.done.wait(timeout)
+
+
+def _load_checked(file, site):
+    mission = load(file)
+    problems = check(mission, site)
+    if problems:
+        raise MissionError('mission check failed:\n  ' + '\n  '.join(problems))
+    return mission
+
+
 def main(argv=None):
+    """`m20 mission <file>`: run one mission in this terminal. Ctrl-C aborts it
+    (robots stop, standing); a STOP from the GUI or `m20 stop` aborts it too."""
     import rclpy
     from . import domain_guard
     argv = list(argv or sys.argv)
@@ -197,46 +289,165 @@ def main(argv=None):
     p.add_argument('--site', required=True)
     p.add_argument('--robots', default='', help='comma list of active robots (default: all)')
     p.add_argument('--check', action='store_true', help='validate only')
-    a = p.parse_args(rclpy.utilities.remove_ros_args(argv or sys.argv)[1:])
+    a = p.parse_args(rclpy.utilities.remove_ros_args(argv)[1:])
     site = Site.load(a.site)
-    mission = load(a.mission)
-    problems = check(mission, site)
-    if problems:
-        sys.exit('mission check failed:\n  ' + '\n  '.join(problems))
+    try:
+        mission = _load_checked(a.mission, site)
+    except MissionError as e:
+        sys.exit(str(e))
     if a.check:
         print(f'{a.mission}: OK ({len(mission["steps"])} steps)')
         return
     import signal
     from .primitives import Fleet
 
-    # rclpy swallows SIGTERM into a context shutdown while the main thread may be
-    # blocked in a wait; turn it into the same clean abort as Ctrl-C.
     def _term(*_):
         raise KeyboardInterrupt
+    signal.signal(signal.SIGTERM, _term)
     robots = [r for r in a.robots.split(',') if r] or None
     fleet = Fleet(site, robots=robots)
-    signal.signal(signal.SIGTERM, _term)   # after rclpy.init, which installs its own
-    name = mission.get('name', a.mission)
-    fleet._say(f'mission {name} start, robots {fleet.robots}')
-    fleet.rmf.on_trigger = fleet.publish_mission        # show queued signals in the GUI
-    fleet.publish_mission(name=name, file=a.mission, state='running', started=time.time(),
-                          phase='', waiting=None, signals=mission.get('signals') or [],
-                          description=mission.get('description', ''))
+    run = MissionRun(fleet, mission, a.mission)
+
+    def on_cmd(cmd):
+        if cmd.get('cmd') == 'abort':
+            threading.Thread(target=run.abort, args=(cmd.get('reason') or 'STOP',),
+                             daemon=True).start()
+    fleet.rmf.on_mission_cmd = on_cmd
+    run.start()
     try:
-        Runner(fleet).run_steps(mission['steps'])
-        fleet._say('mission complete')
-        fleet.publish_mission(state='complete', waiting=None, ended=time.time())
+        while not run.wait(0.2):
+            pass
     except KeyboardInterrupt:
-        fleet.aborted.set()
-        fleet._say('mission aborted by operator: stopping all robots')
-        fleet.publish_mission(state='aborted', waiting=None, ended=time.time())
-        fleet.stop()
-    except Exception as e:  # noqa: BLE001 - shown in the GUI, then re-raised
-        fleet.publish_mission(state='failed', error=str(e), waiting=None, ended=time.time())
-        raise
+        print('\n[mission] Ctrl-C: aborting, stopping robots (Ctrl-C again to quit now)',
+              flush=True)
+        try:
+            run.abort('Ctrl-C')
+            run.wait(10.0)
+        except KeyboardInterrupt:
+            pass
     finally:
         time.sleep(0.3)     # let the last mission state go out
         fleet.rmf.close()
+    if fleet.mission.get('state') == 'failed':
+        sys.exit(1)
+
+
+class MissionHost:
+    """Runs missions on request from the GUI (/m20/mission_cmd), in-process, one at a
+    time, and tells the GUI it is there (/m20/mission_host, every second)."""
+
+    def __init__(self, site_path, robots, client, log=print):
+        self.site_path = site_path
+        self.robots = robots
+        self.rmf = client
+        self.log = log
+        self.run = None
+        self.lock = threading.Lock()
+        from std_msgs.msg import String
+        self._String = String
+        self.pub = client.node.create_publisher(String, '/m20/mission_host', 10)
+        self.others = set()             # pids of other hosts heard on /m20/mission_host
+        client.node.create_subscription(String, '/m20/mission_host', self._on_host, 10)
+
+    def listen(self):
+        """Start taking commands, unless another host is already running: two hosts
+        would both run every mission the GUI starts."""
+        time.sleep(2.5)                 # discovery + one heartbeat period
+        if self.others:
+            raise MissionError(f'another mission host is running (pid {sorted(self.others)}); '
+                               'use that one, or stop it first')
+        self.rmf.on_mission_cmd = self._on_cmd
+
+    def _on_host(self, msg):
+        pid = json.loads(msg.data).get('pid')
+        if pid != os.getpid():
+            self.others.add(pid)
+
+    @property
+    def busy(self):
+        return self.run is not None and not self.run.done.is_set()
+
+    def _on_cmd(self, cmd):
+        # Called on the ROS spin thread; the work (RMF requests) needs that thread.
+        threading.Thread(target=self._handle, args=(cmd,), daemon=True).start()
+
+    def _handle(self, cmd):
+        kind = cmd.get('cmd')
+        if kind == 'start':
+            try:
+                self.start(cmd.get('file', ''))
+            except Exception as e:  # noqa: BLE001 - reported in the pane and the GUI
+                self.log(f'[host] cannot start {cmd.get("file")}: {e}')
+                self.rmf.event(f'mission not started: {e}')
+                if not self.busy:       # show it in the GUI's stage
+                    self.rmf.mission_pub.publish(self._String(data=json.dumps({
+                        'name': os.path.basename(str(cmd.get('file'))), 'state': 'failed',
+                        'error': str(e), 'alive': time.time(), 'robots': self.robots})))
+        elif kind == 'abort':
+            self.abort(cmd.get('reason') or 'STOP')
+
+    def start(self, file):
+        from .primitives import Fleet
+        with self.lock:
+            if self.busy:
+                raise MissionError(f'mission {self.run.name} is still running')
+            site = Site.load(self.site_path)        # re-read: edits apply without restart
+            mission = _load_checked(file, site)
+            fleet = Fleet(site, robots=self.robots, client=self.rmf, log=self.log,
+                          console=False)
+            self.run = MissionRun(fleet, mission, file).start()
+
+    def abort(self, reason):
+        run = self.run
+        if run is not None and not run.done.is_set():
+            run.abort(reason)
+
+    def heartbeat(self):
+        run = self.run
+        self.pub.publish(self._String(data=json.dumps({
+            'alive': time.time(), 'busy': self.busy, 'pid': os.getpid(),
+            'site': self.site_path, 'robots': self.robots,
+            'mission': run.name if run else None})))
+
+
+def host_main(site_path, robots):
+    """`m20 mission-host`: the tmux "mission" pane. Ctrl-C aborts the running mission
+    (robots stop, standing); Ctrl-C with no mission running exits."""
+    import signal
+    from .rmf_client import RmfClient
+    site = Site.load(site_path)
+    robots = robots or site.robot_ids()
+    client = RmfClient(fleet=site.fleet['name'], node_name='m20_mission_host')
+
+    def _term(*_):
+        raise SystemExit(0)
+    signal.signal(signal.SIGTERM, _term)
+    host = MissionHost(site_path, robots, client)
+    try:
+        host.listen()
+    except MissionError as e:
+        client.close()
+        sys.exit(f'[host] {e}')
+    print(f'[host] mission host ready: robots {robots}, site {site_path}\n'
+          '[host] start missions from the GUI. Ctrl-C here: abort the running mission '
+          '(robots stop, standing); Ctrl-C when idle: quit.', flush=True)
+    try:
+        while True:
+            try:
+                while True:
+                    host.heartbeat()
+                    time.sleep(1.0)
+            except KeyboardInterrupt:
+                if not host.busy:
+                    print('\n[host] exiting', flush=True)
+                    break
+                print('\n[host] Ctrl-C: aborting the mission, stopping robots', flush=True)
+                host.abort('Ctrl-C in the mission pane')
+    finally:
+        if host.busy:
+            host.abort('mission host exiting')
+        time.sleep(0.3)
+        client.close()
 
 
 if __name__ == '__main__':

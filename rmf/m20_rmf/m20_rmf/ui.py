@@ -8,10 +8,13 @@ the mission runner's /m20/mission, inspection requests/results and operator sign
 into one view (view.py) and publishes it on /m20/fleet_view for the RViz markers. The
 web page renders the same view; its buttons send:
 
-    stop         robot id or all   -> the no-drop stop of `m20 stop`
+    stop         robot id or all   -> the no-drop stop of `m20 stop`, which also ends the
+                                      running mission (there is no separate abort)
     signal       event (+ data)    -> /m20/trigger (what the mission waits for)
     verdict      request id + text -> /m20/inspect/result (stands in for the vision model)
-    start/abort  mission file      -> runs `m20 mission <file>`; abort = Ctrl-C (robots stop)
+    start        mission file      -> /m20/mission_cmd, run by the mission host
+                                      (`m20 mission-host`, the tmux "mission" pane, where
+                                      Ctrl-C aborts it if this page is unavailable)
 
 HTTP on :8080 (static page), websocket on :8081 (view out, commands in).
 """
@@ -23,9 +26,7 @@ import glob
 import http.server
 import json
 import os
-import shutil
 import signal
-import subprocess
 import sys
 import threading
 import time
@@ -33,11 +34,13 @@ import time
 from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
 from std_msgs.msg import String
 
-from . import stack, view
+from . import protocol, stack, view
 from .sitefile import Site
 
 MISSIONS_DIRS = ('/repo/rmf/m20_rmf/missions',)
 HOLD_LAST_MODE = 3.0        # s a robot keeps its last mode between consecutive tasks
+STOPPED_FOR = 15.0          # s a stopped robot shows STOPPED before it reads IDLE
+STALE = 4.0                 # s without a heartbeat before a mission / host counts as gone
 
 
 class Hub:
@@ -48,12 +51,15 @@ class Hub:
         self.rmf = fleet.rmf
         self.lock = threading.Lock()
         self.mission = {}
-        self.stopped = set()
+        self.stopped = {}               # robot -> time of its STOP
         self.inspections = {}           # request id -> {robot, target, label, t, verdict}
         self.timeline = []
         self.prev = {}                  # robot -> (mode, detail) for timeline changes
         self.last_active = {}           # robot -> (robot view, time) of its last task
-        self.proc = None                # running `m20 mission`
+        self.host = {}                  # last /m20/mission_host heartbeat
+        self.aborted_at = 0.0           # time of the last "mission aborted" note
+        self.lost_noted = None          # start time of the mission last noted as lost
+        self.kick = None                # () -> push the view now (set by the ws server)
         self.missions_dirs = missions_dirs
         node = self.rmf.node
         latched = QoSProfile(depth=1, reliability=ReliabilityPolicy.RELIABLE,
@@ -63,6 +69,7 @@ class Hub:
         node.create_subscription(String, '/m20/inspect/result', self._on_inspect_res, 10)
         node.create_subscription(String, '/m20/stop', self._on_stop, 10)
         node.create_subscription(String, '/m20/trigger', self._on_trigger, 10)
+        node.create_subscription(String, '/m20/mission_host', self._on_host, 10)
         self.view_pub = node.create_publisher(String, '/m20/fleet_view', 10)
 
     # ------------------------------------------------------------ inbound
@@ -76,11 +83,22 @@ class Hub:
         with self.lock:
             old = self.mission
             self.mission = m
-        if m.get('phase') and m.get('phase') != old.get('phase'):
+        if m.get('phase') and (m.get('phase') != old.get('phase') or
+                               m.get('started') != old.get('started')):
             self.note(m['phase'], 'phase')
         if m.get('state') != old.get('state') and m.get('state') in ('complete', 'aborted', 'failed'):
-            self.note(f'mission {m.get("state")}' + (f': {m["error"]}' if m.get('error') else ''),
+            why = m.get('error') or (m.get('reason') if m.get('state') == 'aborted' else '')
+            if m.get('state') == 'aborted':
+                self.aborted_at = time.time()
+            self.note(f'mission {m.get("state")}' + (f': {why}' if why else ''),
                       'alert' if m.get('state') != 'complete' else 'phase')
+        if self.kick:
+            self.kick()
+
+    def _on_host(self, msg):
+        h = json.loads(msg.data)
+        with self.lock:
+            self.host = h
 
     def _on_inspect_req(self, msg):
         r = json.loads(msg.data)
@@ -105,10 +123,25 @@ class Hub:
 
     def _on_stop(self, msg):
         target = msg.data.strip()
+        self.mark_stopped(self.fleet.robots if target in ('', 'all') else [target])
+
+    def mark_stopped(self, robots):
+        now = time.time()
         with self.lock:
-            robots = self.fleet.robots if target in ('', 'all') else [target]
-            self.stopped.update(robots)
-        self.note(f'STOP {", ".join(robots)}', 'alert')
+            fresh = [r for r in robots if now - self.stopped.get(r, 0) > 1.0]
+            self.stopped.update({r: now for r in robots})
+            # During a mission the "mission aborted" line already says it; otherwise one
+            # line per stop, though each robot gets its own /m20/stop message.
+            quiet = self.mission.get('state') == 'running' or now - self.aborted_at < 3.0
+            last = self.timeline[-1] if self.timeline else None
+            if fresh and not quiet and last and last['text'].startswith('STOP ') \
+                    and now - last['t'] < 1.5:
+                last['text'] += ', ' + ', '.join(fresh)
+                fresh = []
+        if fresh and not quiet:
+            self.note(f'STOP {", ".join(fresh)}', 'alert')
+        if self.kick:
+            self.kick()
 
     def _on_trigger(self, msg):
         from .rmf_client import parse_trigger
@@ -123,15 +156,21 @@ class Hub:
             statuses = [self.rmf.robot_status[r] for r in sorted(self.rmf.robot_status)
                         if r in self.fleet.robots]
             tasks = dict(self.rmf.tasks)
+        now = time.time()
         with self.lock:
             pending = {k: v for k, v in self.inspections.items() if v['verdict'] is None}
-            v = view.fleet_view(statuses, tasks, dict(self.mission), set(self.stopped),
+            # STOPPED shows for a while, then the robot reads IDLE again.
+            for r, t in list(self.stopped.items()):
+                if now - t > STOPPED_FOR:
+                    del self.stopped[r]
+            mission = dict(self.mission)
+            host = dict(self.host)
+            v = view.fleet_view(statuses, tasks, mission, set(self.stopped),
                                 list(self.timeline), pending)
-        now = time.time()
         for r in v['robots']:
             # A stop lasts until the robot gets new work.
-            if r['task'] is not None:
-                self.stopped.discard(r['id'])
+            if r['task'] is not None and now - self.stopped.get(r['id'], 0) > 1.0:
+                self.stopped.pop(r['id'], None)
                 self.last_active[r['id']] = (dict(r), now)
             elif r['mode'] == 'IDLE':
                 # Consecutive steps leave a moment with no task; keep showing the last
@@ -145,7 +184,18 @@ class Hub:
                 self.note(f'{r["id"]} {"offline" if r["mode"] == "OFFLINE" else "back online"}',
                           'alert')
             self.prev[r['id']] = r['mode']
-        v['mission']['running'] = self.proc is not None and self.proc.poll() is None
+        m = v['mission']
+        # A mission whose process died (killed, crashed) stops re-publishing: show it as
+        # lost instead of running forever, and let a new one start.
+        if m.get('state') == 'running' and now - m.get('alive', 0) > STALE:
+            m['state'] = 'lost'
+            m['error'] = ('the mission process stopped responding; robots may still be '
+                          'on their last task — STOP ALL if needed')
+            if self.lost_noted != m.get('started'):
+                self.lost_noted = m.get('started')
+                self.note('mission lost: its process stopped responding', 'alert')
+        m['running'] = m.get('state') == 'running'
+        v['host'] = {'up': now - host.get('alive', 0) < STALE, 'busy': host.get('busy', False)}
         v['site'] = self.fleet.site.path
         return v
 
@@ -166,29 +216,40 @@ class Hub:
     def command(self, c):
         kind = c.get('cmd')
         if kind == 'stop':
+            # The robots stop now (UDP + adapter + mission abort, no waiting); clearing
+            # their RMF tasks, which waits on RMF, finishes in the background.
             robot = c.get('robot') or 'all'
-            self.fleet.stop(None if robot == 'all' else [robot])
+            robots = self.fleet.halt(None if robot == 'all' else [robot], source='GUI')
+            self.mark_stopped(robots)
+            threading.Thread(target=self._finish_stop, args=(robots,), daemon=True).start()
         elif kind == 'signal':
-            self.fleet.trigger(c['event'], **(c.get('data') or {}))
+            data = c.get('data') or {}
+            body = json.dumps({'event': c['event'], **data}) if data else c['event']
+            self.rmf.trigger_pub.publish(String(data=body))
         elif kind == 'verdict':
             body = {'id': c['id'], 'verdict': c['verdict']}
-            self.rmf.publish_once(self.rmf.inspect_result_pub, String(data=json.dumps(body)), 1.0)
+            self.rmf.inspect_result_pub.publish(String(data=json.dumps(body)))
         elif kind == 'start':
-            if self.proc is not None and self.proc.poll() is None:
-                return {'error': 'a mission is already running'}
-            exe = shutil.which('m20') or '/ws/install/m20_rmf/lib/m20_rmf/m20'
-            args = [exe, '--site', self.fleet.site.path,
-                    '--robots', ','.join(self.fleet.robots), 'mission', c['file']]
-            log = open('/tmp/m20_mission.log', 'w')
-            self.proc = subprocess.Popen(args, stdin=subprocess.DEVNULL, stdout=log,
-                                         stderr=subprocess.STDOUT, start_new_session=True)
-            self.note(f'mission started: {os.path.basename(c["file"])}', 'phase')
-        elif kind == 'abort':
-            if self.proc is not None and self.proc.poll() is None:
-                os.killpg(self.proc.pid, signal.SIGINT)     # runner stops every robot
-            else:
-                self.fleet.stop()
+            snap = self.snapshot()
+            if snap['mission'].get('running'):
+                return {'error': 'a mission is already running (STOP ALL ends it)'}
+            if not snap['host']['up']:
+                return {'error': 'no mission host: start the stack with scripts/m20_stack.sh '
+                                 'up (tmux pane "mission"), or run `m20 mission-host`'}
+            self.rmf.mission_cmd_pub.publish(String(data=json.dumps(
+                {'cmd': 'start', 'file': c['file']})))
+            self.note(f'mission requested: {os.path.basename(c["file"])}', 'phase')
+        else:
+            return {'error': f'unknown command {kind!r}'}
+        if self.kick:
+            self.kick()
         return {'ok': True}
+
+    def _finish_stop(self, robots):
+        try:
+            self.fleet.cancel(robots, quiet=True)
+        finally:
+            self.fleet._udp_to(robots, protocol.cancel_nav())
 
 
 # --------------------------------------------------------------- servers
@@ -206,17 +267,22 @@ async def serve_ws(hub, port, period):
     import websockets
     clients = set()
 
+    loop = asyncio.get_running_loop()
+    wake = asyncio.Event()
+    # Commands and mission changes push the view at once instead of on the next tick.
+    hub.kick = lambda: loop.call_soon_threadsafe(wake.set)
+
     async def handler(ws, path=None):
         clients.add(ws)
         try:
             await ws.send(json.dumps({'type': 'missions', 'missions': hub.missions()}))
             async for raw in ws:
                 try:
-                    reply = await asyncio.get_running_loop().run_in_executor(
-                        None, hub.command, json.loads(raw))
+                    c = json.loads(raw)
+                    reply = await loop.run_in_executor(None, hub.command, c)
                 except Exception as e:  # noqa: BLE001 - reported to the page
-                    reply = {'error': str(e)}
-                await ws.send(json.dumps({'type': 'reply', **(reply or {})}))
+                    c, reply = {}, {'error': str(e)}
+                await ws.send(json.dumps({'type': 'reply', 'id': c.get('id'), **(reply or {})}))
         finally:
             clients.discard(ws)
 
@@ -231,7 +297,11 @@ async def serve_ws(hub, port, period):
                     await ws.send(msg)
                 except Exception:  # noqa: BLE001 - client went away
                     clients.discard(ws)
-            await asyncio.sleep(period)
+            wake.clear()
+            try:
+                await asyncio.wait_for(wake.wait(), period)
+            except asyncio.TimeoutError:
+                pass
 
     async with websockets.serve(handler, '0.0.0.0', port, max_size=None):
         await broadcast()
@@ -247,7 +317,7 @@ def main(argv=None):
     p.add_argument('--robots', default='')
     p.add_argument('--http-port', type=int, default=8080)
     p.add_argument('--ws-port', type=int, default=0, help='default: http port + 1')
-    p.add_argument('--period', type=float, default=0.5)
+    p.add_argument('--period', type=float, default=0.2)
     a = p.parse_args(rclpy.utilities.remove_ros_args(argv)[1:])
     a.ws_port = a.ws_port or a.http_port + 1      # the page connects to its port + 1
 

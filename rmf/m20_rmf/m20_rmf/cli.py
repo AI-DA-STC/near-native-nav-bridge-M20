@@ -26,13 +26,16 @@ list), default all robots in the site.
   Control
     m20 cancel [834|all]                   cancel RMF tasks
     m20 stop [834|all]                     STOP where they stand (no drop): UDP cancel +
-                                           RMF task cancel. Use this.
+                                           RMF task cancel; ends the running mission.
+                                           Use this.
     m20 estop --drop [834|all]             vendor e-stop: the robot DROPS to the ground
     m20 trigger start                      release wait_for_event / wait_trigger
     m20 inspect-result <id|latest> '{"verdict": "empty"}'
     m20 status                             robots + recent tasks
     m20 events                             follow /m20/events
-    m20 mission missions/visitor_demo.yaml [--check]
+    m20 mission missions/visitor_demo.yaml [--check]    run here; Ctrl-C aborts + stops
+    m20 mission-host                       run missions the GUI starts (tmux "mission"
+                                           pane); Ctrl-C aborts + stops, again quits
 """
 
 import argparse
@@ -280,7 +283,7 @@ def main(argv=None):
                                                         else a.which.split(','))),
         (('which',), {'nargs': '?'}))
     add('stop', lambda a: _run(a, lambda f: f.stop(None if a.which in (None, 'all')
-                                                    else a.which.split(','))),
+                                                    else a.which.split(','), source='m20 stop')),
         (('which',), {'nargs': '?'}))
     add('estop', lambda a: _run(a, lambda f: f.estop(None if a.which in (None, 'all')
                                                       else a.which.split(','), drop=a.drop)),
@@ -294,6 +297,7 @@ def main(argv=None):
     add('events', cmd_events)
     sp = add('mission', None, (('file',), {}), (('--check',), {'action': 'store_true'}))
     sp.set_defaults(fn=lambda a: _mission(a))
+    add('mission-host', lambda a: _mission_host(a))
     a = p.parse_args(argv)
     a.fn(a)
 
@@ -307,6 +311,14 @@ def _mission(a):
     if a.check:
         args.append('--check')
     mission.main(args)
+
+
+def _mission_host(a):
+    from . import mission
+    site = _site_path(a)
+    if not site:
+        sys.exit('no site: pass --site, set M20_SITE, or set site: in m20_stack.yaml')
+    mission.host_main(site, _robots(a))
 
 
 if __name__ == '__main__':

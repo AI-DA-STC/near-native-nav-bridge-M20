@@ -30,7 +30,8 @@ cancelled first (RMF queues robot tasks otherwise — a patrol would never end).
 | return_home   | go_to each robot's home                                          |
 | relocalize    | direct /initialpose_set_relayed_<id> (works while RMF says lost) |
 | cancel        | cancel_task_request for everything the robot has                 |
-| stop          | safe stop, robot stays standing: UDP cancel + adapter + RMF tasks |
+| stop          | safe stop, robot stays standing: UDP cancel + adapter + RMF tasks; |
+|               | also ends the running mission (a stop is never undone by a step)  |
 | estop         | vendor e-stop, robot DROPS; requires drop=True                    |
 | signal        | event on /m20/events (lights/sound/dashboard hook)               |
 | trigger       | publish /m20/trigger (releases wait_for_event actions)           |
@@ -46,12 +47,12 @@ import threading
 import time
 
 from . import protocol
-from .rmf_client import RmfClient, TaskError
+from .rmf_client import Aborted, RmfClient, TaskError
 from .sitefile import Site
 
 
 class Fleet:
-    def __init__(self, site, robots=None, client=None, log=print):
+    def __init__(self, site, robots=None, client=None, log=print, console=True):
         self.site = site if isinstance(site, Site) else Site.load(site)
         self.robots = [str(r) for r in (robots or self.site.robot_ids())]
         for r in self.robots:
@@ -63,19 +64,35 @@ class Fleet:
         self.background = []                        # task ids started with wait=False
         self.mission = {}                           # published on /m20/mission
         self.since = time.monotonic()               # triggers before this are ignored
-        self.aborted = threading.Event()
+        self.aborted = threading.Event()             # set by MissionRun.abort()
+        self.console = console                      # wait_trigger also takes ENTER
+        self._mission_lock = threading.Lock()
 
     def publish_mission(self, **changes):
-        """Update and publish the mission state the status hub / GUI show."""
+        """Update and publish the mission state the status hub / GUI show. `alive` is
+        refreshed on every publish (the runner re-publishes every second), so the GUI
+        can tell a running mission from one whose process died."""
         from std_msgs.msg import String
-        self.mission.update(changes)
-        self.mission['robots'] = self.robots
-        self.mission['queued'] = self.rmf.pending_triggers(self.since) \
-            if hasattr(self.rmf, 'pending_triggers') else []
+        with self._mission_lock:
+            self.mission.update(changes)
+            self.mission['robots'] = self.robots
+            self.mission['alive'] = time.time()
+            self.mission['queued'] = self.rmf.pending_triggers(self.since) \
+                if hasattr(self.rmf, 'pending_triggers') else []
+            data = json.dumps(self.mission)
         try:
-            self.rmf.mission_pub.publish(String(data=json.dumps(self.mission)))
+            self.rmf.mission_pub.publish(String(data=data))
         except Exception:  # noqa: BLE001 - display only
             pass
+
+    def check_abort(self):
+        if self.aborted.is_set():
+            raise Aborted()
+
+    def sleep(self, seconds):
+        """time.sleep that ends early (raising Aborted) when the mission is aborted."""
+        if self.aborted.wait(float(seconds)):
+            raise Aborted()
 
     # --------------------------------------------------------------- helpers
     def _robots(self, robots):
@@ -94,6 +111,7 @@ class Fleet:
         self.rmf.event(text)
 
     def _start(self, robot, activities, label, queue):
+        self.check_abort()          # never start new work after a stop
         if not queue:
             self.cancel(robot, quiet=True)
         tid = self.rmf.compose(robot, activities, category=label)
@@ -105,7 +123,7 @@ class Fleet:
         if not wait:
             self.background.extend(tids)
             return tids
-        res = self.rmf.wait(tids, timeout=timeout)
+        res = self.rmf.wait(tids, timeout=timeout, cancelled=self.aborted.is_set)
         bad = {t: s for t, s in res.items() if s != 'completed'}
         if bad:
             self._say(f'{what}: not all tasks completed: {bad}')
@@ -132,6 +150,7 @@ class Fleet:
             if not rname:
                 raise ValueError(f'robot {r} has no route; pass route=')
             places = self.site.routes[rname]
+            self.check_abort()
             if not queue:
                 self.cancel(r, quiet=True)
             tid = self.rmf.robot_task(r, 'patrol', {'places': places, 'rounds': int(rounds)},
@@ -287,9 +306,13 @@ class Fleet:
                 if self.rmf.status(tid) in ('completed', 'failed', 'canceled', 'killed', 'skipped'):
                     continue
                 try:
-                    self.rmf.cancel(tid)
+                    self.rmf.cancel(tid, timeout=3.0)
                 except TaskError as e:
-                    self._say(f'cancel {tid} failed: {e}')
+                    # A stop cancels from several places at once (GUI, mission, adapter);
+                    # only a task that is still live is worth reporting.
+                    if self.rmf.status(tid) not in ('completed', 'failed', 'canceled',
+                                                    'killed', 'skipped'):
+                        self._say(f'cancel {tid} failed: {e}')
             if not quiet:
                 self._say(f'{r}: cancelled {len(tids)} task(s)')
 
@@ -301,19 +324,33 @@ class Fleet:
                 s.sendto(protocol.encode(payload, i), (cfg['ip'], int(cfg.get('port', 30000))))
         s.close()
 
-    def stop(self, robots=None):
-        """Stop robots where they stand, without dropping them.
-
-        1. cancel navigation straight over UDP (works with RMF/adapter down),
-        2. tell the adapter to drop its running action and current task,
-        3. cancel every RMF task the robots have, so nothing re-sends a goal,
-        4. cancel over UDP once more in case a goal slipped in meanwhile.
-        """
+    def halt(self, robots=None, end_mission=True, source=''):
+        """The immediate part of stop(), no waiting on RMF: cancel navigation over UDP
+        (works with RMF/adapter down), tell the adapter to drop the robots' running
+        action and current task, and abort the running mission (if end_mission)."""
         from std_msgs.msg import String
         robots = self._robots(robots)
         self._udp_to(robots, protocol.cancel_nav())
+        pubs = [self.rmf.stop_pub] + ([self.rmf.mission_cmd_pub] if end_mission else [])
+        deadline = time.monotonic() + 0.5       # a fresh process: let discovery happen
+        while any(p.get_subscription_count() == 0 for p in pubs) and time.monotonic() < deadline:
+            time.sleep(0.02)
         for r in robots:
-            self.rmf.publish_once(self.rmf.stop_pub, String(data=r), wait=0.5)
+            self.rmf.stop_pub.publish(String(data=r))
+        if end_mission:
+            who = 'ALL' if set(robots) == set(self.robots) else ', '.join(robots)
+            self.rmf.mission_cmd_pub.publish(String(data=json.dumps(
+                {'cmd': 'abort', 'reason': f'STOP {who}' + (f' ({source})' if source else '')})))
+        return robots
+
+    def stop(self, robots=None, end_mission=True, source=''):
+        """Stop robots where they stand, without dropping them, and end the mission.
+
+        1. halt(): UDP cancel, adapter stop, abort the running mission,
+        2. cancel every RMF task the robots have, so nothing re-sends a goal,
+        3. cancel over UDP once more in case a goal slipped in meanwhile.
+        """
+        robots = self.halt(robots, end_mission, source)
         try:
             self.cancel(robots, quiet=True)
         finally:
@@ -346,10 +383,12 @@ class Fleet:
         """
         if seconds is not None and event is None and prompt is None:
             self._say(f'waiting {seconds}s')
-            time.sleep(float(seconds))
+            self.sleep(seconds)
             return None
+        # A bare prompt is answered by the GUI's button (signal "continue") or ENTER.
+        event = event or 'continue'
         entered = threading.Event()
-        if prompt is not None:
+        if prompt is not None and self.console:
             def console():
                 try:
                     input(f'>>> {prompt} [ENTER] ')
@@ -357,21 +396,19 @@ class Fleet:
                     return
                 entered.set()
             threading.Thread(target=console, daemon=True).start()
-        self._say(f'waiting for {"signal " + event if event else "operator"}'
+        self._say(f'waiting for signal {event}'
                   f'{f" (max {seconds}s)" if seconds else ""}')
         self.publish_mission(waiting={'event': event, 'prompt': prompt or '',
                                       'label': label or prompt or event or 'Continue',
                                       'seconds': seconds, 'since': time.time()})
         try:
-            if event:
-                payload = self.rmf.wait_trigger(
-                    event, self.since, None if seconds is None else float(seconds),
-                    cancelled=lambda: entered.is_set() or self.aborted.is_set())
-                if payload is not None:
-                    self._say(f'signal {event} received')
-                return payload
-            entered.wait(None if seconds is None else float(seconds))
-            return None
+            payload = self.rmf.wait_trigger(
+                event, self.since, None if seconds is None else float(seconds),
+                cancelled=lambda: entered.is_set() or self.aborted.is_set())
+            self.check_abort()
+            if payload is not None:
+                self._say(f'signal {event} received')
+            return payload
         finally:
             self.publish_mission(waiting=None)
 

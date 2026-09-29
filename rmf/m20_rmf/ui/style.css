@@ -66,6 +66,9 @@ main { padding: 24px; display: grid; gap: 20px; max-width: 1400px; margin: 0 aut
 
 .signals { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: center; }
 .btn:disabled { opacity: .6; cursor: default; }
+.btn.busy { opacity: .6; }
+.toast { background: var(--danger); color: #fff; padding: 10px 24px; font-weight: 600; text-align: center; cursor: pointer; }
+.toast.info { background: var(--panel-2); color: var(--muted); }
 .signals .label { color: var(--muted); font-size: 13px; text-transform: uppercase; letter-spacing: .1em; margin-right: 4px; }
 
 .timeline { list-style: none; margin: 0 auto; padding: 0; color: var(--muted); font-size: 14px; display: grid; gap: 4px; width: min(100%, 720px); }

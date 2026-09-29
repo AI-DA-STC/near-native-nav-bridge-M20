@@ -38,10 +38,19 @@ class TaskError(RuntimeError):
     pass
 
 
+class Aborted(Exception):
+    """The mission was aborted (operator stop, Ctrl-C, GUI)."""
+
+
 class RmfClient:
     def __init__(self, fleet='m20', node_name=None):
         if not rclpy.ok():
-            rclpy.init()
+            # No rclpy signal handlers: its Ctrl-C/SIGTERM handler shuts ROS down before
+            # our code runs, so an aborting mission could no longer cancel tasks or say
+            # it aborted (the GUI then showed it running forever). Ctrl-C stays a plain
+            # KeyboardInterrupt and cleanup still has ROS.
+            from rclpy.signals import SignalHandlerOptions
+            rclpy.init(signal_handler_options=SignalHandlerOptions.NO)
         self.fleet = fleet
         self.node = rclpy.node.Node(node_name or f'm20_client_{uuid.uuid4().hex[:6]}')
         latched = QoSProfile(history=HistoryPolicy.KEEP_LAST, depth=10,
@@ -66,6 +75,12 @@ class RmfClient:
             String, '/m20/mission',
             QoSProfile(depth=1, reliability=ReliabilityPolicy.RELIABLE,
                        durability=DurabilityPolicy.TRANSIENT_LOCAL))
+        # Mission control: {"cmd": "start", "file": ...} for the mission host,
+        # {"cmd": "abort", "reason": ...} for whatever mission is running (host or
+        # `m20 mission`). Every STOP sends an abort: a stop always ends the mission.
+        self.mission_cmd_pub = self.node.create_publisher(String, '/m20/mission_cmd', 10)
+        self.on_mission_cmd = None  # callback(dict), called on the spin thread: don't block
+        self.node.create_subscription(String, '/m20/mission_cmd', self._on_mission_cmd, 10)
         self.events_pub = self.node.create_publisher(String, '/m20/events', 50)
         self.inspect_result_pub = self.node.create_publisher(String, '/m20/inspect/result', 10)
 
@@ -105,6 +120,14 @@ class RmfClient:
         if self.on_trigger:
             self.on_trigger()
 
+    def _on_mission_cmd(self, msg):
+        try:
+            cmd = json.loads(msg.data)
+        except ValueError:
+            cmd = {'cmd': msg.data.strip()}
+        if self.on_mission_cmd and isinstance(cmd, dict):
+            self.on_mission_cmd(cmd)
+
     def pending_triggers(self, since):
         """Events received after `since` and not yet consumed by a wait."""
         with self._lock:
@@ -132,7 +155,7 @@ class RmfClient:
                 left = None if deadline is None else deadline - time.monotonic()
                 if left is not None and left <= 0:
                     return None
-                self._lock.wait(0.5 if left is None else min(left, 0.5))
+                self._lock.wait(0.2 if left is None else min(left, 0.2))
 
     def _on_robot_status(self, msg):
         with self._lock:
@@ -193,11 +216,11 @@ class RmfClient:
             return self.dispatch_task('compose', desc, label=category)
         return self.robot_task(robot, 'compose', desc, label=category)
 
-    def cancel(self, task_id, labels=None):
+    def cancel(self, task_id, labels=None, timeout=10.0):
         payload = {'type': 'cancel_task_request', 'task_id': task_id}
         if labels:
             payload['labels'] = labels
-        return self.request(payload)
+        return self.request(payload, timeout=timeout)
 
     def interrupt(self, task_id, why='m20 mission'):
         return self.request({'type': 'interrupt_task_request', 'task_id': task_id,
@@ -222,8 +245,9 @@ class RmfClient:
                     out.append(tid)
             return out
 
-    def wait(self, task_ids, timeout=None, on_update=None):
-        """Block until every task is terminal. Returns {task_id: status}."""
+    def wait(self, task_ids, timeout=None, on_update=None, cancelled=None):
+        """Block until every task is terminal. Returns {task_id: status}.
+        Raises Aborted as soon as cancelled() is true."""
         task_ids = [t for t in task_ids if t]
         deadline = None if timeout is None else time.monotonic() + timeout
         with self._lock:
@@ -231,12 +255,14 @@ class RmfClient:
                 statuses = {t: (self.tasks.get(t) or {}).get('status') for t in task_ids}
                 if all(s in TERMINAL for s in statuses.values()):
                     return statuses
+                if cancelled is not None and cancelled():
+                    raise Aborted()
                 if on_update:
                     on_update(statuses)
                 left = None if deadline is None else deadline - time.monotonic()
                 if left is not None and left <= 0:
                     raise TaskError(f'timeout waiting for tasks: {statuses}')
-                self._lock.wait(1.0 if left is None else min(left, 1.0))
+                self._lock.wait(0.2 if left is None else min(left, 0.2))
 
     def event(self, text, **extra):
         self.events_pub.publish(String(data=json.dumps(
