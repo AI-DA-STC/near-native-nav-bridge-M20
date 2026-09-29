@@ -471,3 +471,13 @@ def test_zone_corners_can_be_places():
     assert Site(moved).zones['z']['boundary'][2] == [6, 3]   # the corner follows the place
     with pytest.raises(SiteError, match='unknown place'):
         Site({**base, 'zones': {'z': {'entry': 'a', 'boundary': ['a', 'nope', 'c']}}})
+
+
+def test_stack_robots_missing_from_the_site_are_left_out(tmp_path, monkeypatch, capsys):
+    from m20_rmf import stack
+    (tmp_path / 'site.yaml').write_text('robots: {"834": {ip: 1.2.3.4, home: a}}\n')
+    (tmp_path / 'm20_stack.yaml').write_text('site: site.yaml\nrobots: ["834", "665", "741"]\n')
+    monkeypatch.setenv('M20_STACK', str(tmp_path / 'm20_stack.yaml'))
+    assert stack.robots_for(str(tmp_path / 'site.yaml')) == ['834']
+    assert '665, 741' in capsys.readouterr().err
+    assert stack.robots_for('/elsewhere/sim.yaml') is None      # other sites: all theirs

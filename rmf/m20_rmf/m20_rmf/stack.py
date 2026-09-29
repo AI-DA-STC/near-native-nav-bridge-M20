@@ -65,11 +65,29 @@ def own(new_file):
 
 def robots_for(site_path, cfg=None):
     """Stack robots, but only when site_path is the stack's own site; another site
-    (e.g. the mock sim_lab.yaml) gets None = all robots of that site."""
+    (e.g. the mock sim_lab.yaml) gets None = all robots of that site.
+
+    A stack robot the site does not list yet is left out, with a note: its relay and the
+    laptop bridge already run for it (they only need m20_stack.yaml), so its pose can be
+    read to give it a home in the site; RMF and the tools take it on once it is added."""
     cfg = load() if cfg is None else cfg
     if site_path and cfg.get('site') and \
             os.path.realpath(site_path) == os.path.realpath(cfg['site']):
-        return cfg.get('robots') or None
+        robots = cfg.get('robots') or None
+        if robots:
+            try:
+                with open(site_path) as f:
+                    listed = {str(r) for r in ((yaml.safe_load(f) or {}).get('robots') or {})}
+            except (OSError, yaml.YAMLError):
+                return robots
+            missing = [r for r in robots if r not in listed]
+            if missing:
+                import sys
+                print(f'[m20] robots {", ".join(missing)} are in m20_stack.yaml but not in '
+                      f'{os.path.basename(site_path)}: left out until the site lists them',
+                      file=sys.stderr)
+                robots = [r for r in robots if r in listed] or None
+        return robots
     return None
 
 
