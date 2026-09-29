@@ -136,3 +136,20 @@ def test_no_new_work_after_abort():
     with pytest.raises(Aborted):
         f.go_to('834', 'home_834')
     assert f.rmf.n == 0
+
+
+def test_double_click_counts_once():
+    from std_msgs.msg import String
+
+    class R:
+        SAME_SIGNAL = RmfClient.SAME_SIGNAL
+        _on_trigger = RmfClient._on_trigger
+
+        def __init__(self):
+            self._lock = threading.Condition()
+            self.triggers, self.on_trigger = [], None
+    r = R()
+    for _ in range(3):
+        r._on_trigger(String(data='explore'))
+    r._on_trigger(String(data='other'))
+    assert [p['event'] for _, p in r.triggers] == ['explore', 'other']

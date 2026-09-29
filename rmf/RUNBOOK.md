@@ -215,6 +215,7 @@ m20 patrol 834 --route loop --rounds 1 --wait
 | remove a place | `m20 place rm bay_1` — removes its lanes too; refused while a route, formation, zone, target or robot home uses it (it says which) |
 | connect / disconnect | `m20 lane add a b [c …]` (two-way chain) · `m20 lane rm a b` |
 | routes | `m20 route set loop a b c` (create or replace) · `m20 route rm loop` |
+| exploration area | `m20 zone corner area_b --from 834 --entry gate` (first corner), then `m20 zone corner area_b --from 834` at each further corner · `m20 zone set area_b --exit gate_2 --spacing 1.0 --margin 0.4` · `m20 zone clear` / `rm` |
 | a robot's own patrol | `robots: "834": {…, route: loop}` in the site file (by hand) |
 
 A place must have at least one lane (RMF could not reach it otherwise), and no edit may
@@ -222,6 +223,27 @@ leave another place without one. Formations, zones and targets are still edited 
 in the site file (`sites/lab_834_corridor.yaml` is a small annotated example).
 `scripts/m20_stack.sh restart <pane>` restarts any pane the same way (Ctrl-C, then
 its command again), e.g. `restart ui`, `restart "relay 834"`.
+
+### Exploring an area (zones with a boundary)
+Walk the robot to each corner of the area, in order around it (clockwise or not), and
+record it with `m20 zone corner <zone> --from 834` (`--entry <place>` on the first). With
+3+ corners the site turns the polygon into a **sweep**: straight rows `spacing` m apart
+(default 1.0), `margin` m in from the edges (default 0.4), along the polygon's longest
+edge (or `--angle`), walked back and forth. The GUI/RViz map draws the boundary and the
+sweep as soon as each corner is added.
+
+`explore: {zone: area_b, seconds: 120}` in a mission: the robot goes to the zone's
+`entry` place (on the graph), sweeps, and ends at the zone's `exit` place (default: the
+entry). With `seconds`, it stops where it is when time is up and walks to the exit; the
+step then ends normally. The way out is announced to RMF's traffic schedule, so a
+separate `exit` keeps robots coming back out of the way of robots going in.
+
+The boundary is **where the sweep is planned, not a fence**: the robot's own navigation
+walks between sweep points (avoiding obstacles its sensors see), and the walk from the
+entry to the first row starts outside the area. Keep areas convex (a concave one is
+swept only along the widest stretch of each row), and clear of walls by at least the
+margin. Example: `missions/triangle_watch.yaml` (patrol, explore on request for 2 min,
+patrol again, forever).
 
 ### The corridor test (`missions/test_834_corridor.yaml`)
 A one-robot rehearsal of the demo's shape (patrol → form up → explore → inspect → form

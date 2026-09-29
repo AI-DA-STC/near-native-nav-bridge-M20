@@ -203,6 +203,14 @@ class SiteText:
                     return
         raise EditError(f'no lane between {a} and {b}')
 
+    # ---------------------------------------------------------------- zones
+    def set_zone(self, name, value):
+        """Write a zone as one line (a multi-line zone is replaced by its one-line form)."""
+        self._put_map_entry('zones', name, _flow(value))
+
+    def remove_zone(self, name):
+        self._del_map_entry('zones', name)
+
     # --------------------------------------------------------------- routes
     def set_route(self, name, places, comment=''):
         self._put_map_entry('routes', name, _flow([str(p) for p in places]), comment)
@@ -240,8 +248,10 @@ routes: {{}}
 #   muster: {{slots: [muster_1, muster_2], assign: nearest}}
 formations: {{}}
 
-# Exploration: robots leave the graph at `entry`, walk their track, come back.
-#   new_area: {{entry: gate, dwell: 1.0, tracks: [[[x, y, yaw], [x, y, yaw]]]}}
+# Exploration: robots leave the graph at `entry`, sweep the area inside `boundary`
+# (rows `spacing` m apart), and come back on at `exit` (default: the entry).
+#   m20 zone corner zone_b --from {robot} --entry gate     (one per corner)
+#   new_area: {{entry: gate, exit: gate_2, spacing: 1.0, boundary: [[x, y], [x, y], [x, y]]}}
 zones: {{}}
 
 # Inspection: go to `approach`, face `look_at`, wait `timeout` s for Clear / Threat.
@@ -283,7 +293,9 @@ def neighbours(site, name):
 
 def check_text(text, path, missions=(), old_site=None):
     """Load the edited text as a Site; return (site, missions the edit breaks), the
-    latter as ['file: problem; ...'] for problems the old site did not have."""
+    latter as ['file: problem; ...']: missions that validated against the old site and no
+    longer do. One that was already failing (e.g. written before its zone is finished)
+    does not block the edit."""
     try:
         site = Site(yaml.safe_load(text) or {}, path)
     except SiteError as e:
@@ -293,8 +305,9 @@ def check_text(text, path, missions=(), old_site=None):
     for f in missions:
         try:
             m = load(f)
-            before = set(check(m, old_site)) if old_site else set()
-            new = [p for p in check(m, site) if p not in before]
+            if old_site is not None and check(m, old_site):
+                continue
+            new = check(m, site)
         except Exception:  # noqa: BLE001 - not a mission file
             continue
         if new:

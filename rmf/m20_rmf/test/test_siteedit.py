@@ -127,6 +127,10 @@ def test_mission_breakage_is_reported():
     ed = SiteText(text().replace('  box_right:', '  box_left:'))
     broken = check_text(ed.text(), CORRIDOR, missions, Site.load(CORRIDOR))[1]
     assert len(broken) == 1 and 'box_right' in broken[0]
+    # a mission that already failed (e.g. its zone not built yet) never blocks an edit
+    failing = check_text(ed.text(), CORRIDOR)[0]            # the mission's target is gone
+    ed.set_place('fwd_2', [0.0, -6.6, 0.0])                  # any further edit
+    assert check_text(ed.text(), CORRIDOR, missions, failing)[1] == []
 
 
 def test_sim_site_round_trip():

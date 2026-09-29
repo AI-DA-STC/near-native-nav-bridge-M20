@@ -56,6 +56,55 @@ class SiteError(ValueError):
     pass
 
 
+def sweep(boundary, spacing=1.0, margin=0.4, angle=None):
+    """Lawnmower coverage of a polygon: parallel rows `spacing` apart, kept `margin` in
+    from the edges, walked back and forth. Rows run along the polygon's longest edge
+    unless `angle` (degrees, map frame) is given. Returns [x, y, yaw] poses: each row's
+    two ends, facing along the row. Convex shapes are covered fully; for a concave one
+    each row takes its widest stretch."""
+    n = len(boundary)
+    if n < 3:
+        return []
+    if angle is None:
+        a, b = max(((boundary[i], boundary[(i + 1) % n]) for i in range(n)),
+                   key=lambda e: math.hypot(e[1][0] - e[0][0], e[1][1] - e[0][1]))
+        ang = math.atan2(b[1] - a[1], b[0] - a[0])
+    else:
+        ang = math.radians(float(angle))
+    c, s = math.cos(ang), math.sin(ang)
+    # into the sweep frame: rows along +u, stacked along v
+    uv = [(x * c + y * s, -x * s + y * c) for x, y in boundary]
+    vs = [p[1] for p in uv]
+    v0, v1 = min(vs) + margin, max(vs) - margin
+    if v1 < v0:                        # narrower than two margins: one row down the middle
+        v0 = v1 = (min(vs) + max(vs)) / 2
+    rows = []
+    count = int(math.floor((v1 - v0) / spacing + 1e-9)) + 1
+    offset = ((v1 - v0) - (count - 1) * spacing) / 2       # centre the rows
+    for i in range(count):
+        v = v0 + offset + i * spacing
+        xs = []
+        for j in range(n):
+            (pu, pv), (qu, qv) = uv[j], uv[(j + 1) % n]
+            if (pv <= v < qv) or (qv <= v < pv):
+                xs.append(pu + (v - pv) * (qu - pu) / (qv - pv))
+        xs.sort()
+        spans = [(xs[k] + margin, xs[k + 1] - margin) for k in range(0, len(xs) - 1, 2)]
+        spans = [sp for sp in spans if sp[1] >= sp[0]]
+        if spans:
+            ua, ub = max(spans, key=lambda sp: sp[1] - sp[0])
+            rows.append((ua, ub, v))
+    poses = []
+    for i, (ua, ub, v) in enumerate(rows):
+        if i % 2:
+            ua, ub = ub, ua
+        yaw = ang + (0.0 if ub >= ua else math.pi)
+        yaw = math.atan2(math.sin(yaw), math.cos(yaw))
+        for u in ((ua, ub) if abs(ub - ua) > 1e-6 else (ua,)):
+            poses.append([round(u * c - v * s, 3), round(u * s + v * c, 3), round(yaw, 4)])
+    return poses
+
+
 def _pose(v, where):
     if isinstance(v, dict):
         v = v.get('pose')
@@ -94,6 +143,14 @@ class Site:
             z = {'entry': v.get('entry'), 'exit': v.get('exit')}
             z['tracks'] = [[_pose(p, f'zones.{k}.tracks') for p in t] for t in v.get('tracks', [])]
             z['poses'] = [_pose(p, f'zones.{k}.poses') for p in v.get('poses', [])]
+            # A boundary instead: the poses are a sweep over the area it encloses.
+            z['boundary'] = [[float(p[0]), float(p[1])] for p in v.get('boundary', [])]
+            z['spacing'] = float(v.get('spacing', 1.0))
+            z['margin'] = float(v.get('margin', 0.4))
+            if z['boundary'] and not z['tracks'] and not z['poses']:
+                if z['spacing'] <= 0:
+                    raise SiteError(f'zones.{k}.spacing must be > 0')
+                z['poses'] = sweep(z['boundary'], z['spacing'], z['margin'], v.get('angle'))
             z['dwell'] = float(v.get('dwell', 0.0))
             self.zones[str(k)] = z
         self.targets = {}
@@ -157,7 +214,8 @@ class Site:
             need(z['entry'], f'zones.{k}.entry')
             need(z['exit'], f'zones.{k}.exit')
             if not z['tracks'] and not z['poses']:
-                raise SiteError(f'zones.{k}: needs tracks or poses')
+                if not z['boundary']:
+                    raise SiteError(f'zones.{k}: needs tracks, poses or a boundary')
         for k, t in self.targets.items():
             need(t['approach'], f'targets.{k}.approach')
             if t['approach'] is None and t['standoff'] is None:
@@ -182,6 +240,13 @@ class Site:
     def warnings(self):
         """Layout problems RMF will not reject but will fight with at run time."""
         out = []
+        for k, z in self.zones.items():
+            if z['boundary'] and not z['tracks'] and len(z['boundary']) < 3:
+                out.append(f'zone {k}: {len(z["boundary"])} boundary corner(s); it needs at '
+                           'least 3 before it can be explored')
+            elif z['boundary'] and not z['poses'] and not z['tracks']:
+                out.append(f'zone {k}: the area is too small for spacing {z["spacing"]} m / '
+                           f'margin {z["margin"]} m: nothing to explore')
         sep = self.min_separation()
         groups = {f'formation {k}': f['slots'] for k, f in self.formations.items()}
         groups['robot homes'] = [r['home'] for r in self.robots.values()]

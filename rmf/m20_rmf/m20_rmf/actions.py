@@ -39,6 +39,10 @@ from geometry_msgs.msg import PoseWithCovarianceStamped
 from .robot_client import NavState
 
 
+class TimeUp(Exception):
+    """An action's own time limit (`seconds`) ran out: wrap up, don't fail."""
+
+
 class Cancelled(Exception):
     pass
 
@@ -122,12 +126,16 @@ class Action:
         if self._cancelled.wait(max(0.0, seconds)):
             raise Cancelled()
 
-    def goto(self, pose, check_yaw=False, timeout=300.0):
+    def goto(self, pose, check_yaw=False, timeout=300.0, until=None):
+        """Walk to a pose. `until` (monotonic time): stop there and raise TimeUp."""
         x, y, yaw = pose
         self.client.go_to(x, y, yaw, check_yaw=check_yaw)
         deadline = time.monotonic() + timeout
         while True:
             self.sleep(0.1)
+            if until is not None and time.monotonic() >= until:
+                self.client.cancel()
+                raise TimeUp()
             st = self.client.nav_state()
             if st == NavState.ARRIVED:
                 return
@@ -155,12 +163,17 @@ class Action:
     def resolve(self, ref):
         return self.site.resolve_pose(ref)
 
-    def maybe_return(self, exit_pose=None):
+    def return_target(self, exit_pose=None):
+        """Where the robot walks back to at the end (None: it stays)."""
         if self.desc.get('return', self.default_return):
-            target = exit_pose or self.start_pose
-            if target is not None:
-                self.underway('returning to graph')
-                self.goto(target)
+            return exit_pose or self.start_pose
+        return None
+
+    def maybe_return(self, exit_pose=None):
+        target = self.return_target(exit_pose)
+        if target is not None:
+            self.underway('returning to graph')
+            self.goto(target)
 
 
 class GotoPose(Action):
@@ -194,8 +207,9 @@ class Waypoints(Action):
     _index = 0
 
     def describe(self):
+        back = self.return_target(self.exit_pose())
         return {'category': self.category, 'detail': '',
-                'path': [list(p) for p in self.path[self._index:]]}
+                'path': [list(p) for p in self.path[self._index:]] + ([list(back)] if back else [])}
 
     def validate(self):
         self.path = self.poses()
@@ -204,16 +218,35 @@ class Waypoints(Action):
 
     def run(self):
         loops = int(self.desc.get('loops', 1))
-        self.announce_path(self.path * loops)
-        for lap in range(loops):
-            for i, p in enumerate(self.path):
-                self._index = i
-                self.underway(f'{self.category} {i + 1}/{len(self.path)} (lap {lap + 1}/{loops})')
-                self.goto(p)
-                self.bus.event(self.robot.id, f'{self.category} reached {i + 1}/{len(self.path)}',
-                               pose=p)
-                if self.dwell() > 0:
-                    self.sleep(self.dwell())
+        # `seconds`: a time limit. When it runs out the robot stops where it is and
+        # walks back (to the exit / its start), and the action ends normally.
+        limit = self.desc.get('seconds')
+        until = time.monotonic() + float(limit) if limit else None
+        # The walk back is part of the plan other robots are told about, so the way out
+        # (entry -> poses -> exit) is kept clear the whole time.
+        back = self.return_target(self.exit_pose())
+        self.announce_path(self.path * loops + ([list(back)] if back else []))
+        try:
+            for lap in range(loops):
+                for i, p in enumerate(self.path):
+                    self._index = i
+                    self.underway(f'{self.category} {i + 1}/{len(self.path)} (lap {lap + 1}/{loops})')
+                    self.goto(p, until=until)
+                    self.bus.event(self.robot.id,
+                                   f'{self.category} reached {i + 1}/{len(self.path)}', pose=p)
+                    if self.dwell() > 0:
+                        left = None if until is None else until - time.monotonic()
+                        self.sleep(self.dwell() if left is None else min(self.dwell(), left))
+                    if until is not None and time.monotonic() >= until and \
+                            (lap, i) != (loops - 1, len(self.path) - 1):
+                        raise TimeUp()
+        except TimeUp:
+            self.bus.event(self.robot.id, f'{self.category}: time up after {float(limit):g} s, '
+                           f'on the way to pose {self._index + 1} of {len(self.path)}: '
+                           'heading back')
+            self._index = len(self.path)
+            if back:
+                self.announce_path([list(back)])    # from here straight to the exit
         self.maybe_return(self.exit_pose())
 
 
@@ -244,8 +277,10 @@ class Explore(Waypoints):
         return d
 
     def exit_pose(self):
-        ex = self.zone.get('exit')
-        return self.site.place(ex) if ex else None
+        # The zone's exit place, or else its entry place: the robot ends on the graph at a
+        # known waypoint (not wherever it started), so RMF can plan from there.
+        name = self.zone.get('exit') or self.zone.get('entry')
+        return self.site.place(name) if name else None
 
 
 class Inspect(Action):

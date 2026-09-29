@@ -99,14 +99,20 @@ class Markers:
                 ring.pose.position = pt(x, y, 0.01)
                 out.append(ring)
         for zname, z in s.zones.items():
+            if len(z['boundary']) >= 2:       # the area it covers (a sweep inside)
+                edge = self._m('site/zones', Marker.LINE_STRIP, rgba(MODES['EXPLORE'], 0.55),
+                               (0.04, 0, 0))
+                ring = z['boundary'] + ([z['boundary'][0]] if len(z['boundary']) > 2 else [])
+                edge.points = [pt(p[0], p[1], 0.01) for p in ring]
+                out.append(edge)
             tracks = z['tracks'] or [z['poses']]
             for tr in tracks:
                 line = self._m('site/zones', Marker.LINE_STRIP, rgba(MODES['EXPLORE'], 0.9),
                                (0.06, 0, 0))
                 line.points = [pt(p[0], p[1], 0.02) for p in tr]
                 out.append(line)
-            if tracks and tracks[0]:
-                x, y = tracks[0][0][:2]
+            if tracks and tracks[0] or z['boundary']:
+                x, y = (tracks[0][0] if tracks and tracks[0] else z['boundary'][0])[:2]
                 out.append(self._text('site/names', x, y - 0.3, 0.05, zname,
                                       rgba(MODES['EXPLORE'], 0.9), 0.18))
         for tname, t in s.targets.items():

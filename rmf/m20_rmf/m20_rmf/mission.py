@@ -14,7 +14,7 @@ Each step is `{primitive: {kwargs}}` where primitive is any Fleet method (see
 primitives.py), plus these control steps:
 
     - parallel: [step, step, ...]         run concurrently, continue when all finish
-    - repeat: {times: 3, steps: [...]}    loop
+    - repeat: {times: 3, steps: [...]}    loop (times: forever = until the mission is stopped)
     - log: "text"                         narrate to console + /m20/events
     - phase: "Patrolling"                 the stage shown big in the GUI (also logged)
     - sleep: 5                            plain delay
@@ -141,8 +141,13 @@ class Runner:
                 if errors:
                     raise errors[0]
             elif name == 'repeat':
-                for n in range(int(args.get('times', 1))):
-                    self.log(f'{prefix}[mission] repeat {n + 1}/{args.get("times", 1)}')
+                times = args.get('times', 1)
+                forever = str(times).lower() == 'forever'
+                n = 0
+                while forever or n < int(times):
+                    self.fleet.check_abort()
+                    n += 1
+                    self.log(f'{prefix}[mission] repeat {n}/{"forever" if forever else times}')
                     self.run_steps(args['steps'], depth + 1)
             else:
                 fn = getattr(self.fleet, name, None)
@@ -179,6 +184,9 @@ def check(mission, site):
             if name == 'parallel':
                 walk(args)
             elif name == 'repeat':
+                t = args.get('times', 1)
+                if str(t).lower() != 'forever' and not (isinstance(t, int) and t >= 0):
+                    problems.append(f'repeat: times must be a number or forever, got {t!r}')
                 walk(args.get('steps', []))
             elif name in CONTROL:
                 continue
@@ -189,6 +197,10 @@ def check(mission, site):
                         continue            # filled from a signal at run time
                     if key in args and v not in table:
                         problems.append(f'{name}: unknown {key} {args[key]!r}')
+                z = site.zones.get(args.get('zone')) if name == 'explore' else None
+                if z is not None and not z['tracks'] and not z['poses']:
+                    problems.append(f'explore: zone {args["zone"]} has nothing to walk yet '
+                                    '(a boundary needs 3+ corners and room for one row)')
                 for key in ROBOT_ARGS & args.keys():
                     v = args[key]
                     for r in (v if isinstance(v, list) else [v]):

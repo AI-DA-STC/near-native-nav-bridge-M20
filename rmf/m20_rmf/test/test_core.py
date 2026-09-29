@@ -111,7 +111,7 @@ def test_lanes_bidirectional_and_oneway():
     ({'robots': {'1': {'home': 'a'}}}, 'missing ip'),
     ({'robots': {'1': {'ip': 'x'}}}, 'missing home'),
     ({'places': {'a': [0, 0], 'b': [1, 0], 'c': [5, 5]}}, 'no lanes'),
-    ({'zones': {'z': {'entry': 'a'}}}, 'needs tracks or poses'),
+    ({'zones': {'z': {'entry': 'a'}}}, 'needs tracks, poses or a boundary'),
     ({'formations': {'f': {'slots': ['a'], 'assign': 'random'}}}, 'nearest|fixed'),
 ])
 def test_validation_errors(over, msg):
@@ -376,3 +376,82 @@ def test_paths_are_relative_to_the_stack_file(tmp_path, monkeypatch):
     assert stack.path('/abs/x.yaml') == '/abs/x.yaml'
     assert stack.path('') == '' and stack.path(None) is None
     assert stack.load()['site'] == stack.path('sites/a.yaml')                # same rule
+
+
+# ------------------------------------------------------------ zone boundaries
+def _inside(poly, x, y):
+    n, hit = len(poly), False
+    for i in range(n):
+        (ax, ay), (bx, by) = poly[i], poly[(i + 1) % n]
+        if (ay > y) != (by > y) and x < ax + (y - ay) * (bx - ax) / (by - ay):
+            hit = not hit
+    return hit
+
+
+def test_sweep_covers_a_rectangle_back_and_forth():
+    from m20_rmf.sitefile import sweep
+    rect = [[0, 0], [6, 0], [6, 3], [0, 3]]              # long side along x
+    poses = sweep(rect, spacing=1.0, margin=0.5)
+    rows = [poses[i:i + 2] for i in range(0, len(poses), 2)]
+    assert len(rows) == 3                                # v from 0.5 to 2.5, 1 m apart
+    for i, (a, b) in enumerate(rows):
+        assert a[1] == b[1]                               # a row is straight along x
+        assert abs(abs(a[0] - b[0]) - 5.0) < 1e-6         # 0.5 in from each end
+        assert (b[0] > a[0]) == (i % 2 == 0)              # back and forth
+        assert abs(a[2] - (0.0 if i % 2 == 0 else math.pi)) < 1e-3 or \
+            abs(abs(a[2]) - math.pi) < 1e-3               # facing along the row
+    assert all(_inside(rect, x, y) for x, y, _ in poses)
+
+
+def test_sweep_follows_a_rotated_area():
+    from m20_rmf.sitefile import sweep
+    c, s = math.cos(0.6), math.sin(0.6)
+    rot = [[x * c - y * s, x * s + y * c] for x, y in [[0, 0], [8, 0], [8, 2], [0, 2]]]
+    poses = sweep(rot, spacing=1.0, margin=0.4)
+    assert len(poses) == 4                               # 2 rows along the long edge
+    for p in poses:
+        assert _inside(rot, p[0], p[1])
+    assert abs(math.remainder(poses[0][2] - 0.6, math.pi)) < 1e-3   # rows along the long edge
+
+
+def test_sweep_triangle_and_tiny_areas():
+    from m20_rmf.sitefile import sweep
+    tri = [[0, 0], [4, 0], [2, 3]]
+    poses = sweep(tri, spacing=0.8, margin=0.3)
+    assert poses and all(_inside(tri, x, y) for x, y, _ in poses)
+    assert sweep([[0, 0], [1, 0]]) == []                 # not an area yet
+    assert sweep([[0, 0], [0.5, 0], [0.5, 0.5], [0, 0.5]], margin=0.4) == []   # too small
+
+
+def test_zone_with_boundary_loads_and_checks():
+    import yaml
+    from m20_rmf.mission import check
+    from m20_rmf.sitefile import Site
+    base = {'places': {'a': [0, 0, 0], 'b': [1, 0, 0]}, 'lanes': [['a', 'b']],
+            'robots': {'834': {'ip': '1.2.3.4', 'home': 'a'}}}
+    ok = Site({**base, 'zones': {'z': {'entry': 'b', 'boundary': [[2, -1], [6, -1], [6, 2], [2, 2]],
+                                       'spacing': 1.0}}})
+    assert len(ok.zones['z']['poses']) >= 4 and ok.warnings() == []
+    part = Site({**base, 'zones': {'z': {'entry': 'b', 'boundary': [[2, -1], [6, -1]]}}})
+    assert part.zones['z']['poses'] == [] and 'at least 3' in part.warnings()[0]
+    m = {'steps': [{'explore': {'zone': 'z', 'seconds': 60}},
+                   {'repeat': {'times': 'forever', 'steps': [{'sleep': 1}]}}]}
+    assert check(m, ok) == []
+    assert 'nothing to walk' in check(m, part)[0]
+    assert 'forever' in check({'steps': [{'repeat': {'times': 'always', 'steps': []}}]}, ok)[0]
+    assert yaml.safe_load(yaml.safe_dump(ok.raw)) == ok.raw
+
+
+def test_repeat_forever_runs_until_stopped():
+    from m20_rmf.mission import Runner
+
+    class F(_FakeFleet):
+        def hold(self, **kw):
+            self.calls.append(kw)
+            if len(self.calls) == 5:
+                raise KeyboardInterrupt        # stands in for a stop
+    f = F(['834'])
+    with pytest.raises(KeyboardInterrupt):
+        Runner(f, log=lambda *_: None).run_steps(
+            [{'repeat': {'times': 'forever', 'steps': [{'hold': {'seconds': 1}}]}}])
+    assert len(f.calls) == 5

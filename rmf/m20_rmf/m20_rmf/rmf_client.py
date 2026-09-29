@@ -52,6 +52,7 @@ class RmfClient:
             from rclpy.signals import SignalHandlerOptions
             rclpy.init(signal_handler_options=SignalHandlerOptions.NO)
         self.fleet = fleet
+        self._born = time.monotonic()
         self.node = rclpy.node.Node(node_name or f'm20_client_{uuid.uuid4().hex[:6]}')
         latched = QoSProfile(history=HistoryPolicy.KEEP_LAST, depth=10,
                              reliability=ReliabilityPolicy.RELIABLE,
@@ -112,9 +113,14 @@ class RmfClient:
                 self.tasks[tid] = data
                 self._lock.notify_all()
 
+    SAME_SIGNAL = 1.0       # s: an identical signal again within this is a double-click
+
     def _on_trigger(self, msg):
+        now, payload = time.monotonic(), parse_trigger(msg.data)
         with self._lock:
-            self.triggers.append((time.monotonic(), parse_trigger(msg.data)))
+            if any(p == payload and now - t < self.SAME_SIGNAL for t, p in self.triggers[-5:]):
+                return
+            self.triggers.append((now, payload))
             del self.triggers[:-50]
             self._lock.notify_all()
         if self.on_trigger:
@@ -268,15 +274,37 @@ class RmfClient:
         self.events_pub.publish(String(data=json.dumps(
             {'robot': 'mission', 'text': text, 't': time.time(), **extra})))
 
+    DISCOVERY = 1.5         # s a new process gives DDS to find the others
+
+    def discovered(self):
+        """Block until this client is old enough to have discovered the other nodes.
+        A subscriber count alone cannot tell: this client subscribes to its own topics
+        (/m20/trigger, /m20/mission_cmd), so the count is never 0, and a message sent at
+        once from a fresh `m20 trigger` / `m20 stop` was lost. Free for long-lived
+        processes (the GUI hub, a mission)."""
+        left = self._born + self.DISCOVERY - time.monotonic()
+        if left > 0:
+            time.sleep(left)
+
     def publish_once(self, pub, msg, wait=3.0):
-        """Publish a one-shot message after waiting (briefly) for a subscriber, so it is
-        not lost to DDS discovery. Returns the number of subscribers it reached."""
+        """Publish a one-shot message once the others are discovered and wait until the
+        subscribers have it. Returns the number of subscribers."""
+        self.discovered()
         deadline = time.monotonic() + wait
         while pub.get_subscription_count() == 0 and time.monotonic() < deadline:
             time.sleep(0.05)
         pub.publish(msg)
-        time.sleep(0.2)
+        self.flush(pub)
         return pub.get_subscription_count()
+
+    @staticmethod
+    def flush(pub, timeout=1.0):
+        """Wait until reliable subscribers acknowledged what was published."""
+        from rclpy.duration import Duration
+        try:
+            pub.wait_for_all_acked(Duration(seconds=timeout))
+        except Exception:  # noqa: BLE001 - older rclpy: a short grace period instead
+            time.sleep(0.2)
 
     def close(self):
         # Stop spinning before tearing down, or rclpy aborts the process on exit.

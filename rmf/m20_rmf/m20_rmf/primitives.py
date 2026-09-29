@@ -124,6 +124,7 @@ class Fleet:
             self.background.extend(tids)
             return tids
         res = self.rmf.wait(tids, timeout=timeout, cancelled=self.aborted.is_set)
+        self.check_abort()          # tasks ended by the stop itself: not a step result
         bad = {t: s for t, s in res.items() if s != 'completed'}
         if bad:
             self._say(f'{what}: not all tasks completed: {bad}')
@@ -213,14 +214,19 @@ class Fleet:
                                     f'form_up:{formation}', False))
         return self._finish(tids, wait, timeout, f'form_up {formation}')
 
-    def explore(self, zone, robots=None, wait=True, timeout=None):
+    def explore(self, zone, robots=None, seconds=None, wait=True, timeout=None):
         """Robots enter the zone and each walks one track (tracks are dealt round-robin;
-        with a flat `poses` list, the poses are split into contiguous chunks)."""
+        with a flat `poses` list, or a `boundary` sweep, the poses are split into
+        contiguous chunks). Each robot ends at the zone's `exit` place (default: its
+        entry). `seconds`: time limit from the zone entry; when it runs out each robot
+        stops and walks to the exit, and the step ends normally."""
         robots = self._robots(robots)
         z = self.site.zones[zone]
         tids = []
         for i, r in enumerate(robots):
             desc = {'zone': zone}
+            if seconds:
+                desc['seconds'] = float(seconds)
             if z['tracks']:
                 desc['track'] = i % len(z['tracks'])
             else:
@@ -232,9 +238,9 @@ class Fleet:
             acts = []
             if z['entry']:
                 acts.append({'category': 'go_to_place', 'description': z['entry']})
-            acts.append(self._perform('explore', desc, estimate_s=120))
+            acts.append(self._perform('explore', desc, estimate_s=float(seconds or 120)))
             tids.append(self._start(r, acts, f'explore:{zone}', False))
-        self._say(f'explore {zone} with {robots}')
+        self._say(f'explore {zone} with {robots}' + (f' for up to {seconds:g} s' if seconds else ''))
         return self._finish(tids, wait, timeout, f'explore {zone}')
 
     def inspect(self, target, robot, wait=True, timeout=None):
@@ -331,16 +337,20 @@ class Fleet:
         from std_msgs.msg import String
         robots = self._robots(robots)
         self._udp_to(robots, protocol.cancel_nav())
-        pubs = [self.rmf.stop_pub] + ([self.rmf.mission_cmd_pub] if end_mission else [])
-        deadline = time.monotonic() + 0.5       # a fresh process: let discovery happen
-        while any(p.get_subscription_count() == 0 for p in pubs) and time.monotonic() < deadline:
-            time.sleep(0.02)
+        # The robots are already stopping (UDP). A fresh `m20 stop` process now waits
+        # for discovery, or the adapter and the mission would never hear it.
+        if hasattr(self.rmf, 'discovered'):
+            self.rmf.discovered()
         for r in robots:
             self.rmf.stop_pub.publish(String(data=r))
         if end_mission:
             who = 'ALL' if set(robots) == set(self.robots) else ', '.join(robots)
             self.rmf.mission_cmd_pub.publish(String(data=json.dumps(
                 {'cmd': 'abort', 'reason': f'STOP {who}' + (f' ({source})' if source else '')})))
+        if hasattr(self.rmf, 'flush'):
+            self.rmf.flush(self.rmf.stop_pub, 0.5)
+            if end_mission:
+                self.rmf.flush(self.rmf.mission_cmd_pub, 0.5)
         return robots
 
     def stop(self, robots=None, end_mission=True, source=''):

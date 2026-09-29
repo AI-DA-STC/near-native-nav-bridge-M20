@@ -30,6 +30,16 @@ list), default all robots in the site.
     m20 lane rm a b                        remove the lane between a and b
     m20 route set loop a b c               patrol route (create or replace)
     m20 route rm loop
+    m20 zone corner zone_b --from 834 --entry corner_2
+                                           add a boundary corner at 834's pose (the zone
+                                           is created on the first; x y also works);
+                                           the robot sweeps the area inside the corners
+    m20 zone set zone_b [--entry P] [--exit P] [--spacing 1.0] [--margin 0.4] [--angle deg]
+                                           exit: where it rejoins the graph (default: the
+                                           entry); a separate exit keeps the way back
+                                           clear of robots going in
+    m20 zone clear zone_b                  forget its corners (keeps entry/spacing)
+    m20 zone rm zone_b
     (each takes --dry-run; --force writes even if a mission would break.
      RMF uses the new graph after: scripts/m20_stack.sh restart rmf)
 
@@ -301,6 +311,78 @@ def cmd_route_set(a):
     _edit_site(a, change)
 
 
+def _zone_raw(site, name):
+    return dict((site.raw.get('zones') or {}).get(name) or {})
+
+
+def cmd_zone_corner(a):
+    from .siteedit import EditError
+    if a.robot:
+        x, y, _ = _read_pose(a.robot)
+    elif len(a.xy) == 2:
+        x, y = a.xy
+    else:
+        sys.exit('where? --from <robot> (its current position), or x y')
+
+    def change(ed, site):
+        z = _zone_raw(site, a.name)
+        new = a.name not in site.zones
+        if new and not a.entry:
+            raise EditError(f'{a.name} is a new zone: give --entry <place> (where the robot '
+                            'leaves the graph to explore it, and comes back to)')
+        for key in ('tracks', 'poses'):
+            if z.get(key):
+                raise EditError(f'zone {a.name} is defined by {key}: edit it by hand, or '
+                                f'`m20 zone rm {a.name}` and start again with corners')
+        if a.entry:
+            z['entry'] = a.entry
+        if a.exit:
+            z['exit'] = a.exit
+        z.setdefault('spacing', 1.0)
+        z['boundary'] = list(z.get('boundary') or []) + [[round(x, 3), round(y, 3)]]
+        ed.set_zone(a.name, z)
+        n = len(z['boundary'])
+        return (f'zone {a.name}: corner {n} at ({x:.3f}, {y:.3f})' +
+                ('' if n >= 3 else f' — {3 - n} more to make an area'))
+    _edit_site(a, change)
+
+
+def cmd_zone_set(a):
+    from .siteedit import EditError
+
+    def change(ed, site):
+        if a.name not in site.zones and not a.entry:
+            raise EditError(f'no zone {a.name!r}: create it with m20 zone corner … --entry <place>')
+        z = _zone_raw(site, a.name)
+        for key in ('entry', 'exit', 'spacing', 'margin', 'angle'):
+            v = getattr(a, key)
+            if v is not None:
+                z[key] = v
+        ed.set_zone(a.name, z)
+        return f'zone {a.name}: {z}'
+    _edit_site(a, change)
+
+
+def cmd_zone_clear(a):
+    from .siteedit import EditError
+
+    def change(ed, site):
+        if a.name not in site.zones:
+            raise EditError(f'no zone {a.name!r}')
+        z = _zone_raw(site, a.name)
+        z['boundary'] = []
+        ed.set_zone(a.name, z)
+        return f'zone {a.name}: corners cleared'
+    _edit_site(a, change)
+
+
+def cmd_zone_rm(a):
+    def change(ed, site):
+        ed.remove_zone(a.name)
+        return f'zone {a.name} removed'
+    _edit_site(a, change)
+
+
 def cmd_route_rm(a):
     from .siteedit import EditError
 
@@ -515,6 +597,18 @@ def main(argv=None):
     group('lane', 'add / remove lanes', [
         ('add', cmd_lane_add, [(('places',), {'nargs': '+'})]),
         ('rm', cmd_lane_rm, [(('a',), {}), (('b',), {})]),
+    ])
+    group('zone', 'exploration zones by their boundary corners', [
+        ('corner', cmd_zone_corner, [name, (('xy',), {'nargs': '*', 'type': float}),
+                                     (('--from',), {'dest': 'robot', 'help': 'use this robot\'s position'}),
+                                     (('--entry',), {'help': 'place where it enters the zone'}),
+                                     (('--exit',), {'help': 'place where it leaves (default: entry)'})]),
+        ('set', cmd_zone_set, [name, (('--entry',), {}), (('--exit',), {}),
+                               (('--spacing',), {'type': float, 'help': 'm between sweep rows'}),
+                               (('--margin',), {'type': float, 'help': 'm kept from the boundary'}),
+                               (('--angle',), {'type': float, 'help': 'row direction, degrees'})]),
+        ('clear', cmd_zone_clear, [name]),
+        ('rm', cmd_zone_rm, [name]),
     ])
     group('route', 'set / remove patrol routes', [
         ('set', cmd_route_set, [name, (('places',), {'nargs': '+'})]),

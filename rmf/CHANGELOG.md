@@ -12,6 +12,26 @@ with several real robots at once.
 
 ## Added
 
+### Exploring an area on request (2026-09-29)
+- **Zones by boundary:** `boundary: [[x, y], …]` (3+ corners) + `spacing` / `margin` /
+  `angle`; the site generates a back-and-forth sweep inside it (`sitefile.sweep`),
+  drawn with the boundary on the map. `m20 zone corner <zone> --from <robot>` records
+  corners; `m20 zone set|clear|rm`.
+- **Exit place:** a zone's `exit` (default: its `entry`) is where explorers rejoin the
+  graph, after the sweep or when time is up; the return leg is part of the path
+  announced to RMF's traffic schedule.
+- **`explore: {…, seconds: N}`:** a time limit: stop, walk to the exit, end normally.
+- **`repeat: {times: forever}`** (until STOP). `--check` flags zones with nothing to walk.
+- **`m20 trigger` and `m20 stop` from a terminal were unreliable:** a fresh process
+  published before discovering the others (its own subscription made the subscriber
+  count non-zero), so the signal, or a stop's "end the mission", could be lost. Fresh
+  processes now wait for discovery and for delivery acknowledgements. The GUI was not
+  affected (long-lived).
+- An identical signal within 1 s counts once (a double-click is one request).
+- Site edits are no longer blocked by missions that were already invalid (e.g. a
+  mission written before its zone is finished).
+- `missions/triangle_watch.yaml`: patrol the triangle, explore on request, patrol again.
+
 ### Full-screen map console (2026-09-29)
 - The web GUI is one screen that never scrolls: the map (the RViz view) fills it, the
   phase and operator prompts float over its top edge, robots / signals / log are in a
