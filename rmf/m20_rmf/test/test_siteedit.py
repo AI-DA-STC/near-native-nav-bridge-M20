@@ -139,3 +139,18 @@ def test_sim_site_round_trip():
     assert got.keys() == s.places.keys()
     for n in got:                           # written to 1 mm / 1 mrad
         assert got[n] == pytest.approx(s.places[n], abs=6e-4)
+
+
+def test_new_site_loads_and_grows():
+    from m20_rmf.siteedit import new_site
+    t = new_site('834', '192.168.123.102', 30000, [-2.092, -6.49, -0.05], 'test')
+    s = load(t, '/tmp/new.yaml')
+    assert s.places == {'home_834': [-2.092, -6.49, -0.05]}
+    assert s.robots['834']['ip'] == '192.168.123.102' and s.robots['834']['home'] == 'home_834'
+    ed = SiteText(t)                       # the commands work on it straight away
+    ed.set_place('bay_1', [-1.0, -6.5, 0.0])
+    ed.add_lane(['bay_1', 'home_834'])
+    ed.set_route('loop', ['bay_1', 'home_834'])
+    s = load(ed.text(), '/tmp/new.yaml')
+    assert set(s.places) == {'home_834', 'bay_1'} and s.routes == {'loop': ['bay_1', 'home_834']}
+    assert '# Waypoints RMF can route to' in ed.text()     # comments kept

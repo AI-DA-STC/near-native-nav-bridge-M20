@@ -12,6 +12,10 @@ list), default all robots in the site.
                                            then add `map: ../maps/<name>.yaml` to the site
 
   Edit the site file (comments kept; shows a diff; checked before writing)
+    m20 site new sites/lab_b.yaml --from 834
+                                           start a new site: 834 with its home at its
+                                           current pose (or --at x y yaw); then point
+                                           site: in m20_stack.yaml at it
     m20 place ls                           places, their lanes and what uses them
     m20 place set scan_1 --from 834 --link fwd_2
                                            add/move a place to 834's current pose, with
@@ -58,6 +62,8 @@ import os
 import sys
 import tempfile
 import time
+
+import yaml
 
 from . import stack
 from .sitefile import Site
@@ -146,6 +152,8 @@ def _edit_site(a, change):
     path = _site_path(a)
     if not path:
         sys.exit('no site: pass --site, set M20_SITE, or set site: in m20_stack.yaml')
+    if not os.path.exists(path):
+        sys.exit(f'no site file {path}: start one with  m20 site new {path} --from <robot>')
     with open(path) as f:
         old_text = f.read()
     old_site = Site.load(path)
@@ -171,6 +179,39 @@ def _edit_site(a, change):
         print(f'WARNING: {w}')
     print('The GUI/RViz map shows it now. RMF routes with it after: '
           'scripts/m20_stack.sh restart rmf  (on the host; robots must be idle)')
+
+
+def cmd_site_new(a):
+    from . import siteedit
+    if os.path.exists(a.path):
+        sys.exit(f'{a.path} exists: edit it with m20 place/lane/route, or pick another name')
+    if a.robot:
+        rid, pose = a.robot, _read_pose(a.robot)
+        note = f'home = {rid} pose, {time.strftime("%F %T %Z")}'
+    elif a.at and a.id:
+        rid, pose, note = a.id, list(a.at), ''
+    else:
+        sys.exit('where is its home? --from <robot> (its current pose), or --id <robot> --at x y yaw')
+    ip, port = a.ip, None
+    if not ip:          # the robot's address from the current site
+        cur = _site_path(a)
+        r = Site.load(cur).robots.get(str(rid)) if cur and os.path.exists(cur) else None
+        if r is None:
+            sys.exit(f'robot {rid} is not in the current site: pass --ip <address>')
+        ip, port = r['ip'], r.get('port')
+    text = siteedit.new_site(rid, ip, port, pose, note)
+    Site(yaml.safe_load(text), a.path)          # it must load before it is written
+    os.makedirs(os.path.dirname(os.path.abspath(a.path)), exist_ok=True)
+    with open(a.path, 'w') as f:
+        f.write(text)
+    cfg = stack.find()
+    rel = os.path.relpath(os.path.abspath(a.path), os.path.dirname(os.path.abspath(cfg))) \
+        if cfg and os.path.exists(cfg) else a.path
+    print(f'created {a.path}: robot {rid} ({ip}), home_{rid} at '
+          f'({pose[0]:.3f}, {pose[1]:.3f}, {pose[2]:.3f})\n'
+          f'next: set  site: {rel}  in m20_stack.yaml, restart the stack '
+          f'(down + up), then add places:\n'
+          f'  m20 place set <name> --from {rid} --link home_{rid}')
 
 
 def cmd_place_ls(a):
@@ -439,6 +480,14 @@ def main(argv=None):
                                 help='write even if a mission would break')
             sp.set_defaults(fn=fn)
     name = (('name',), {})
+    g = sub.add_parser('site', help='start a new site file').add_subparsers(dest='action', required=True)
+    sp = g.add_parser('new')
+    sp.add_argument('path')
+    sp.add_argument('--from', dest='robot', help='the robot whose current pose is its home')
+    sp.add_argument('--id', help='robot id, with --at')
+    sp.add_argument('--at', nargs=3, type=float, metavar=('X', 'Y', 'YAW'))
+    sp.add_argument('--ip', help='robot address (default: from the current site)')
+    sp.set_defaults(fn=cmd_site_new)
     group('place', 'list / add / move / remove places', [
         ('ls', cmd_place_ls, []),
         ('set', cmd_place_set, [name, (('coords',), {'nargs': '*', 'type': float}),

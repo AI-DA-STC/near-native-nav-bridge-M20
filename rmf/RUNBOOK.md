@@ -194,6 +194,8 @@ Each edit prints a diff, is checked (the site must load, missions must still val
 and only then written; the file's comments stay. `--dry-run` shows the diff only.
 
 ```bash
+m20 site new rmf/m20_rmf/sites/lab_b.yaml --from 834   # only for a new site: 834 + its
+#   home at its current pose; then site: in m20_stack.yaml, scripts/m20_stack.sh down + up
 m20 place ls                                  # places, their lanes, what uses them
 # walk/drive 834 to a spot (controller or m20 go), then record it:
 m20 place set bay_1 --from 834 --link fwd_2   # new place at 834's pose + lane to fwd_2

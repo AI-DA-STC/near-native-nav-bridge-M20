@@ -19,6 +19,8 @@ with several real robots at once.
   the area below the phase panel.
 - An inspection that ends without a verdict (timeout, stop) no longer leaves its
   Clear / Threat card up: it clears when the robot leaves INVESTIGATE, with a log line.
+- `m20 site new <file> --from <robot>`: starts a site file (the robot, its home at its
+  current pose, every section commented) for the place/lane/route commands to grow.
 - `m20 capture` removed: `m20 place set <name> --from <robot>` writes the place into
   the site instead of a side file to paste from. `m20 pose` stays (read-only).
 - `m20_rmf.launch.py monitor_port:=…` (default 7878), so a mock rehearsal can run next

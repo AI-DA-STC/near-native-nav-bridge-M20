@@ -211,6 +211,49 @@ class SiteText:
         self._del_map_entry('routes', name)
 
 
+# ---------------------------------------------------------------- new site
+def new_site(robot, ip, port, home_pose, note=''):
+    """Text of a fresh site file: one robot and its home, every section in place and
+    commented, ready for `m20 place/lane/route` and hand edits."""
+    home = f'home_{robot}'
+    port_s = f', port: {port}' if port and int(port) != 30000 else ''
+    return f'''# Site file: every name a mission uses (places, lanes, routes, formations, zones,
+# targets, robots). Coordinates are in the robots' SLAM `map` frame, metres / radians.
+# Started with `m20 site new`{f" ({note})" if note else ""}. Add places with
+#   m20 place set <name> --from {robot} --link <place>
+# and see sites/sim_lab.yaml for every section filled in (RUNBOOK section 6).
+
+map_name: L1
+# map: ../maps/<name>.yaml        # optional: saved SLAM map drawn under the GUI/RViz view
+
+# Waypoints RMF can route to: [x, y, yaw]. Each needs a lane (except a lone first one).
+places:
+  {home}: {pose_str(home_pose)}
+
+# Two-way chains of places; {{path: [a, b, c], oneway: true}} for one-way.
+lanes: []
+
+# Patrol routes: place sequences (m20 route set <name> a b c).
+routes: {{}}
+
+# Formations: slots are places; assign: nearest (min travel) or fixed (robot order).
+#   muster: {{slots: [muster_1, muster_2], assign: nearest}}
+formations: {{}}
+
+# Exploration: robots leave the graph at `entry`, walk their track, come back.
+#   new_area: {{entry: gate, dwell: 1.0, tracks: [[[x, y, yaw], [x, y, yaw]]]}}
+zones: {{}}
+
+# Inspection: go to `approach`, face `look_at`, wait `timeout` s for Clear / Threat.
+#   box1: {{approach: gate, look_at: [x, y], dwell: 5.0, timeout: 20.0, label: suspicious box}}
+targets: {{}}
+
+# Robots: vendor UDP address, home place (its RMF parking/charger), default patrol route.
+robots:
+  "{robot}": {{ip: {ip}{port_s}, home: {home}}}
+'''
+
+
 # ------------------------------------------------------------------- checks
 def place_uses(site, name):
     """Where a place is referenced, other than lanes."""
