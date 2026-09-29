@@ -17,6 +17,9 @@ with several real robots at once.
   `angle`; the site generates a back-and-forth sweep inside it (`sitefile.sweep`),
   drawn with the boundary on the map. `m20 zone corner <zone> --from <robot>` records
   corners; `m20 zone set|clear|rm`.
+- **Places as corners:** `boundary` entries may be place names
+  (`m20 zone corner <zone> --place <name>`); the corner follows the place when it is
+  moved, and `m20 place rm` refuses a place that is a corner.
 - **Exit place:** a zone's `exit` (default: its `entry`) is where explorers rejoin the
   graph, after the sweep or when time is up; the return leg is part of the path
   announced to RMF's traffic schedule.

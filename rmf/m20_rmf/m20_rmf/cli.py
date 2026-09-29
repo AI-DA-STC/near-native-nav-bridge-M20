@@ -34,6 +34,8 @@ list), default all robots in the site.
                                            add a boundary corner at 834's pose (the zone
                                            is created on the first; x y also works);
                                            the robot sweeps the area inside the corners
+    m20 zone corner zone_b --place corner_1   an existing place as a corner (by name: it
+                                           follows the place if the place moves)
     m20 zone set zone_b [--entry P] [--exit P] [--spacing 1.0] [--margin 0.4] [--angle deg]
                                            exit: where it rejoins the graph (default: the
                                            entry); a separate exit keeps the way back
@@ -317,12 +319,17 @@ def _zone_raw(site, name):
 
 def cmd_zone_corner(a):
     from .siteedit import EditError
-    if a.robot:
+    corner = None
+    if a.place:
+        corner = a.place                    # by name
+    elif a.robot:
         x, y, _ = _read_pose(a.robot)
     elif len(a.xy) == 2:
         x, y = a.xy
     else:
-        sys.exit('where? --from <robot> (its current position), or x y')
+        sys.exit('where? --place <place>, --from <robot> (its current position), or x y')
+    if corner is None:
+        corner = [round(x, 3), round(y, 3)]
 
     def change(ed, site):
         z = _zone_raw(site, a.name)
@@ -339,10 +346,13 @@ def cmd_zone_corner(a):
         if a.exit:
             z['exit'] = a.exit
         z.setdefault('spacing', 1.0)
-        z['boundary'] = list(z.get('boundary') or []) + [[round(x, 3), round(y, 3)]]
+        if isinstance(corner, str) and corner not in site.places:
+            raise EditError(f'no place {corner!r}')
+        z['boundary'] = list(z.get('boundary') or []) + [corner]
         ed.set_zone(a.name, z)
         n = len(z['boundary'])
-        return (f'zone {a.name}: corner {n} at ({x:.3f}, {y:.3f})' +
+        where = corner if isinstance(corner, str) else f'({corner[0]:.3f}, {corner[1]:.3f})'
+        return (f'zone {a.name}: corner {n} at {where}' +
                 ('' if n >= 3 else f' — {3 - n} more to make an area'))
     _edit_site(a, change)
 
@@ -601,6 +611,7 @@ def main(argv=None):
     group('zone', 'exploration zones by their boundary corners', [
         ('corner', cmd_zone_corner, [name, (('xy',), {'nargs': '*', 'type': float}),
                                      (('--from',), {'dest': 'robot', 'help': 'use this robot\'s position'}),
+                                     (('--place',), {'help': 'use this place (by name)'}),
                                      (('--entry',), {'help': 'place where it enters the zone'}),
                                      (('--exit',), {'help': 'place where it leaves (default: entry)'})]),
         ('set', cmd_zone_set, [name, (('--entry',), {}), (('--exit',), {}),

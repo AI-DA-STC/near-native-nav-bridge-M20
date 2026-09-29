@@ -215,7 +215,7 @@ m20 patrol 834 --route loop --rounds 1 --wait
 | remove a place | `m20 place rm bay_1` — removes its lanes too; refused while a route, formation, zone, target or robot home uses it (it says which) |
 | connect / disconnect | `m20 lane add a b [c …]` (two-way chain) · `m20 lane rm a b` |
 | routes | `m20 route set loop a b c` (create or replace) · `m20 route rm loop` |
-| exploration area | `m20 zone corner area_b --from 834 --entry gate` (first corner), then `m20 zone corner area_b --from 834` at each further corner · `m20 zone set area_b --exit gate_2 --spacing 1.0 --margin 0.4` · `m20 zone clear` / `rm` |
+| exploration area | `m20 zone corner area_b --from 834 --entry gate` (first corner), then `m20 zone corner area_b --from 834` at each further corner · `m20 zone corner area_b --place corner_1` uses an existing place (by name: the corner follows the place) · `m20 zone set area_b --exit gate_2 --spacing 1.0 --margin 0.4` · `m20 zone clear` / `rm` |
 | a robot's own patrol | `robots: "834": {…, route: loop}` in the site file (by hand) |
 
 A place must have at least one lane (RMF could not reach it otherwise), and no edit may

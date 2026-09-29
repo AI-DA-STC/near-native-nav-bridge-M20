@@ -144,7 +144,15 @@ class Site:
             z['tracks'] = [[_pose(p, f'zones.{k}.tracks') for p in t] for t in v.get('tracks', [])]
             z['poses'] = [_pose(p, f'zones.{k}.poses') for p in v.get('poses', [])]
             # A boundary instead: the poses are a sweep over the area it encloses.
-            z['boundary'] = [[float(p[0]), float(p[1])] for p in v.get('boundary', [])]
+            # Corners are [x, y] or a place name (the corner follows the place if it moves).
+            z['boundary'], z['corner_places'] = [], []
+            for p in v.get('boundary', []):
+                if isinstance(p, str):
+                    if p not in self.places:
+                        raise SiteError(f'zones.{k}.boundary: unknown place {p!r}')
+                    z['corner_places'].append(p)
+                    p = self.places[p]
+                z['boundary'].append([float(p[0]), float(p[1])])
             z['spacing'] = float(v.get('spacing', 1.0))
             z['margin'] = float(v.get('margin', 0.4))
             if z['boundary'] and not z['tracks'] and not z['poses']:

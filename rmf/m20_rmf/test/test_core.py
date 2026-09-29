@@ -455,3 +455,19 @@ def test_repeat_forever_runs_until_stopped():
         Runner(f, log=lambda *_: None).run_steps(
             [{'repeat': {'times': 'forever', 'steps': [{'hold': {'seconds': 1}}]}}])
     assert len(f.calls) == 5
+
+
+def test_zone_corners_can_be_places():
+    from m20_rmf.siteedit import place_uses
+    from m20_rmf.sitefile import Site, SiteError
+    base = {'places': {'a': [0, 0, 0], 'b': [4, 0, 0], 'c': [4, 3, 0]},
+            'lanes': [['a', 'b', 'c']], 'robots': {'834': {'ip': '1.2.3.4', 'home': 'a'}}}
+    s = Site({**base, 'zones': {'z': {'entry': 'a', 'boundary': ['a', 'b', 'c', [0, 3]]}}})
+    assert s.zones['z']['boundary'] == [[0, 0], [4, 0], [4, 3], [0, 3]]
+    assert s.zones['z']['poses']
+    assert 'zone z (corner)' in place_uses(s, 'b')       # place rm refuses it
+    moved = {**base, 'places': {**base['places'], 'c': [6, 3, 0]},
+             'zones': {'z': {'entry': 'a', 'boundary': ['a', 'b', 'c']}}}
+    assert Site(moved).zones['z']['boundary'][2] == [6, 3]   # the corner follows the place
+    with pytest.raises(SiteError, match='unknown place'):
+        Site({**base, 'zones': {'z': {'entry': 'a', 'boundary': ['a', 'nope', 'c']}}})

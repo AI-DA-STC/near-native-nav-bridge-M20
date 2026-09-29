@@ -277,6 +277,8 @@ def place_uses(site, name):
     for k, z in site.zones.items():
         if name in (z['entry'], z['exit']):
             uses.append(f'zone {k}')
+        elif name in z.get('corner_places', ()):
+            uses.append(f'zone {k} (corner)')
     for k, t in site.targets.items():
         if t['approach'] == name:
             uses.append(f'target {k}')
