@@ -6,8 +6,6 @@ list), default all robots in the site.
 
   Setup / localization
     m20 pose 834                           current pose from /ODOM_relayed_834
-    m20 capture 834 muster_1               record current pose as a place (appends to
-                                           <site>.captures.yaml, ready to paste)
     m20 relocalize 834 home_834            set SLAM pose at a place (or: 834 x y yaw)
     m20 graph                              write nav graph + fleet config, print summary
     m20 map-save 834 [name]                save the robot's SLAM map (maps/<name>.yaml);
@@ -111,17 +109,6 @@ def _read_pose(robot, timeout=5.0):
 
 def cmd_pose(a):
     print(json.dumps(_read_pose(a.robot)))
-
-
-def cmd_capture(a):
-    pose = _read_pose(a.robot)
-    site_path = _site_path(a)
-    out = a.out or (site_path + '.captures.yaml' if site_path else 'captures.yaml')
-    line = f'  {a.name}: [{pose[0]}, {pose[1]}, {pose[2]}]   # robot {a.robot}, {time.strftime("%F %T")}\n'
-    with open(out, 'a') as f:
-        f.write(line)
-    print(line.rstrip())
-    print(f'(appended to {out}; paste under places:)')
 
 
 def cmd_relocalize(a):
@@ -390,7 +377,6 @@ def main(argv=None):
     wait = (('--no-wait',), {'action': 'store_true'})
     queue = (('--queue',), {'action': 'store_true'})
     add('pose', cmd_pose, rob)
-    add('capture', cmd_capture, rob, (('name',), {}), (('--out',), {}))
     add('relocalize', cmd_relocalize, rob, (('where',), {'nargs': '+'}))
     add('graph', cmd_graph, (('--out',), {}))
     add('map-save', cmd_map_save, rob, (('name',), {'nargs': '?'}), (('--out',), {}))

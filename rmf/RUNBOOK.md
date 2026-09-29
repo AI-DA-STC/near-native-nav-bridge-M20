@@ -119,16 +119,19 @@ up with the controller first.
 ## 5. Demo console (GUI) and RViz
 
 Open **http://localhost:8080** (or `http://<laptop ip>:8080` from a tablet on the Wi-Fi).
+One screen, no scrolling: the **map** fills the window, the mission's phase and anything
+waiting for the operator float over its top edge, and the robots, signals and log sit in
+a sidebar on the right (below the map on narrow screens).
 
 | Area | Shows / does |
 |---|---|
 | header | mission picker + **Start** (the `mission` pane runs it), **STOP ALL** |
-| stage | mission name, the current **phase** in large type, elapsed time |
-| action card | only when needed: the mission's question with its button (e.g. *Begin scenario*, *Suspicious item at box 1*), or an inspection waiting for a verdict (**Clear** / **Threat**) |
-| map | the **RViz view** in the page: the SLAM map with the site (lanes, places, slots, tracks, targets) and each robot in its mode colour with its path. Scroll to zoom, drag to pan, double-click to fit the site again |
-| robot cards | one per robot: **mode** (colour + word), one detail line (route, zone, target), battery; per-robot **Stop** when no mission is running |
+| phase (over the map, top) | mission name, the current **phase**, elapsed time |
+| action card (under the phase) | only when needed: the mission's question with its button (e.g. *Begin scenario*, *Suspicious item at box 1*), or an inspection waiting for a verdict (**Clear** / **Threat**) |
+| map (the window) | the **RViz view** in the page: the SLAM map with the site (lanes, places, slots, tracks, targets) and each robot in its mode colour with its path. Scroll to zoom, drag to pan, double-click to fit the site again |
+| robot cards (sidebar) | one per robot: **mode** (colour + word), one detail line (route, zone, target), battery; per-robot **Stop** when no mission is running |
 | signal row | signals the mission offers at any time; pressing one early is fine, it shows **queued** until the mission uses it |
-| log | the last few phases, signals, verdicts and stops |
+| log (sidebar) | phases, signals, verdicts, stops, inspections that ended without a verdict |
 
 Modes (same colours in RViz): **PATROL** · **REGROUP** (forming up) · **EXPLORE** ·
 **INVESTIGATE** (+ "awaiting verdict") · **RETURN** · **MOVE** · **HOLD** · **IDLE** ·
@@ -271,9 +274,9 @@ Files:
 Start from `sites/sim_lab.yaml` (fully commented) or `sites/lab_834_corridor.yaml`.
 
 1. **Record spots:** drive the robot there with the controller, then
-   `m20 capture 834 <name>` → appends to `<site>.captures.yaml`; paste under `places:`.
-2. **Connect them with `lanes`** (chains of places, two-way unless `oneway: true`). RMF
-   only routes along lanes.
+   `m20 place set <name> --from 834 --link <neighbour>` (§6, *Make your own route*).
+2. **Connect them with `lanes`** (`m20 lane add`; two-way chains, `oneway: true` by
+   hand). RMF only routes along lanes.
 3. **`m20 graph`** — validates and warns about places closer than footprint + vicinity
    (1.1 m): formation slots and homes must be further apart.
 4. **Write the mission**, then `m20 mission <file> --check`.

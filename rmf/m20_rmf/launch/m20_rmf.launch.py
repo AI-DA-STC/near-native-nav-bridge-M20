@@ -34,11 +34,13 @@ def _nodes(context):
     s = Site.load(site)     # fail fast on a bad site file, before anything starts
     fleet = s.fleet['name']
     footprint = float(s.fleet['profile']['footprint'])
-    ws = 'ws://localhost:7878'
+    port = LaunchConfiguration('monitor_port').perform(context)
+    ws = f'ws://localhost:{port}'
     guard = ['--allow-robot-domain'] if allow else []
     out = [
         # Monitor first: the dispatcher and adapter connect to its websocket on start.
-        Node(package='m20_rmf', executable='monitor', output='both', arguments=guard),
+        Node(package='m20_rmf', executable='monitor', output='both',
+             arguments=['--port', port] + guard),
         Node(package='rmf_traffic_ros2', executable='rmf_traffic_schedule', output='both'),
         Node(package='rmf_traffic_ros2', executable='rmf_traffic_blockade', output='both'),
         Node(package='rmf_task_ros2', executable='rmf_task_dispatcher', output='both',
@@ -73,6 +75,9 @@ def generate_launch_description():
                               description='comma list; default: robots: in m20_stack.yaml when using its site, else all robots of the site'),
         DeclareLaunchArgument('sim', default_value='false', description='start mock robots'),
         DeclareLaunchArgument('viz', default_value='false', description='RMF visualizers + RViz'),
+        DeclareLaunchArgument('monitor_port', default_value='7878',
+                              description='task-state websocket; change it to run a mock '
+                                          'rehearsal next to the live stack'),
         DeclareLaunchArgument('allow_robot_domain', default_value='false',
                               description='permit ROS_DOMAIN_ID=0 (only if no Foxy relay can see us)'),
         DeclareLaunchArgument('rviz_config', default_value=os.path.join(share, 'rviz', 'm20_rmf.rviz')),

@@ -7,8 +7,8 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <header>
-    <div class="brand"><span id="link" class="link" title="connection"></span>M20 Fleet</div>
+  <header class="bar">
+    <div class="brand"><span id="link" class="link" title="connection to the hub"></span>M20 Fleet</div>
     <div class="mission-controls">
       <select id="mission-file" aria-label="Mission"></select>
       <button id="start" class="btn">Start</button>
@@ -16,29 +16,30 @@
     <button id="stop-all" class="btn stop" title="Stop every robot where it stands (no drop) and end the mission">STOP ALL</button>
   </header>
 
-  <div id="toast" class="toast" hidden></div>
-
-  <main>
-    <section class="stage">
-      <div id="mission-name" class="mission-name"></div>
-      <div id="phase" class="phase">No mission running</div>
-      <div id="elapsed" class="elapsed"></div>
+  <div class="app">
+    <!-- The map (the RViz view) fills the screen; the mission's state and anything
+         that needs the operator float over its top edge. -->
+    <section class="mapview">
+      <canvas id="map" aria-label="Map: the RViz view of the site and robots"></canvas>
+      <div class="overlay">
+        <div id="stage" class="stage">
+          <div id="mission-name" class="mission-name"></div>
+          <div id="phase" class="phase">No mission running</div>
+          <div id="elapsed" class="elapsed"></div>
+        </div>
+        <div id="toast" class="toast" hidden></div>
+        <section id="actions" class="actions"></section>
+      </div>
+      <div class="map-hint">scroll zoom · drag pan · double-click fit</div>
     </section>
 
-    <section id="actions" class="actions"></section>
-
-    <div class="split">
-      <section class="mapview">
-        <canvas id="map" aria-label="Map: the RViz view of the site and robots"></canvas>
-        <div class="map-hint">scroll zoom · drag pan · double-click fit</div>
-      </section>
-      <div class="side">
-        <section id="robots" class="robots"></section>
-        <section id="signals" class="signals" hidden></section>
-        <ol id="timeline" class="timeline"></ol>
-      </div>
-    </div>
-  </main>
+    <aside class="side">
+      <section id="robots" class="robots"></section>
+      <section id="signals" class="signals" hidden></section>
+      <div class="side-label">Log</div>
+      <ol id="timeline" class="timeline"></ol>
+    </aside>
+  </div>
 
   <script src="map.js"></script>
   <script src="app.js"></script>

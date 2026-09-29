@@ -1,6 +1,6 @@
 # Annotated site file. Every name a mission refers to is defined here.
 # Coordinates: the robots' shared SLAM `map` frame, metres / radians.
-# Record real poses with:  ros2 run m20_rmf m20 capture <robot> <place_name> --site <file>
+# Record real poses with:  m20 --site <file> place set <place_name> --from <robot> --link <place>
 #
 # This one drives the mock robots (127.0.0.1:3000x) for offline rehearsal; the door
 # route points come from the README. Copy it for a real site and change robots.*.ip.

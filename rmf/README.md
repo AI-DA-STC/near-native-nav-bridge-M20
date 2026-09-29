@@ -169,8 +169,8 @@ the RMF nav graph and fleet config at start-up; `m20 graph` does the same and pr
 layout warnings.
 
 Record real poses by walking a robot to each spot and running
-`m20 capture 834 muster_1` — it appends a ready-to-paste line to
-`<site>.captures.yaml`.
+`m20 place set muster_1 --from 834 --link <neighbour>` — it writes the place (and the
+lane) into the site file; see RUNBOOK §6 for the other editing commands.
 
 **Spacing rule:** RMF never schedules two robots closer than footprint + vicinity
 (1.1 m by default, `fleet.profile`). Formation slots and homes closer than that make

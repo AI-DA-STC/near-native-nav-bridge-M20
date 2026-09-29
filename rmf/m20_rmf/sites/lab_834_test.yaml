@@ -4,7 +4,7 @@
 # without leaving that corridor. Poses come from 834's UDP LocationStatus.
 #
 # Copy this as the starting point for the real demo site and replace the places
-# with `m20 capture` output.
+# with `m20 place set --from` poses.
 
 map_name: L1
 

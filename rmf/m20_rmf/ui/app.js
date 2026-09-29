@@ -151,7 +151,7 @@ function render() {
       : el('button', { class: 'btn', onclick: (e) => send({ cmd: 'signal', event: s.event, data: s.data || {} }, e.currentTarget) }, s.label || s.event))]);
 
   // Timeline: the last few things that happened.
-  const recent = [...(view.timeline || [])].reverse().slice(0, 6);
+  const recent = [...(view.timeline || [])].reverse();
   renderIf('timeline', recent, () => recent.map((e) =>
     el('li', { class: `${e.kind}-k` }, el('time', {}, new Date(e.t * 1000).toLocaleTimeString([], { hour12: false })), e.text)));
 }

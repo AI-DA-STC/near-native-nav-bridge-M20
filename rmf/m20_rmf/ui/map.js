@@ -60,11 +60,16 @@ const MapView = (() => {
       ys = [grid.origin[1], grid.origin[1] + grid.h * grid.res];
     }
     if (!xs.length) return;
-    const pad = 3.0;                   // metres of map around the site
+    const pad = 2.0;                   // metres of map around the site
     const x0 = Math.min(...xs) - pad, x1 = Math.max(...xs) + pad;
     const y0 = Math.min(...ys) - pad, y1 = Math.max(...ys) + pad;
     const { w, h } = size();
-    cam = { x: (x0 + x1) / 2, y: (y0 + y1) / 2, k: Math.min(w / (x1 - x0), h / (y1 - y0)) };
+    // Frame it in the part of the map below the floating phase panel.
+    const stage = document.getElementById('stage');
+    const top = stage ? stage.getBoundingClientRect().bottom - canvas.getBoundingClientRect().top + 12 : 0;
+    const k = Math.min(w / (x1 - x0), (h - top) / (y1 - y0));
+    const cy = (y0 + y1) / 2;
+    cam = { x: (x0 + x1) / 2, y: cy - (h / 2 - (top + (h - top) / 2)) / k, k };
   }
 
   function size() {

@@ -8,8 +8,8 @@ and is compiled into the two files Open-RMF needs:
   * fleet config (EasyFullControl config.yaml)
 
 All coordinates are in the robots' shared SLAM `map` frame, which is also RMF's
-frame (identity transform). Poses are [x, y, yaw_rad]; `m20 capture` records them
-from a robot standing on the spot.
+frame (identity transform). Poses are [x, y, yaw_rad]; `m20 place set <name> --from
+<robot>` records one from a robot standing on the spot (siteedit.py).
 
 See sites/example_lab.yaml for the annotated schema.
 """

@@ -126,6 +126,6 @@ def fleet_view(statuses, task_states, mission, stopped, timeline, inspections, n
         'mission': mission or {},
         'robots': sorted(robots, key=lambda r: r['id']),
         'inspections': inspections,
-        'timeline': timeline[-8:],
+        'timeline': timeline[-30:],
         'modes': MODES,
     }

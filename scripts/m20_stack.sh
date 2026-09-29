@@ -290,11 +290,15 @@ restart() {   # $1 = pane title: rmf | ui | bridge | events | mission | operator
   esac
   # Ctrl-C first so the processes in the container end cleanly (killing the pane
   # would leave them running), then start the same command again in that pane.
+  # The pane's own process is a bash running the command; when the command has ended it
+  # is a plain shell with no children left.
+  local ppid; ppid=$(tmux display -p -t "$pane" '#{pane_pid}')
   tmux send-keys -t "$pane" C-c
   for _ in $(seq 20); do
-    [ "$(tmux display -p -t "$pane" '#{pane_current_command}')" = bash ] && break
+    pgrep -P "$ppid" >/dev/null || break
     sleep 1
   done
+  pgrep -P "$ppid" >/dev/null && echo "'$name' did not end on Ctrl-C within 20 s: killing its pane" >&2
   tmux respawn-pane -k -t "$pane" "$cmd; echo; echo '[$name ended - shell]'; exec bash"
   echo "restarted $name"
 }

@@ -12,6 +12,20 @@ with several real robots at once.
 
 ## Added
 
+### Full-screen map console (2026-09-29)
+- The web GUI is one screen that never scrolls: the map (the RViz view) fills it, the
+  phase and operator prompts float over its top edge, robots / signals / log are in a
+  right sidebar (a strip below the map on narrow screens). The map fits the site into
+  the area below the phase panel.
+- An inspection that ends without a verdict (timeout, stop) no longer leaves its
+  Clear / Threat card up: it clears when the robot leaves INVESTIGATE, with a log line.
+- `m20 capture` removed: `m20 place set <name> --from <robot>` writes the place into
+  the site instead of a side file to paste from. `m20 pose` stays (read-only).
+- `m20_rmf.launch.py monitor_port:=…` (default 7878), so a mock rehearsal can run next
+  to the live stack on another domain without reporting into its task monitor.
+- `scripts/m20_stack.sh restart` now waits for the pane's command to end after Ctrl-C
+  (it could not tell before, as every pane runs under bash).
+
 ### Map in the console, site editing from the CLI (2026-09-29)
 - **Map panel in the web GUI:** the RViz view in the page. The hub forwards RViz's own
   `/m20/viz` markers and `/m20/map` (the SLAM map) and the page draws them top-down

@@ -257,6 +257,16 @@ class Hub:
                 self.note('mission lost: its process stopped responding', 'alert')
         m['running'] = m.get('state') == 'running'
         v['host'] = {'up': now - host.get('alive', 0) < STALE, 'busy': host.get('busy', False)}
+        # An inspection that ended without a verdict (it timed out, or was stopped): the
+        # robot has left INVESTIGATE, so stop asking the operator about it.
+        modes = {r['id']: r['mode'] for r in v['robots']}
+        for k, ins in list(v['inspections'].items()):
+            if modes.get(ins['robot']) != 'INVESTIGATE' and now - ins['t'] > 3.0:
+                with self.lock:
+                    self.inspections[k]['verdict'] = 'none'
+                del v['inspections'][k]
+                self.note(f'{ins["robot"]}: inspection of {ins["label"]} ended without a verdict',
+                          'alert')
         v['site'] = self.fleet.site.path
         return v
 
