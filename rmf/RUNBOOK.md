@@ -374,6 +374,7 @@ m20 status
 | `no response to robot_task_request for robot X` | the running adapter doesn't serve X | add X to `robots:` / the launch |
 | Robot won't walk, `asleep: true` | sitting | stand it up with the controller |
 | Robot ping 0.1–1.6 s, SSH resets | full relay set loading its Wi-Fi | `robot_relay: odom` |
+| Everything on the laptop stalls (even the internet) while relays run | the robots' traffic fills the laptop's one Wi-Fi link | `scripts/m20_stack.sh netcheck` shows by what; keep `robot_relay: odom` (odometry only, best effort); the live map only with `odom+map` when needed |
 | `localized: false` while RViz looks right | the UDP `Location` flag's meaning is unconfirmed | trust RViz for now |
 | RViz: `could not connect to display` / "Authorization required" | X access for root containers lost after reboot | `xhost +SI:localuser:root` (the launcher does it on `up`) |
 | GUI page loads but stays empty | the `ui` pane is not running (or port 8080 taken) | check the `ui` pane; `pkill -f lib/m20_rmf/ui` in the Jazzy container |

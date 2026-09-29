@@ -42,7 +42,8 @@ SHARED = [
     ('tfmessage_relay', '/tf_static_relayed', 'up', {'durability': 'transient_local'}),
 ]
 PER_ROBOT = [
-    ('odom_relay', '/ODOM_relayed', 'up', None),
+    # best effort, as the robots' odom relays send it (scripts/m20_stack.sh)
+    ('odom_relay', '/ODOM_relayed', 'up', {'reliability': 'best_effort', 'depth': 5}),
     ('occupancygrid_relay', '/GRID_MAP_relayed', 'up', {'durability': 'transient_local'}),
     ('posewithcov_relay', '/initialpose_relayed', 'up', None),
     ('posestamped_relay', '/goal_pose_relayed', 'down', None),

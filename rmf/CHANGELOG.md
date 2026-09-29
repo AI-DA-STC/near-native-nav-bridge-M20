@@ -12,6 +12,17 @@ with several real robots at once.
 
 ## Added
 
+### Wi-Fi load with three robots (2026-09-29 evening)
+- With all three relays running, the laptop's one Wi-Fi link (robots and internet
+  share it) stalled: both relays were **reliable** (every lost fragment resent) and the
+  map relay forwarded every live SLAM map. Now `robot_relay: odom` relays odometry
+  only, **best effort** (a lost pose is replaced by the next), and the laptop bridge
+  matches; `odom+map` adds the live map when needed (`m20 map-save`, or a site without
+  a `map:` file). Tested on the laptop: fake robot `/ODOM` at 30 Hz -> best-effort
+  robot relay -> bridge -> `m20 pose`: 30 Hz, correct pose. Not yet on the robots.
+- `scripts/m20_stack.sh netcheck`: Wi-Fi receive/send rate, each robot's relayed
+  odometry/map rate and bandwidth, ping, internet response. Runs on its own.
+
 ### Three robots: robot-side checks (2026-09-29)
 - **Relay profile:** the launcher now always copies `robot/fastdds_relay.xml` (robot IP
   substituted) to `/root/m20_relay_profile.xml` in the relay container and runs the

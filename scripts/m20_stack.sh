@@ -6,6 +6,8 @@
 #                                  `up` then leaves them alone
 #   scripts/m20_stack.sh attach    re-attach to it
 #   scripts/m20_stack.sh status    containers, panes, robots
+#   scripts/m20_stack.sh netcheck  Wi-Fi load, each robot's relay traffic, ping, internet
+#                                  (run while the relays are up; needs nothing else)
 #   scripts/m20_stack.sh restart <pane>   Ctrl-C one pane and start it again, e.g.
 #                                  `restart rmf` after `m20 place/lane/route` edits
 #   scripts/m20_stack.sh down      Ctrl-C every pane (clean shutdown), then close it
@@ -62,6 +64,7 @@ out = {
     'ROBOT_COMPOSE_DIR': str(c.get('robot_compose_dir', '~')),
     'ROBOT_COMPOSE_SERVICE': str(c.get('robot_compose_service', 'nav_cmd_bridge')),
     'ROBOTS_DOMAIN': str(c.get('robots_domain', 0)),
+    'RMF_DOMAIN': str(c.get('rmf_domain', 20)),
     'SITE': site,
 }
 for rid in robots:
@@ -115,13 +118,22 @@ relay_cmd() {   # $1 = robot id
   local rid=$1 ip var="IP_$1" inner stale
   ip=${!var}
   [ -n "$ip" ] || { echo "echo 'robot $rid has no ip in the site file'"; return; }
+  # Odometry goes best effort: over Wi-Fi a lost pose is replaced by the next one, and
+  # reliable delivery (resending every lost fragment, for three robots) swamped the
+  # laptop's link on 2026-09-29. The SLAM map is large and republished often: relayed
+  # only on request (odom+map), e.g. for m20 map-save; the GUI draws the site's map file.
+  local odom="ros2 run nav_cmd_bridge odom_relay --ros-args -r __node:=odom_relay_$rid -p input_topic:=/ODOM -p output_topic:=/ODOM_relayed_$rid -p frame_prefix:=\"'$rid'\" -p reliability:=best_effort -p depth:=5"
+  local grid="ros2 run nav_cmd_bridge occupancygrid_relay --ros-args -r __node:=grid_map_relay_$rid -p input_topic:=/GRID_MAP -p output_topic:=/GRID_MAP_relayed_$rid -p frame_prefix:=\"'$rid'\""
   case "$RELAY_MODE" in
-    odom) # odometry (all RMF needs) + the SLAM map (latched: sent once, light on Wi-Fi)
+    odom) # odometry only: all RMF and the GUI need
           stale="[_]_node:=(odom|grid_map)_relay_$rid"
-          inner="trap 'kill 0' EXIT; ros2 run nav_cmd_bridge occupancygrid_relay --ros-args -r __node:=grid_map_relay_$rid -p input_topic:=/GRID_MAP -p output_topic:=/GRID_MAP_relayed_$rid -p frame_prefix:=\"'$rid'\" & ros2 run nav_cmd_bridge odom_relay --ros-args -r __node:=odom_relay_$rid -p input_topic:=/ODOM -p output_topic:=/ODOM_relayed_$rid -p frame_prefix:=\"'$rid'\" & wait" ;;
+          inner="$odom" ;;
+    odom+map) # + the SLAM map (for m20 map-save, or a site without a map file)
+          stale="[_]_node:=(odom|grid_map)_relay_$rid"
+          inner="trap 'kill 0' EXIT; $grid & $odom & wait" ;;
     full) stale="[r]elays.launch.py"; inner="ros2 launch nav_cmd_bridge relays.launch.py" ;;
     none) echo "echo 'robot_relay: none -> start the relay on $rid yourself'"; return ;;
-    *) die "robot_relay must be odom, full or none" ;;
+    *) die "robot_relay must be odom, odom+map, full or none" ;;
   esac
   inner="source /opt/ros/foxy/setup.bash && source /root/ros2_ws/install/setup.bash && export ROBOT_ID=$rid ROS_DOMAIN_ID=$ROBOTS_DOMAIN FASTRTPS_DEFAULT_PROFILES_FILE=$ROBOT_PROFILE && $inner"
   # Robots are powered off daily: the relay container may be stopped, or gone. On the
@@ -307,6 +319,50 @@ restart() {   # $1 = pane title: rmf | ui | bridge | events | mission | operator
   echo "restarted $name"
 }
 
+netcheck() {   # how loaded the robots' Wi-Fi is, and by what
+  read_stack
+  local j dev secs=10 t0 rx0 tx0 rx1 tx1 out
+  j=$(container_for "$JAZZY_CFG")
+  dev=$(ip route get 192.168.123.1 2>/dev/null | grep -o 'dev [^ ]*' | cut -d' ' -f2)
+  [ -n "$dev" ] || die "no route to the robots' network (192.168.123.0/24)"
+  out=$(mktemp -d)
+  # per-robot relay traffic, measured on the laptop side (adds nothing to the Wi-Fi)
+  if [ -n "$j" ]; then
+    for rid in $ROBOTS; do
+      for t in ODOM_relayed GRID_MAP_relayed; do
+        docker exec "$j" bash -c "source /ws/install/setup.bash; export ROS_DOMAIN_ID=$RMF_DOMAIN
+          timeout $((secs - 1)) ros2 topic hz /${t}_$rid 2>/dev/null | grep 'average rate' | tail -1
+          " > "$out/hz_${t}_$rid" 2>&1 &
+        docker exec "$j" bash -c "source /ws/install/setup.bash; export ROS_DOMAIN_ID=$RMF_DOMAIN
+          timeout $((secs - 1)) ros2 topic bw /${t}_$rid 2>/dev/null | grep -E 'B/s from' | tail -1
+          " > "$out/bw_${t}_$rid" 2>&1 &
+      done
+    done
+  fi
+  for rid in $ROBOTS; do
+    local var="IP_$rid"; ping -c 8 -i 0.5 -W 1 "${!var}" 2>/dev/null | tail -2 > "$out/ping_$rid" &
+  done
+  ( curl -s -o /dev/null -m 8 -w '%{time_total}' https://api.anthropic.com > "$out/net" 2>/dev/null || echo fail > "$out/net" ) &
+  rx0=$(cat /sys/class/net/$dev/statistics/rx_bytes); tx0=$(cat /sys/class/net/$dev/statistics/tx_bytes); t0=$(date +%s.%N)
+  wait
+  rx1=$(cat /sys/class/net/$dev/statistics/rx_bytes); tx1=$(cat /sys/class/net/$dev/statistics/tx_bytes)
+  local dt; dt=$(echo "$(date +%s.%N) - $t0" | bc)
+  echo "Wi-Fi ($dev, $(iw dev "$dev" link 2>/dev/null | awk -F': ' '/SSID/{print $2}')):" \
+    "receive $(echo "($rx1 - $rx0) / $dt / 1024" | bc) KB/s, send $(echo "($tx1 - $tx0) / $dt / 1024" | bc) KB/s"
+  for rid in $ROBOTS; do
+    echo "robot $rid:"
+    for t in ODOM_relayed GRID_MAP_relayed; do
+      local hz bw
+      hz=$(sed 's/average rate: /rate /' "$out/hz_${t}_$rid" 2>/dev/null | head -1)
+      bw=$(head -1 "$out/bw_${t}_$rid" 2>/dev/null)
+      printf '  %-18s %s\n' "$t" "${hz:-no data}${bw:+ | $bw}"
+    done
+    echo "  ping: $(grep -o '[0-9]*% packet loss' "$out/ping_$rid"), $(grep -o 'rtt.*' "$out/ping_$rid" | cut -d= -f2)"
+  done
+  echo "internet (api.anthropic.com): $(cat "$out/net") s"
+  rm -rf "$out"
+}
+
 status() {
   read_stack
   echo "containers: foxy=$(container_for "$FOXY_CFG" || true) jazzy=$(container_for "$JAZZY_CFG" || true)"
@@ -326,5 +382,6 @@ case "${1:-}" in
   attach) exec tmux attach -t "=$SESSION" ;;
   status) status ;;
   restart) shift; restart "$@" ;;
+  netcheck) netcheck ;;
   *) sed -n '2,/^set -euo/p' "$0" | sed '$d'; exit 1 ;;
 esac
