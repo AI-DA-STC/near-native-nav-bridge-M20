@@ -179,7 +179,7 @@ def main(argv=None):
     p = argparse.ArgumentParser(prog='m20_viz')
     p.add_argument('--site', default='')
     a = p.parse_args(rclpy.utilities.remove_ros_args(argv)[1:])
-    site_path = a.site or stack.load().get('site')
+    site_path = stack.path(a.site) or stack.load().get('site')
     if not site_path:
         sys.exit('no site: pass --site or set site: in m20_stack.yaml')
     node = rclpy.node.Node('m20_viz')

@@ -162,7 +162,8 @@ def main(argv=sys.argv):
     p.add_argument('--fail-first-goals', type=int, default=0,
                    help='reject this many goals with a planning error (tests retries)')
     a = p.parse_args(args_[1:])
-    site = Site.load(a.site)
+    from . import stack
+    site = Site.load(stack.path(a.site))
     node = rclpy.node.Node('m20_mock_robots')
     wanted = [r for r in a.robots.split(',') if r] or site.robot_ids()
     mocks = []

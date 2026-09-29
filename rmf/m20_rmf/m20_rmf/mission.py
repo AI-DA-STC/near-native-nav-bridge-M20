@@ -290,6 +290,8 @@ def main(argv=None):
     p.add_argument('--robots', default='', help='comma list of active robots (default: all)')
     p.add_argument('--check', action='store_true', help='validate only')
     a = p.parse_args(rclpy.utilities.remove_ros_args(argv)[1:])
+    from . import stack
+    a.site, a.mission = stack.path(a.site), stack.path(a.mission)
     site = Site.load(a.site)
     try:
         mission = _load_checked(a.mission, site)
@@ -387,7 +389,9 @@ class MissionHost:
             self.abort(cmd.get('reason') or 'STOP')
 
     def start(self, file):
+        from . import stack
         from .primitives import Fleet
+        file = stack.path(file)
         with self.lock:
             if self.busy:
                 raise MissionError(f'mission {self.run.name} is still running')

@@ -1,5 +1,8 @@
 """`m20` — operator CLI over the mission primitives.
 
+Relative paths (--site, mission files, --out, site new) are relative to the repo root,
+as in m20_stack.yaml, from whatever directory you run in.
+
 Site file: --site, $M20_SITE, or `site:` in m20_stack.yaml. Active robots: --robots,
 $M20_ROBOTS, or `robots:` in m20_stack.yaml (comma
 list), default all robots in the site.
@@ -70,7 +73,7 @@ from .sitefile import Site
 
 
 def _site_path(a):
-    return a.site or os.environ.get('M20_SITE') or stack.load().get('site')
+    return stack.path(a.site or os.environ.get('M20_SITE')) or stack.load().get('site')
 
 
 def _site(a):
@@ -128,10 +131,12 @@ def cmd_relocalize(a):
 
 def cmd_graph(a):
     site = _site(a)
-    out = a.out or os.path.join(tempfile.gettempdir(), 'm20_rmf')
+    out = stack.path(a.out) or os.path.join(tempfile.gettempdir(), 'm20_rmf')
     os.makedirs(out, exist_ok=True)
     nav, cfg = os.path.join(out, 'nav_graph.yaml'), os.path.join(out, 'fleet_config.yaml')
     site.write(nav, cfg)
+    for f in (out, nav, cfg):
+        stack.own(f)
     for w in site.warnings():
         print(f'WARNING: {w}')
     print(f'places {len(site.places)}, lanes {len(site.lanes)}, routes {list(site.routes)}, '
@@ -185,6 +190,7 @@ def _edit_site(a, change):
 
 def cmd_site_new(a):
     from . import siteedit
+    a.path = stack.path(a.path)
     if os.path.exists(a.path):
         sys.exit(f'{a.path} exists: edit it with m20 place/lane/route, or pick another name')
     if a.robot:
@@ -203,12 +209,17 @@ def cmd_site_new(a):
         ip, port = r['ip'], r.get('port')
     text = siteedit.new_site(rid, ip, port, pose, note)
     Site(yaml.safe_load(text), a.path)          # it must load before it is written
-    os.makedirs(os.path.dirname(os.path.abspath(a.path)), exist_ok=True)
+    root = stack.root()
+    if root and not a.path.startswith(root + os.sep):
+        print(f'WARNING: {a.path} is outside the repo ({root}): the stack cannot use it '
+              'from there, and in the devcontainer it is not on the host')
+    parent = os.path.dirname(a.path)
+    if not os.path.isdir(parent):
+        sys.exit(f'no folder {parent}: sites go in rmf/m20_rmf/sites/')
     with open(a.path, 'w') as f:
         f.write(text)
-    cfg = stack.find()
-    rel = os.path.relpath(os.path.abspath(a.path), os.path.dirname(os.path.abspath(cfg))) \
-        if cfg and os.path.exists(cfg) else a.path
+    stack.own(a.path)
+    rel = os.path.relpath(a.path, root) if root else a.path
     print(f'created {a.path}: robot {rid} ({ip}), home_{rid} at '
           f'({pose[0]:.3f}, {pose[1]:.3f}, {pose[2]:.3f})\n'
           f'next: set  site: {rel}  in m20_stack.yaml, restart the stack '
@@ -335,13 +346,16 @@ def cmd_map_save(a):
                  'its GRID_MAP (robot_relay odom/full) and the laptop bridge running?')
     g = got[-1]
     site_path = _site_path(a)
-    out_dir = a.out or os.path.join(os.path.dirname(os.path.abspath(site_path or '.')), '..', 'maps')
+    out_dir = stack.path(a.out) or \
+        os.path.join(os.path.dirname(os.path.abspath(site_path or '.')), '..', 'maps')
     os.makedirs(out_dir, exist_ok=True)
     name = a.name or f'map_{a.robot}_{time.strftime("%Y%m%d")}'
     path = os.path.normpath(os.path.join(out_dir, name + '.yaml'))
     o = g.info.origin.position
-    mapfile.save(path, g.info.width, g.info.height, g.info.resolution, [o.x, o.y, 0.0],
-                 list(g.data))
+    pgm = mapfile.save(path, g.info.width, g.info.height, g.info.resolution, [o.x, o.y, 0.0],
+                       list(g.data))
+    stack.own(path)
+    stack.own(pgm)
     print(f'saved {path} ({g.info.width}x{g.info.height} @ {g.info.resolution:.2f} m)')
     if site_path:
         rel = os.path.relpath(path, os.path.dirname(os.path.abspath(site_path)))
@@ -512,7 +526,7 @@ def main(argv=None):
 
 def _mission(a):
     from . import mission
-    args = ['m20_mission', a.file, '--site', _site_path(a) or '']
+    args = ['m20_mission', stack.path(a.file), '--site', _site_path(a) or '']
     r = ','.join(_robots(a) or [])
     if r:
         args += ['--robots', r]

@@ -1,0 +1,34 @@
+# Site file: every name a mission uses (places, lanes, routes, formations, zones,
+# targets, robots). Coordinates are in the robots' SLAM `map` frame, metres / radians.
+# Started with `m20 site new` (home = 834 pose, 2026-09-29 08:19:32 UTC). Add places with
+#   m20 place set <name> --from 834 --link <place>
+# and see sites/sim_lab.yaml for every section filled in (RUNBOOK section 6).
+
+map_name: L1
+# map: ../maps/<name>.yaml        # optional: saved SLAM map drawn under the GUI/RViz view
+
+# Waypoints RMF can route to: [x, y, yaw]. Each needs a lane (except a lone first one).
+places:
+  home_834: [-2, -6.533, 0.09]
+
+# Two-way chains of places; {path: [a, b, c], oneway: true} for one-way.
+lanes: []
+
+# Patrol routes: place sequences (m20 route set <name> a b c).
+routes: {}
+
+# Formations: slots are places; assign: nearest (min travel) or fixed (robot order).
+#   muster: {slots: [muster_1, muster_2], assign: nearest}
+formations: {}
+
+# Exploration: robots leave the graph at `entry`, walk their track, come back.
+#   new_area: {entry: gate, dwell: 1.0, tracks: [[[x, y, yaw], [x, y, yaw]]]}
+zones: {}
+
+# Inspection: go to `approach`, face `look_at`, wait `timeout` s for Clear / Threat.
+#   box1: {approach: gate, look_at: [x, y], dwell: 5.0, timeout: 20.0, label: suspicious box}
+targets: {}
+
+# Robots: vendor UDP address, home place (its RMF parking/charger), default patrol route.
+robots:
+  "834": {ip: 192.168.123.102, home: home_834}

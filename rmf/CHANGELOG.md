@@ -19,6 +19,13 @@ with several real robots at once.
   the area below the phase panel.
 - An inspection that ends without a verdict (timeout, stop) no longer leaves its
   Clear / Threat card up: it clears when the robot leaves INVESTIGATE, with a log line.
+- **Relative paths mean the repo root everywhere** (`stack.path`): `--site`, mission
+  files, `--out`, `site new`, `site:=` in both launch files, and the `ui`, `viz`,
+  `mission`, `mock_robot` and `fleet_adapter` executables. Before, they were relative to
+  the shell's directory, and the devcontainer terminals start in `/`, so
+  `m20 site new rmf/m20_rmf/sites/x.yaml` wrote to `/rmf/...` inside the container, not
+  the repo. Files the tools create in the repo (site new, map-save, graph --out) get the
+  folder's owner instead of root. The operator pane starts in `/repo`.
 - `m20 site new <file> --from <robot>`: starts a site file (the robot, its home at its
   current pose, every section commented) for the place/lane/route commands to grow.
 - `m20 capture` removed: `m20 place set <name> --from <robot>` writes the place into

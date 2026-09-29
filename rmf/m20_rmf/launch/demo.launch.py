@@ -20,7 +20,7 @@ def _nodes(context):
     from m20_rmf import stack
     from m20_rmf.sitefile import Site
     cfg = stack.load()
-    site = LaunchConfiguration('site').perform(context) or cfg.get('site', '')
+    site = stack.path(LaunchConfiguration('site').perform(context)) or cfg.get('site', '')
     if not site:
         raise RuntimeError('no site: pass site:= or set site: in m20_stack.yaml')
     robots = LaunchConfiguration('robots').perform(context) or \

@@ -409,7 +409,7 @@ def main(argv=None):
     a.ws_port = a.ws_port or a.http_port + 1      # the page connects to its port + 1
 
     cfg = stack.load()
-    site_path = a.site or cfg.get('site')
+    site_path = stack.path(a.site) or cfg.get('site')
     if not site_path:
         sys.exit('no site: pass --site or set site: in m20_stack.yaml')
     robots = [r for r in a.robots.split(',') if r] or stack.robots_for(site_path, cfg)

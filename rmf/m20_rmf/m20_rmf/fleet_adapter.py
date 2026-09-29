@@ -282,6 +282,8 @@ def main(argv=sys.argv):
     parser.add_argument('--out-dir', default=os.path.join(tempfile.gettempdir(), 'm20_rmf'))
     args = parser.parse_args(args_[1:])
 
+    from . import stack
+    args.site = stack.path(args.site)
     site = Site.load(args.site)
     for w in site.warnings():
         print(f'[site warning] {w}', file=sys.stderr)

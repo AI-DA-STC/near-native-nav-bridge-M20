@@ -26,7 +26,7 @@ def _nodes(context):
                            'the Foxy relays. export ROS_DOMAIN_ID=10 (or allow_robot_domain:=true).')
     from m20_rmf import stack
     cfg = stack.load()
-    site = LaunchConfiguration('site').perform(context) or cfg.get('site') or \
+    site = stack.path(LaunchConfiguration('site').perform(context)) or cfg.get('site') or \
         os.path.join(get_package_share_directory('m20_rmf'), 'sites', 'sim_lab.yaml')
     robots = LaunchConfiguration('robots').perform(context) or \
         ','.join(stack.robots_for(site, cfg) or [])

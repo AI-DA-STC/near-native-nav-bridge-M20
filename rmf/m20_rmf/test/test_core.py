@@ -355,3 +355,24 @@ def test_nearest_slot_assignment():
     f = Fleet(SIM_SITE, client=FakeRmf(), log=lambda *_: None)
     slots = f.assign_slots('muster', ['741', '665', '834'])
     assert slots == {'741': 'muster_3', '665': 'muster_1', '834': 'muster_2'}
+
+
+def test_paths_are_relative_to_the_stack_file(tmp_path, monkeypatch):
+    # Tools run from anywhere (the devcontainer terminals start in /): a relative path
+    # means the same as in m20_stack.yaml, unless it exists from the current directory.
+    from m20_rmf import stack
+    repo = tmp_path / 'repo'
+    (repo / 'sites').mkdir(parents=True)
+    (repo / 'm20_stack.yaml').write_text('site: sites/a.yaml\n')
+    (repo / 'sites' / 'a.yaml').write_text('places: {}\n')
+    elsewhere = tmp_path / 'elsewhere'
+    (elsewhere / 'sites').mkdir(parents=True)
+    (elsewhere / 'sites' / 'b.yaml').write_text('x: 1\n')
+    monkeypatch.setenv('M20_STACK', str(repo / 'm20_stack.yaml'))
+    monkeypatch.chdir(elsewhere)
+    assert stack.path('sites/a.yaml') == str(repo / 'sites' / 'a.yaml')      # repo-relative
+    assert stack.path('sites/new.yaml') == str(repo / 'sites' / 'new.yaml')  # to be created
+    assert stack.path('sites/b.yaml') == str(elsewhere / 'sites' / 'b.yaml')  # exists here
+    assert stack.path('/abs/x.yaml') == '/abs/x.yaml'
+    assert stack.path('') == '' and stack.path(None) is None
+    assert stack.load()['site'] == stack.path('sites/a.yaml')                # same rule

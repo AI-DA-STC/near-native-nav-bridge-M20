@@ -192,7 +192,7 @@ mission_cmd() {   # runs the missions started from the GUI; Ctrl-C = abort + sto
 }
 
 operator_cmd() {
-  in_container "$JAZZY" 'clear; echo "operator shell  |  m20 status  |  m20 go <robot> <place>  |  m20 mission <file>  |  m20 stop [robot]  (no drop)"; echo "Ctrl-C on a moving command stops that robot. GUI missions: Ctrl-C in the mission pane."; exec bash -i'
+  in_container "$JAZZY" 'cd /repo; clear; echo "operator shell  |  m20 status  |  m20 go <robot> <place>  |  m20 mission <file>  |  m20 stop [robot]  (no drop)"; echo "Ctrl-C on a moving command stops that robot. GUI missions: Ctrl-C in the mission pane."; echo "In /repo (the repo root): paths like rmf/m20_rmf/sites/x.yaml work as in m20_stack.yaml."; exec bash -i'
 }
 
 # --- actions ----------------------------------------------------------------------

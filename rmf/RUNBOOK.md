@@ -190,6 +190,8 @@ Information only: `m20 status`, `m20 pose 834`, `m20 events`, `m20 graph`,
 
 ### Make your own route (site editing)
 All from the operator pane, against the site in `m20_stack.yaml` (`--site` for another).
+Relative paths given to any `m20` command (or `site:=` of the launch files) are relative
+to the repo root, like the paths in `m20_stack.yaml`, from whatever directory you are in.
 Each edit prints a diff, is checked (the site must load, missions must still validate)
 and only then written; the file's comments stay. `--dry-run` shows the diff only.
 
