@@ -5,6 +5,7 @@
 # missions/test_834_corridor.yaml runs against either.
 
 map_name: L1
+map: ../maps/lab_834.yaml     # 834's SLAM map (m20 map-save 834 lab_834), drawn under the RViz markers
 
 places:
   home_834: [-2.092, -6.490, -0.05]

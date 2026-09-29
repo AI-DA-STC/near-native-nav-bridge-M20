@@ -10,6 +10,8 @@ list), default all robots in the site.
                                            <site>.captures.yaml, ready to paste)
     m20 relocalize 834 home_834            set SLAM pose at a place (or: 834 x y yaw)
     m20 graph                              write nav graph + fleet config, print summary
+    m20 map-save 834 [name]                save the robot's SLAM map (maps/<name>.yaml);
+                                           then add `map: ../maps/<name>.yaml` to the site
 
   Motion (each preempts the robot's current task unless --queue)
     m20 go 834 door_a [--yaw 1.57]         go to a place
@@ -136,6 +138,41 @@ def _run(a, fn):
         f.rmf.close()
 
 
+def cmd_map_save(a):
+    import rclpy
+    import rclpy.node
+    from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
+    from nav_msgs.msg import OccupancyGrid
+    from . import mapfile
+    if not rclpy.ok():
+        rclpy.init()
+    node = rclpy.node.Node('m20_map_save')
+    got = []
+    node.create_subscription(OccupancyGrid, f'/GRID_MAP_relayed_{a.robot}', got.append,
+                             QoSProfile(depth=1, reliability=ReliabilityPolicy.RELIABLE,
+                                        durability=DurabilityPolicy.TRANSIENT_LOCAL))
+    deadline = time.monotonic() + 20
+    while not got and time.monotonic() < deadline:
+        rclpy.spin_once(node, timeout_sec=0.2)
+    node.destroy_node()
+    if not got:
+        sys.exit(f'no map on /GRID_MAP_relayed_{a.robot} within 20 s: is the robot relaying '
+                 'its GRID_MAP (robot_relay odom/full) and the laptop bridge running?')
+    g = got[-1]
+    site_path = _site_path(a)
+    out_dir = a.out or os.path.join(os.path.dirname(os.path.abspath(site_path or '.')), '..', 'maps')
+    os.makedirs(out_dir, exist_ok=True)
+    name = a.name or f'map_{a.robot}_{time.strftime("%Y%m%d")}'
+    path = os.path.normpath(os.path.join(out_dir, name + '.yaml'))
+    o = g.info.origin.position
+    mapfile.save(path, g.info.width, g.info.height, g.info.resolution, [o.x, o.y, 0.0],
+                 list(g.data))
+    print(f'saved {path} ({g.info.width}x{g.info.height} @ {g.info.resolution:.2f} m)')
+    if site_path:
+        rel = os.path.relpath(path, os.path.dirname(os.path.abspath(site_path)))
+        print(f'add to {site_path}:  map: {rel}')
+
+
 def cmd_status(a):
     f = _fleet(a)
     time.sleep(1.5)
@@ -211,6 +248,7 @@ def main(argv=None):
     add('capture', cmd_capture, rob, (('name',), {}), (('--out',), {}))
     add('relocalize', cmd_relocalize, rob, (('where',), {'nargs': '+'}))
     add('graph', cmd_graph, (('--out',), {}))
+    add('map-save', cmd_map_save, rob, (('name',), {'nargs': '?'}), (('--out',), {}))
     add('go', lambda a: _run(a, lambda f: f.go_to(a.robot, a.place, yaw=a.yaw,
                                                    face='travel' if a.face_travel else 'place',
                                                    wait=not a.no_wait, queue=a.queue)),

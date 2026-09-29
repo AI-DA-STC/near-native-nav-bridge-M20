@@ -1,0 +1,63 @@
+Panels: []
+Visualization Manager:
+  Class: ""
+  Displays:
+    - Class: rviz_default_plugins/Grid
+      Name: Grid
+      Enabled: false
+      Cell Size: 1
+      Plane Cell Count: 40
+      Color: 60; 70; 90
+      Alpha: 0.35
+      Reference Frame: <Fixed Frame>
+      Value: false
+    - Class: rviz_default_plugins/Map
+      Name: Robot map
+      Enabled: true
+      Alpha: 0.85
+      Color Scheme: map
+      Draw Behind: true
+      Topic:
+        Depth: 1
+        Durability Policy: Transient Local
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /m20/map
+      Value: true
+    - Class: rviz_default_plugins/MarkerArray
+      Name: M20 fleet
+      Enabled: true
+      Topic:
+        Depth: 10
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /m20/viz
+      Value: true
+  Enabled: true
+  Global Options:
+    Background Color: 11; 18; 32
+    Fixed Frame: map
+    Frame Rate: 30
+  Name: root
+  Tools:
+    - Class: rviz_default_plugins/MoveCamera
+    - Class: rviz_default_plugins/Measure
+  Value: true
+  Views:
+    Current:
+      Class: rviz_default_plugins/TopDownOrtho
+      Name: Current View
+      Scale: __SCALE__
+      X: __X__
+      Y: __Y__
+      Angle: 0
+      Near Clip Distance: 0.01
+      Target Frame: <Fixed Frame>
+      Value: TopDownOrtho (rviz_default_plugins)
+    Saved: ~
+Window Geometry:
+  Height: 900
+  Width: 1400
+  Hide Left Dock: true
+  Hide Right Dock: true

@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>M20 Fleet</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <div class="brand"><span id="link" class="link" title="connection"></span>M20 Fleet</div>
+    <div class="mission-controls">
+      <select id="mission-file" aria-label="Mission"></select>
+      <button id="start" class="btn">Start</button>
+      <button id="abort" class="btn" hidden>Abort</button>
+    </div>
+    <button id="stop-all" class="btn stop" title="Stop every robot where it stands (no drop)">STOP ALL</button>
+  </header>
+
+  <main>
+    <section class="stage">
+      <div id="mission-name" class="mission-name"></div>
+      <div id="phase" class="phase">No mission running</div>
+      <div id="elapsed" class="elapsed"></div>
+    </section>
+
+    <section id="actions" class="actions"></section>
+
+    <section id="robots" class="robots"></section>
+
+    <section id="signals" class="signals" hidden></section>
+
+    <ol id="timeline" class="timeline"></ol>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>

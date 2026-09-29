@@ -1,31 +1,39 @@
-# The visitor demo: patrol -> form up -> explore new area -> inspect box -> form up
-# -> resume patrol. Names refer to the site file passed with --site.
+# The visitor demo: patrol -> regroup -> explore the new area -> investigate a suspicious
+# item -> regroup -> resume patrols. Operator moments are GUI buttons (or
+# `m20 trigger <event>`); `phase` lines are what the GUI shows big.
 #
-#   ros2 run m20_rmf m20 mission missions/visitor_demo.yaml --site sites/sim_lab.yaml
-#   (add --robots 834 to rehearse with one dog; --check to validate only)
+#   GUI: pick "visitor_demo", Start       CLI: m20 mission /repo/rmf/m20_rmf/missions/visitor_demo.yaml
+#   (add --robots 834 on the CLI to rehearse with one dog; robots not active are substituted)
 name: visitor_demo
+description: Patrol, regroup, explore, investigate a suspicious item, regroup, patrol.
+
+# Buttons the GUI offers for the whole mission. Pressing one early is fine: the mission
+# uses it when it gets there. `data` travels with the signal (see ${suspicious.target}).
+signals:
+  - {event: suspicious, label: "Suspicious item at box 1", data: {target: box1}}
+
 steps:
-  - log: "Phase 1: individual patrols"
+  - phase: "Patrolling"
   - patrol: {}                                  # every robot on its own route, background
-  - wait_trigger: {prompt: "Patrolling. Start the scenario?", event: start, seconds: 600}
+  - wait_trigger: {event: start, label: "Begin scenario", prompt: "Robots on patrol. Begin the scenario?"}
 
-  - log: "Phase 2: form up"
-  - form_up: {formation: muster}                # cancels patrols; barrier until all in slots
-  - parallel:
-      - signal: {event: formed_up}
-      - hold: {seconds: 3}
+  - phase: "Regrouping"
+  - form_up: {formation: muster}                # cancels patrols; waits until all are in place
+  - hold: {seconds: 2}
 
-  - log: "Phase 3: explore the new area"
+  - phase: "Exploring the new area"
   - explore: {zone: new_area}                   # one track per robot, back to the gate
 
-  - log: "Phase 4: investigate the suspicious box"
+  - phase: "Awaiting report"
+  - wait_trigger: {event: suspicious, label: "Suspicious item at box 1", prompt: "Area explored. Anything suspicious?"}
+
+  - phase: "Investigating suspicious item"
   - parallel:
-      - inspect: {target: box1, robot: "834"}
-      - hold: {robots: ["741", "665"], seconds: 20}   # the others stand by
+      - inspect: {target: "${suspicious.target}", robot: "834"}   # verdict from the GUI or the vision model
+      - hold: {robots: ["741", "665"], seconds: 20}              # the others stand by
 
-  - log: "Phase 5: regroup"
+  - phase: "Regrouping"
   - form_up: {formation: muster}
-  - signal: {event: regrouped}
 
-  - log: "Phase 6: resume patrols"
+  - phase: "Resuming patrols"
   - patrol: {}

@@ -2,6 +2,7 @@
 
 > **[RUNBOOK.md](RUNBOOK.md)** — setup, running, stopping, building demos, troubleshooting.  
 > **[CHANGELOG.md](CHANGELOG.md)** — everything changed since branching off `dev-nav-relay`.  
+> **[SETUP.md](SETUP.md)** — reproducing this setup (Open-RMF install, containers, keys, robot profile).  
 > Work in progress; this README is the design and reference detail.
 
 Open-RMF orchestration for the DeepRobotics M20s: an EasyFullControl fleet adapter,

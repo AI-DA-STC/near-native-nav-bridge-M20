@@ -1,0 +1,10 @@
+image: lab_834.pgm
+mode: trinary
+resolution: 0.10000000149011612
+origin:
+- -8.6
+- -14.4
+- 0.0
+negate: 0
+occupied_thresh: 0.65
+free_thresh: 0.196

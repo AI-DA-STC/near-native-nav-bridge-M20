@@ -191,13 +191,21 @@ class M20Robot:
 
     def status(self):
         pose = self.client.pose
+        action = None
         with self.lock:
-            if self.action is not None:
+            if self.action is not None and not self.action.done:
                 activity = f'action:{self.action.category}'
+                try:
+                    action = self.action.describe()
+                except Exception:  # noqa: BLE001 - display only
+                    action = {'category': self.action.category}
             elif self.execution is not None:
                 activity = 'navigate'
             else:
                 activity = 'idle'
+        g = self.client.goal
+        goal = [round(g.x, 3), round(g.y, 3), round(g.yaw, 3)] \
+            if g is not None and activity != 'idle' else None
         return {
             'robot': self.id,
             'pose': [round(v, 3) for v in pose] if pose else None,
@@ -212,6 +220,8 @@ class M20Robot:
             'registered': self.update_handle is not None,
             'activity': activity,
             'goal_distance': self.client.goal_distance(),
+            'goal': goal,
+            'action': action,
         }
 
 

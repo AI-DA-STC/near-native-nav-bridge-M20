@@ -85,17 +85,25 @@ scripts/m20_stack.sh up          # on the host, from the repo root
 ```
 
 A tmux window opens with one pane per process (click to focus; `Ctrl-b d` detaches,
-`scripts/m20_stack.sh attach` returns):
+`scripts/m20_stack.sh attach` returns). It also grants the containers access to your
+display (for RViz) and opens RViz and the demo console (§5).
 
 | Pane | What it is | Healthy when |
 |---|---|---|
-| `relay <id>` | SSH → robot container → relay (`robot_relay: odom` = odometry only) | prints `Relay: /ODOM -> /ODOM_relayed_<id>` |
+| `relay <id>` | SSH → robot → relay container → odometry + SLAM-map relays | `Relay: /GRID_MAP -> …` and `Relay: /ODOM -> /ODOM_relayed_<id>` |
 | `bridge` | Foxy: rebuild if needed, `shm_clean`, laptop bridge | `robots [...], domain 0 -> 20 ...`, then `Relay:` lines (2 shared + 4 per robot) |
 | `rmf` | Jazzy: rebuild if needed, Open-RMF + adapter | `[<id>] registered with RMF at (x, y)` |
 | `events` | live log of every command the adapter sends | — |
+| `ui` | demo console (http://localhost:8080) + RViz markers + RViz | `m20 ui: http://localhost:8080` |
 | `operator` | shell for `m20 …` | prompt |
 
-Relays already running by hand? `M20_RELAY=none scripts/m20_stack.sh up`.
+**Relays on their own:** `scripts/m20_stack.sh relay` starts only the robots' relays (own
+tmux session `m20-relays`); a later `up` leaves them alone. No SSH by hand is needed:
+the robots are powered off daily, so it starts the relay container if it is stopped,
+recreates it from the robot's `~/docker-compose.yml` if it is gone, and installs the
+relay DDS profile from `robot/fastdds_relay.xml` (with the robot's IP) only if the
+container has none. Relays already running by hand? `M20_RELAY=none scripts/m20_stack.sh up`.
+No RViz wanted? `M20_RVIZ=false`.
 
 **Check in the operator pane before any motion:**
 ```bash
@@ -107,7 +115,34 @@ up with the controller first.
 
 ---
 
-## 5. Operate
+## 5. Demo console (GUI) and RViz
+
+Open **http://localhost:8080** (or `http://<laptop ip>:8080` from a tablet on the Wi-Fi).
+
+| Area | Shows / does |
+|---|---|
+| header | mission picker + **Start** (runs it as `m20 mission`), **Abort** (stops it and every robot), **STOP ALL** (no-drop stop) |
+| stage | mission name, the current **phase** in large type, elapsed time |
+| action card | only when needed: the mission's question with its button (e.g. *Begin scenario*, *Suspicious item at box 1*), or an inspection waiting for a verdict (**Clear** / **Threat**) |
+| robot cards | one per robot: **mode** (colour + word), one detail line (route, zone, target), battery, per-robot **Stop** |
+| signal row | signals the mission offers at any time; pressing one early is fine, it shows **queued** until the mission uses it |
+| log | the last few phases, signals, verdicts and stops |
+
+Modes (same colours in RViz): **PATROL** · **REGROUP** (forming up) · **EXPLORE** ·
+**INVESTIGATE** (+ "awaiting verdict") · **RETURN** · **MOVE** · **HOLD** · **IDLE** ·
+**SITTING** · **STOPPED** · **OFFLINE**. They come from the label of each robot's RMF task,
+computed once by the status hub (`/m20/fleet_view`) for both GUI and RViz.
+
+**RViz** (opened by the `ui` pane) draws, over the robot's **SLAM map**: the site's lanes
+and places, formation slots, exploration tracks, targets, and each robot oriented in its
+mode colour with its remaining path. The map is the site's saved map (`map:` in the site
+file) or else the live relayed one. Save a map with `m20 map-save 834 <name>` (needs the
+relay and bridge up), then add the printed `map:` line to the site file.
+
+The GUI's buttons are the only way it moves robots: **Start** runs the chosen mission;
+everything else stops, signals or answers. Start a mission only with someone by the robots.
+
+## 6. Operate from the terminal
 
 Always try one short step before a whole mission.
 
@@ -142,15 +177,15 @@ Stopping the RMF launch does **not** stop a robot (it keeps its last goal) — c
 
 ---
 
-## 6. Stop the stack
+## 7. Stop the stack
 ```bash
-scripts/m20_stack.sh down        # Ctrl-C to every pane, then closes the session
+scripts/m20_stack.sh down        # Ctrl-C to every pane (relays too), then closes the sessions
 ```
 Robots keep standing; sit them with the controller.
 
 ---
 
-## 7. Build a demo
+## 8. Build a demo
 
 Files:
 
@@ -191,13 +226,15 @@ Building blocks (runnable examples in `missions/examples.yaml`, full scenario in
 | inspect | `targets` | `inspect: {target, robot}` |
 | turn / wait | — | `turn_to`, `hold` |
 | flow | — | `parallel`, `repeat`, `wait_trigger`, `sleep`, `log`, `signal` |
+| what the GUI shows big | — | `phase: "Exploring the new area"` |
+| operator moments | mission header `signals: [{event, label, data}]` | `wait_trigger: {event, label, prompt}`; later steps can use the signal's data as `${event.key}` |
 
 New behaviours are code: robot-side actions in `rmf/m20_rmf/m20_rmf/actions.py`,
 mission steps in `primitives.py` (both documented at the top).
 
 ---
 
-## 8. Without the launcher (manual)
+## 9. Without the launcher (manual)
 
 ```bash
 # robot relay (laptop terminal)
@@ -219,7 +256,7 @@ m20 status
 
 ---
 
-## 9. Troubleshooting
+## 10. Troubleshooting
 
 | Symptom | Cause | Fix |
 |---|---|---|
@@ -234,17 +271,22 @@ m20 status
 | Robot won't walk, `asleep: true` | sitting | stand it up with the controller |
 | Robot ping 0.1–1.6 s, SSH resets | full relay set loading its Wi-Fi | `robot_relay: odom` |
 | `localized: false` while RViz looks right | the UDP `Location` flag's meaning is unconfirmed | trust RViz for now |
+| RViz: `could not connect to display` / "Authorization required" | X access for root containers lost after reboot | `xhost +SI:localuser:root` (the launcher does it on `up`) |
+| GUI page loads but stays empty | the `ui` pane is not running (or port 8080 taken) | check the `ui` pane; `pkill -f lib/m20_rmf/ui` in the Jazzy container |
+| RViz has no map | robot relay without the map (`robot_relay: odom` includes it) or no `map:` in the site | `m20 map-save …` and add `map:` |
+| `relay <id>` pane: container not running | robot powered off and back on | the relay command now starts / recreates it; rerun `scripts/m20_stack.sh relay` |
 | 3-robot site runs with one robot | CLI/launch robots default to `m20_stack.yaml` only with its own site | pass `--robots` / `robots:=` |
 
 ---
 
-## 10. Reference
+## 11. Reference
 
 | Item | Value |
 |---|---|
 | Domains | robots/relays 0 · Open-RMF + tools 20 · mock rehearsal 42 |
 | Vendor UDP | robot `:30000`, JSON over a 16-byte header (`protocol.py`) |
 | Task-state websocket | `ws://localhost:7878` (monitor) |
-| ROS topics | `/m20/events`, `/m20/robot_status`, `/m20/task_states`, `/m20/stop`, `/m20/trigger`, `/m20/inspect/request`, `/m20/inspect/result` |
+| ROS topics | `/m20/events`, `/m20/robot_status`, `/m20/task_states`, `/m20/mission`, `/m20/fleet_view`, `/m20/viz`, `/m20/map`, `/m20/stop`, `/m20/trigger`, `/m20/inspect/request`, `/m20/inspect/result` |
+| Demo console | http://localhost:8080 (websocket :8081) |
 | Tests | `cd /repo/rmf/m20_rmf && python3 -m pytest -q test` (Jazzy devcontainer) |
 | Robot container | `user-nav_cmd_bridge-1`, workspace `/root/ros2_ws` |

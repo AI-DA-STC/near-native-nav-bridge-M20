@@ -23,6 +23,17 @@ from std_msgs.msg import String
 TERMINAL = {'completed', 'failed', 'canceled', 'killed', 'skipped'}
 
 
+def parse_trigger(data):
+    """'/m20/trigger' payload -> {'event': name, ...}; plain strings are the event name."""
+    try:
+        d = json.loads(data)
+        if isinstance(d, dict) and 'event' in d:
+            return d
+    except ValueError:
+        pass
+    return {'event': str(data).strip()}
+
+
 class TaskError(RuntimeError):
     pass
 
@@ -45,6 +56,16 @@ class RmfClient:
         self.node.create_subscription(String, '/m20/robot_status', self._on_robot_status, 10)
         self.stop_pub = self.node.create_publisher(String, '/m20/stop', 10)
         self.trigger_pub = self.node.create_publisher(String, '/m20/trigger', 10)
+        # Operator signals are buffered, so one sent before the mission reaches its
+        # wait_trigger (e.g. "suspicious item" pressed early) is not lost.
+        self.triggers = []          # [(monotonic time, {'event': name, ...payload})]
+        self.on_trigger = None      # callback after a signal arrives (mission state)
+        self.node.create_subscription(String, '/m20/trigger', self._on_trigger, 10)
+        # Mission state for the status hub / GUI: latched, last value only.
+        self.mission_pub = self.node.create_publisher(
+            String, '/m20/mission',
+            QoSProfile(depth=1, reliability=ReliabilityPolicy.RELIABLE,
+                       durability=DurabilityPolicy.TRANSIENT_LOCAL))
         self.events_pub = self.node.create_publisher(String, '/m20/events', 50)
         self.inspect_result_pub = self.node.create_publisher(String, '/m20/inspect/result', 10)
 
@@ -75,6 +96,43 @@ class RmfClient:
             with self._lock:
                 self.tasks[tid] = data
                 self._lock.notify_all()
+
+    def _on_trigger(self, msg):
+        with self._lock:
+            self.triggers.append((time.monotonic(), parse_trigger(msg.data)))
+            del self.triggers[:-50]
+            self._lock.notify_all()
+        if self.on_trigger:
+            self.on_trigger()
+
+    def pending_triggers(self, since):
+        """Events received after `since` and not yet consumed by a wait."""
+        with self._lock:
+            return [p.get('event') for t, p in self.triggers if t >= since]
+
+    def take_trigger(self, event, since):
+        """Oldest unconsumed trigger `event` received after `since`; removes it."""
+        with self._lock:
+            for i, (t, payload) in enumerate(self.triggers):
+                if t >= since and payload.get('event') == event:
+                    del self.triggers[i]
+                    return payload
+        return None
+
+    def wait_trigger(self, event, since, timeout=None, cancelled=lambda: False):
+        deadline = None if timeout is None else time.monotonic() + timeout
+        with self._lock:
+            while True:
+                for i, (t, payload) in enumerate(self.triggers):
+                    if t >= since and payload.get('event') == event:
+                        del self.triggers[i]
+                        return payload
+                if cancelled():
+                    return None
+                left = None if deadline is None else deadline - time.monotonic()
+                if left is not None and left <= 0:
+                    return None
+                self._lock.wait(0.5 if left is None else min(left, 0.5))
 
     def _on_robot_status(self, msg):
         with self._lock:

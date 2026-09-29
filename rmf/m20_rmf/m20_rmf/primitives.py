@@ -61,6 +61,21 @@ class Fleet:
         self.log = log
         self.owned = {r: [] for r in self.robots}   # task ids we started, per robot
         self.background = []                        # task ids started with wait=False
+        self.mission = {}                           # published on /m20/mission
+        self.since = time.monotonic()               # triggers before this are ignored
+        self.aborted = threading.Event()
+
+    def publish_mission(self, **changes):
+        """Update and publish the mission state the status hub / GUI show."""
+        from std_msgs.msg import String
+        self.mission.update(changes)
+        self.mission['robots'] = self.robots
+        self.mission['queued'] = self.rmf.pending_triggers(self.since) \
+            if hasattr(self.rmf, 'pending_triggers') else []
+        try:
+            self.rmf.mission_pub.publish(String(data=json.dumps(self.mission)))
+        except Exception:  # noqa: BLE001 - display only
+            pass
 
     # --------------------------------------------------------------- helpers
     def _robots(self, robots):
@@ -316,42 +331,49 @@ class Fleet:
     def signal(self, event, data=None):
         self.rmf.event(f'signal {event}', signal=event, data=data)
 
-    def trigger(self, event='go'):
+    def trigger(self, event='go', **data):
         from std_msgs.msg import String
-        n = self.rmf.publish_once(self.rmf.trigger_pub, String(data=event))
+        body = json.dumps({'event': event, **data}) if data else event
+        n = self.rmf.publish_once(self.rmf.trigger_pub, String(data=body))
         self._say(f'trigger "{event}" sent to {n} listener(s)')
 
-    def wait_trigger(self, prompt=None, event=None, seconds=None):
-        """Mission pause: ENTER on the console, a /m20/trigger event, or a timer."""
+    def wait_trigger(self, prompt=None, event=None, seconds=None, label=None):
+        """Mission pause until an operator signal, ENTER on the console, or a timer.
+
+        `event`: a /m20/trigger name (the GUI shows `label` or `prompt` as its button;
+        `m20 trigger <event>` works too). Signals sent earlier in the mission count:
+        they are buffered. Returns the signal's payload (dict) or None on timeout/ENTER.
+        """
         if seconds is not None and event is None and prompt is None:
             self._say(f'waiting {seconds}s')
             time.sleep(float(seconds))
-            return
-        done = threading.Event()
-        if event:
-            from std_msgs.msg import String
-
-            def cb(msg):
-                try:
-                    data = json.loads(msg.data).get('event', msg.data)
-                except (ValueError, AttributeError):
-                    data = msg.data
-                if data == event:
-                    done.set()
-            sub = self.rmf.node.create_subscription(String, '/m20/trigger', cb, 10)
+            return None
+        entered = threading.Event()
         if prompt is not None:
             def console():
                 try:
                     input(f'>>> {prompt} [ENTER] ')
                 except EOFError:
                     return
-                done.set()
+                entered.set()
             threading.Thread(target=console, daemon=True).start()
-        self._say(f'waiting for {"trigger " + event if event else "operator"}'
+        self._say(f'waiting for {"signal " + event if event else "operator"}'
                   f'{f" (max {seconds}s)" if seconds else ""}')
-        done.wait(None if seconds is None else float(seconds))
-        if event:
-            self.rmf.node.destroy_subscription(sub)
+        self.publish_mission(waiting={'event': event, 'prompt': prompt or '',
+                                      'label': label or prompt or event or 'Continue',
+                                      'seconds': seconds, 'since': time.time()})
+        try:
+            if event:
+                payload = self.rmf.wait_trigger(
+                    event, self.since, None if seconds is None else float(seconds),
+                    cancelled=lambda: entered.is_set() or self.aborted.is_set())
+                if payload is not None:
+                    self._say(f'signal {event} received')
+                return payload
+            entered.wait(None if seconds is None else float(seconds))
+            return None
+        finally:
+            self.publish_mission(waiting=None)
 
     def wait_tasks(self, timeout=None):
         tids, self.background = self.background, []

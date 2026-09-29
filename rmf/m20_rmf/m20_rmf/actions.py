@@ -71,6 +71,10 @@ class Action:
     def run(self):
         raise NotImplementedError
 
+    def describe(self):
+        """What the GUI / RViz show for this action: kind, detail, remaining path."""
+        return {'category': self.category, 'detail': '', 'path': []}
+
     # ------------------------------------------------------------ lifecycle
     def start(self):
         threading.Thread(target=self._main, daemon=True, name=f'{self.robot.id}-{self.category}').start()
@@ -165,6 +169,9 @@ class GotoPose(Action):
             raise ValueError('needs pose or place')
         self.target = self.resolve(self.desc.get('pose', self.desc.get('place')))
 
+    def describe(self):
+        return {'category': self.category, 'detail': '', 'path': [list(self.target)]}
+
     def run(self):
         self.announce_path([self.target])
         self.underway(f'going to {self.target}')
@@ -184,6 +191,12 @@ class Waypoints(Action):
     def exit_pose(self):
         return None
 
+    _index = 0
+
+    def describe(self):
+        return {'category': self.category, 'detail': '',
+                'path': [list(p) for p in self.path[self._index:]]}
+
     def validate(self):
         self.path = self.poses()
         if not self.path:
@@ -194,6 +207,7 @@ class Waypoints(Action):
         self.announce_path(self.path * loops)
         for lap in range(loops):
             for i, p in enumerate(self.path):
+                self._index = i
                 self.underway(f'{self.category} {i + 1}/{len(self.path)} (lap {lap + 1}/{loops})')
                 self.goto(p)
                 self.bus.event(self.robot.id, f'{self.category} reached {i + 1}/{len(self.path)}',
@@ -224,6 +238,11 @@ class Explore(Waypoints):
     def dwell(self):
         return float(self.desc.get('dwell', self.zone['dwell']))
 
+    def describe(self):
+        d = super().describe()
+        d['detail'] = self.desc.get('zone', '')
+        return d
+
     def exit_pose(self):
         ex = self.zone.get('exit')
         return self.site.place(ex) if ex else None
@@ -236,6 +255,12 @@ class Inspect(Action):
             raise ValueError(f'unknown target {name!r}')
         self.name = name
         self.target = self.site.targets[name]
+        self.awaiting_verdict = False
+
+    def describe(self):
+        path = [list(self.target['standoff'])] if self.target['standoff'] else []
+        return {'category': self.category, 'detail': self.name, 'path': path,
+                'awaiting_verdict': self.awaiting_verdict}
 
     def run(self):
         t = self.target
@@ -265,7 +290,11 @@ class Inspect(Action):
                 return json.loads(data).get('id') in (req_id, '*', 'latest')
             except ValueError:
                 return False
-        result = self.bus.wait_for(match, timeout, lambda: self.cancelled)
+        self.awaiting_verdict = True
+        try:
+            result = self.bus.wait_for(match, timeout, lambda: self.cancelled)
+        finally:
+            self.awaiting_verdict = False
         self.check()
         self.sleep(dwell - (time.monotonic() - started))
         self.bus.event(self.robot.id, f'inspect result for {self.name}: '

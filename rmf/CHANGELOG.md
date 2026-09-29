@@ -2,13 +2,42 @@
 
 Open-RMF orchestration for the DeepRobotics M20 fleet. Branched off `dev-nav-relay` at
 `6d93419` ("updated readm") on 2026-09-28. Everything below is unreleased and still
-changing; see [RUNBOOK.md](RUNBOOK.md) for how to use it.
+changing; see [RUNBOOK.md](RUNBOOK.md) for how to use it and [SETUP.md](SETUP.md) for
+reproducing the environment (Open-RMF installation, containers, keys, robot profile)
+on another laptop.
 
 Scope so far: 11 commits, 43 files, ~5,200 lines added. Tested on mock robots throughout
 and on robot **834** (single robot, standing, ~2 m corridor). Not yet run on 741 / 665 or
 with several real robots at once.
 
 ## Added
+
+### Demo console and RViz (2026-09-29)
+- **Web GUI** (`m20_rmf ui`, http://localhost:8080): mission picker / Start / Abort,
+  **STOP ALL** and per-robot Stop (no drop), the mission **phase** in large type, one
+  call-to-action card only when the mission waits for the operator or an inspection needs
+  a verdict (Clear / Threat), one card per robot with a single colour-coded **mode**
+  (PATROL, REGROUP, EXPLORE, INVESTIGATE, RETURN, MOVE, HOLD, IDLE, SITTING, STOPPED,
+  OFFLINE), mission signal buttons (queued if pressed early), a short log.
+- **Status hub** (in the GUI process, `view.py`): one fleet view from adapter status, RMF
+  task labels, mission state and inspections, published on `/m20/fleet_view`; the GUI
+  and RViz both render it. Short gaps between consecutive tasks keep the last mode.
+- **RViz** (`m20_rmf viz` + `rviz/m20_demo.rviz`, `demo.launch.py`): site lanes, places,
+  formation slots, exploration tracks, targets, and each robot oriented in its mode colour
+  with its remaining path, **over the robot's SLAM map** (`/m20/map`: the site's saved
+  `map:` or the live relayed map). `m20 map-save <robot> <name>` saves a map
+  (`mapfile.py`, ROS map_server format); `maps/lab_834.yaml` saved from 834.
+- **Missions:** `phase:` step; mission header `signals:` (GUI buttons, with data);
+  `wait_trigger` signals are buffered (pressing early works); later steps can use a
+  signal's data as `${event.key}`; missions publish their state on `/m20/mission`.
+  `visitor_demo.yaml` rewritten as the scripted story with phases and operator signals.
+- **Adapter** status now carries each robot's current goal and action (kind, detail,
+  remaining path, awaiting-verdict).
+- **Launcher:** `ui` pane (GUI + RViz), `scripts/m20_stack.sh relay` (relays only),
+  relay default = odometry **+ SLAM map**; the relay command starts the robot's relay
+  container if stopped, recreates it from `~/docker-compose.yml` if gone, and installs the
+  relay profile only if missing; X access for RViz granted on `up`.
+- `rmf/SETUP.md`: reproducing this setup on another laptop.
 
 ### Open-RMF stack for the laptop (`rmf/m20_rmf`, ROS 2 Jazzy) — `6599c02`
 - **Fleet adapter** (`fleet_adapter.py`, Open-RMF EasyFullControl) driving M20s over the
@@ -104,6 +133,9 @@ with several real robots at once.
 - Root `README.md`: laptop-side localization notes, relay profile notes, pointer to `rmf/`.
 
 ## Fixed
+- (2026-09-29) GUI process ignored SIGTERM and kept its ports; tmux session names
+  prefix-matched (`m20` vs `m20-relays`); map loader read unknown cells as free
+  (now map_server's `free_thresh: 0.196`).
 - **Jazzy crashing the Foxy relays** (`Deserialization of data failed` → `bad_alloc`):
   Jazzy's hidden `ros_discovery_info` uses 16-byte GIDs (Iron+), Foxy expects 24.
   `rmf/fastdds_jazzy.xml` puts it in its own DDS partition; UDP-only because the Foxy and
@@ -147,4 +179,5 @@ with several real robots at once.
   revisiting with the team.
 - Object recognition for `inspect` is a hook only (`/m20/inspect/request` → result).
 - `m20 relocalize` (Jazzy) cannot reach robots without a Foxy forwarder.
-- No GUI operator console yet (planned: STOP button, status, go/mission buttons).
+- GUI/RViz tested end to end on three mock robots and read-only on 834 (sitting); not yet
+  with 834 moving under a GUI-started mission.

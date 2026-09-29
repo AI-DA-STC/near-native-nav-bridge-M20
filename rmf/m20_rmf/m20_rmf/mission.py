@@ -16,7 +16,18 @@ primitives.py), plus these control steps:
     - parallel: [step, step, ...]         run concurrently, continue when all finish
     - repeat: {times: 3, steps: [...]}    loop
     - log: "text"                         narrate to console + /m20/events
+    - phase: "Patrolling"                 the stage shown big in the GUI (also logged)
     - sleep: 5                            plain delay
+
+Operator signals: `wait_trigger: {event: suspicious, label: "Suspicious item"}` pauses
+until the GUI button / `m20 trigger suspicious` (signals sent earlier in the mission
+count). A signal may carry data, used by later steps as `${event.key}`:
+
+    signals:                                  # buttons the GUI offers during the mission
+      - {event: suspicious, label: "Suspicious item at box 1", data: {target: box1}}
+    steps:
+      - wait_trigger: {event: suspicious, label: "Report suspicious item"}
+      - inspect: {target: "${suspicious.target}", robot: "834"}
 
 `robot` / `robots` may name robots that are not active in this run (e.g. a 3-robot
 mission tested with one dog): missing robots are dropped from lists, and a single
@@ -33,7 +44,7 @@ import yaml
 
 from .sitefile import Site
 
-CONTROL = {'parallel', 'repeat', 'log', 'sleep'}
+CONTROL = {'parallel', 'repeat', 'log', 'sleep', 'phase'}
 ROBOT_ARGS = {'robot', 'robots'}
 
 
@@ -60,6 +71,21 @@ class Runner:
     def __init__(self, fleet, log=print):
         self.fleet = fleet
         self.log = log
+        self.signals = {}           # event -> payload of the last signal received
+
+    def _resolve(self, value):
+        """Replace '${event.key}' strings with data from received signals."""
+        if isinstance(value, dict):
+            return {k: self._resolve(v) for k, v in value.items()}
+        if isinstance(value, list):
+            return [self._resolve(v) for v in value]
+        if isinstance(value, str) and value.startswith('${') and value.endswith('}'):
+            event, _, key = value[2:-1].partition('.')
+            payload = self.signals.get(event)
+            if payload is None or (key and key not in payload):
+                raise MissionError(f'{value}: no signal {event!r} with {key!r} received yet')
+            return payload[key] if key else payload
+        return value
 
     # Resolve robot arguments against the robots active in this run.
     def _fit_robots(self, name, kwargs):
@@ -85,6 +111,9 @@ class Runner:
             prefix = '  ' * depth
             if name == 'log':
                 self.fleet._say(str(args))
+            elif name == 'phase':
+                self.fleet._say(str(args))
+                self.fleet.publish_mission(phase=str(args))
             elif name == 'sleep':
                 time.sleep(float(args))
             elif name == 'parallel':
@@ -111,11 +140,14 @@ class Runner:
                 if fn is None or name.startswith('_'):
                     raise MissionError(f'unknown primitive {name!r}')
                 kwargs = dict(args or {}) if isinstance(args, dict) else {}
-                kwargs = self._fit_robots(name, kwargs)
+                kwargs = self._fit_robots(name, self._resolve(kwargs))
                 if kwargs is None:
                     continue
                 self.log(f'{prefix}[mission] step: {name} {kwargs}')
-                fn(**kwargs)
+                result = fn(**kwargs)
+                if name == 'wait_trigger' and isinstance(result, dict):
+                    self.signals[result.get('event', '')] = result
+                    self.fleet.publish_mission(used=sorted(self.signals))
 
 
 def check(mission, site):
@@ -141,7 +173,10 @@ def check(mission, site):
                 continue
             elif isinstance(args, dict):
                 for key, table in lookups.items():
-                    if key in args and args[key] not in table:
+                    v = args.get(key)
+                    if isinstance(v, str) and v.startswith('${'):
+                        continue            # filled from a signal at run time
+                    if key in args and v not in table:
                         problems.append(f'{name}: unknown {key} {args[key]!r}')
                 for key in ROBOT_ARGS & args.keys():
                     v = args[key]
@@ -181,14 +216,26 @@ def main(argv=None):
     robots = [r for r in a.robots.split(',') if r] or None
     fleet = Fleet(site, robots=robots)
     signal.signal(signal.SIGTERM, _term)   # after rclpy.init, which installs its own
-    fleet._say(f'mission {mission.get("name", a.mission)} start, robots {fleet.robots}')
+    name = mission.get('name', a.mission)
+    fleet._say(f'mission {name} start, robots {fleet.robots}')
+    fleet.rmf.on_trigger = fleet.publish_mission        # show queued signals in the GUI
+    fleet.publish_mission(name=name, file=a.mission, state='running', started=time.time(),
+                          phase='', waiting=None, signals=mission.get('signals') or [],
+                          description=mission.get('description', ''))
     try:
         Runner(fleet).run_steps(mission['steps'])
         fleet._say('mission complete')
+        fleet.publish_mission(state='complete', waiting=None, ended=time.time())
     except KeyboardInterrupt:
+        fleet.aborted.set()
         fleet._say('mission aborted by operator: stopping all robots')
+        fleet.publish_mission(state='aborted', waiting=None, ended=time.time())
         fleet.stop()
+    except Exception as e:  # noqa: BLE001 - shown in the GUI, then re-raised
+        fleet.publish_mission(state='failed', error=str(e), waiting=None, ended=time.time())
+        raise
     finally:
+        time.sleep(0.3)     # let the last mission state go out
         fleet.rmf.close()
 
 

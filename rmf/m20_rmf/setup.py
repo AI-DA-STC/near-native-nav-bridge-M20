@@ -15,6 +15,8 @@ setup(
         ('share/' + package_name + '/sites', glob('sites/*.yaml')),
         ('share/' + package_name + '/missions', glob('missions/*.yaml')),
         ('share/' + package_name + '/rviz', glob('rviz/*.rviz')),
+        ('share/' + package_name + '/ui', glob('ui/*')),
+        ('share/' + package_name + '/maps', glob('maps/*')),
     ],
     install_requires=['setuptools'],
     zip_safe=True,
@@ -30,6 +32,8 @@ setup(
             'mock_robot = m20_rmf.mock_robot:main',
             'mission = m20_rmf.mission:main',
             'm20 = m20_rmf.cli:main',
+            'ui = m20_rmf.ui:main',
+            'viz = m20_rmf.viz:main',
         ],
     },
 )

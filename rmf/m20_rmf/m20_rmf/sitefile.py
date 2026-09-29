@@ -17,6 +17,7 @@ See sites/example_lab.yaml for the annotated schema.
 import copy
 import itertools
 import math
+import os
 
 import yaml
 
@@ -70,6 +71,10 @@ class Site:
         self.path = path
         self.raw = data
         self.map_name = str(data.get('map_name', 'L1'))
+        # Optional saved SLAM map (.yaml, from `m20 map save`), drawn under the markers.
+        m = data.get('map')
+        self.map_file = None if not m else m if os.path.isabs(m) or not path else \
+            os.path.join(os.path.dirname(os.path.abspath(path)), m)
         self.places = {}
         self.place_flags = {}
         for name, v in (data.get('places') or {}).items():
