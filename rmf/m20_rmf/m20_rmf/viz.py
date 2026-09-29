@@ -7,6 +7,8 @@ Draws on /m20/viz (MarkerArray, frame `map`):
   robots   body oriented by heading + "834 · PATROL" label, in the mode colour
   plans    line from the robot along its remaining path to its goal
   focus    the target being investigated, highlighted
+and /map (rmf_building_map_msgs/BuildingMap, latched): the site as Open-RMF's own tools
+(rmf-web dashboard, rmf_visualization) expect it (buildingmap.py);
 and /m20/map (OccupancyGrid, latched): the site's saved SLAM map (`map:` in the site
 file, from `m20 map save`), or else the robots' live /GRID_MAP_relayed_<id>, so RViz
 always has one map layer under the markers.
@@ -199,6 +201,21 @@ def main(argv=None):
     latched = QoSProfile(depth=1, reliability=ReliabilityPolicy.RELIABLE,
                          durability=DurabilityPolicy.TRANSIENT_LOCAL)
     map_pub = node.create_publisher(OccupancyGrid, '/m20/map', latched)
+    from rmf_building_map_msgs.msg import BuildingMap
+    from . import buildingmap
+    bmap_pub = node.create_publisher(BuildingMap, '/map', latched)
+
+    def publish_building_map():
+        s = state['site']
+        grid = None
+        if s.map_file:
+            from . import mapfile
+            try:
+                grid = mapfile.load(s.map_file)
+            except OSError as e:
+                node.get_logger().warn(f'/map: no floor image ({e})')
+        bmap_pub.publish(buildingmap.building_map(s, grid))
+    publish_building_map()
     site = state['site']
     if site.map_file:
         from . import mapfile
@@ -228,6 +245,7 @@ def main(argv=None):
             if mtime != state['mtime']:
                 state['mtime'] = mtime
                 state['site'] = Site.load(site_path)
+                publish_building_map()
                 node.get_logger().info(f'site file changed: reloaded {site_path}')
         except Exception as e:  # noqa: BLE001 - keep drawing the last good site
             node.get_logger().warn(f'site file not reloaded: {e}')

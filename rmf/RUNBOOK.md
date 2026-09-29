@@ -167,6 +167,21 @@ pane — it stops the mission and its robots without the GUI. Then `m20 stop` in
 operator pane, or the controller. The page shows a red banner while it has no
 connection to the hub.
 
+### Open-RMF's own dashboard (rmf-web), optional
+`rmf_web: true` in `m20_stack.yaml` (or `M20_RMF_WEB=true scripts/m20_stack.sh up`) adds a
+pane `rmf-web` running Open-RMF's web dashboard: **http://localhost:3000**. It shows the
+fleet as Open-RMF sees it: a Robots table (status, battery, level, last update), the
+task queue and history (every task our missions and `m20` commands create), the floor
+(the site's saved SLAM map) with the robots, and a **New task** form (patrol, go to
+place, …, among the site's places). It knows nothing of missions, phases, signals or
+verdicts: those stay in our console (:8080).
+
+How it is fed, with nothing drawn twice: our task monitor forwards every RMF update to its
+API server (`forward:=` in `m20_rmf.launch.py`), and `viz` publishes the site on `/map`
+as an Open-RMF `BuildingMap` (floor image, nav graph, walls around the site). Task
+history is kept in the docker volume `m20-rmf-web`. Its view starts zoomed out: use its
+zoom buttons. Images: `ghcr.io/open-rmf/rmf-web/{api-server,demo-dashboard}:jazzy-nightly`.
+
 ## 6. Operate from the terminal
 
 Always try one short step before a whole mission.

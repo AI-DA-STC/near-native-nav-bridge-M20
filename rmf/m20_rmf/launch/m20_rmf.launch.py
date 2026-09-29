@@ -40,7 +40,9 @@ def _nodes(context):
     out = [
         # Monitor first: the dispatcher and adapter connect to its websocket on start.
         Node(package='m20_rmf', executable='monitor', output='both',
-             arguments=['--port', port] + guard),
+             arguments=['--port', port] + guard + sum(
+                 (['--forward', u] for u in
+                  LaunchConfiguration('forward').perform(context).split(',') if u), [])),
         Node(package='rmf_traffic_ros2', executable='rmf_traffic_schedule', output='both'),
         Node(package='rmf_traffic_ros2', executable='rmf_traffic_blockade', output='both'),
         Node(package='rmf_task_ros2', executable='rmf_task_dispatcher', output='both',
@@ -75,6 +77,9 @@ def generate_launch_description():
                               description='comma list; default: robots: in m20_stack.yaml when using its site, else all robots of the site'),
         DeclareLaunchArgument('sim', default_value='false', description='start mock robots'),
         DeclareLaunchArgument('viz', default_value='false', description='RMF visualizers + RViz'),
+        DeclareLaunchArgument('forward', default_value='',
+                              description='also send RMF task/fleet updates here, e.g. '
+                                          'ws://localhost:8000/_internal (rmf-web api-server)'),
         DeclareLaunchArgument('monitor_port', default_value='7878',
                               description='task-state websocket; change it to run a mock '
                                           'rehearsal next to the live stack'),

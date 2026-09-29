@@ -12,6 +12,19 @@ with several real robots at once.
 
 ## Added
 
+### Open-RMF's dashboard alongside ours (2026-09-29 evening)
+- **rmf-web** (Open-RMF's web dashboard, docker images `jazzy-nightly`) runs next to
+  our stack: `rmf_web: true` in `m20_stack.yaml` adds a pane with its API server (:8000)
+  and dashboard (http://localhost:3000). Tried on mock 834 with `triangle_watch`: the
+  robot on the floor map at the right place, Robots table, the mission's patrol task in
+  the task queue. With the real stack config on domain 20 the Foxy bridge was unaffected
+  (the API server gets our Jazzy DDS profile).
+- **`monitor --forward URL`** (`forward:=` in `m20_rmf.launch.py`): RMF reports to one
+  websocket; the monitor now passes everything on, so rmf-web and our tools both get it.
+- **`/map` BuildingMap** from the site + saved SLAM map (`buildingmap.py`, published by
+  `viz`): what Open-RMF tools (rmf-web, rmf_visualization floorplans/navgraphs) expect
+  from a `.building.yaml`. `mapfile.to_png`. Tests: `test/test_buildingmap.py`; 84 passing.
+
 ### Wi-Fi load with three robots (2026-09-29 evening)
 - With all three relays running, the laptop's one Wi-Fi link (robots and internet
   share it) stalled: both relays were **reliable** (every lost fragment resent) and the

@@ -34,6 +34,9 @@ def main(argv=sys.argv):
     args_ = rclpy.utilities.remove_ros_args(argv)
     p = argparse.ArgumentParser(prog='m20_monitor')
     p.add_argument('--port', type=int, default=7878)
+    p.add_argument('--forward', action='append', default=[],
+                   help='also pass everything on to this websocket, e.g. the rmf-web '
+                        'api-server: ws://localhost:8000/_internal (repeatable)')
     a = p.parse_args(args_[1:])
 
     node = rclpy.node.Node('m20_task_monitor')
@@ -44,8 +47,28 @@ def main(argv=sys.argv):
     log = node.get_logger()
     last_status = {}
 
+    # Fleet adapters and the dispatcher report to one websocket (server_uri): this one.
+    # Other consumers (the rmf-web api-server) get a copy, so both keep working.
+    queues = []
+
+    async def forward(url, q):
+        while True:
+            try:
+                async with websockets.connect(url, max_size=None) as up:
+                    log.info(f'forwarding RMF updates to {url}')
+                    while True:
+                        await up.send(await q.get())
+            except Exception as e:  # noqa: BLE001 - keep trying; drop what piles up
+                log.warn(f'forward to {url}: {e!r}; retrying in 3 s', throttle_duration_sec=30)
+                while not q.empty():
+                    q.get_nowait()
+                await asyncio.sleep(3)
+
     async def handler(ws, path=None):
         async for raw in ws:
+            for q in queues:
+                if q.qsize() < 1000:
+                    q.put_nowait(raw)
             try:
                 msg = json.loads(raw)
             except ValueError:
@@ -63,6 +86,10 @@ def main(argv=sys.argv):
                 fleet_pub.publish(String(data=json.dumps(data)))
 
     async def serve():
+        for url in a.forward:
+            q = asyncio.Queue()
+            queues.append(q)
+            asyncio.create_task(forward(url, q))
         async with websockets.serve(handler, '0.0.0.0', a.port, max_size=None):
             log.info(f'listening for RMF task/fleet state on ws://0.0.0.0:{a.port}')
             await asyncio.Future()

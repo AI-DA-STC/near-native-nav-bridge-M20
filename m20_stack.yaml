@@ -17,6 +17,10 @@ laptop_profile: fastdds_profile.xml
 # Site file for Open-RMF: places, lanes, routes, formations, zones, targets, robots.
 site: rmf/m20_rmf/sites/lab_834_corridor.yaml
 
+# Open-RMF's own web dashboard (rmf-web, http://localhost:3000) next to ours: robots,
+# task queue and history, new tasks. Docker images ghcr.io/open-rmf/rmf-web/*:jazzy-nightly.
+rmf_web: false
+
 # Optional bridge extras
 bridge_clouds: false       # also bridge /ALIGNED_POINTS_relayed_<id> (heavy)
 

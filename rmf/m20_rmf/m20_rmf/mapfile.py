@@ -75,3 +75,22 @@ def load(path_yaml):
             data.append(100 if p > occ_t else 0 if p < free_t else -1)
     return {'width': w, 'height': h, 'resolution': float(meta['resolution']),
             'origin': meta.get('origin', [0.0, 0.0, 0.0]), 'data': data}
+
+
+def to_png(width, height, data):
+    """Occupancy (row 0 = bottom, -1 unknown / 0..100) -> 8-bit greyscale PNG bytes in the
+    map_server look (free white, unknown grey, occupied black), top row first. For the
+    Open-RMF dashboard's floor image; zlib only, no imaging library needed."""
+    import struct
+    import zlib
+    rows = []
+    for r in range(height - 1, -1, -1):
+        row = data[r * width:(r + 1) * width]
+        rows.append(b'\x00' + bytes(205 if v < 0 else 254 if v <= 25 else 0 if v >= 65 else 128
+                                    for v in row))
+
+    def chunk(kind, body):
+        return (struct.pack('>I', len(body)) + kind + body +
+                struct.pack('>I', zlib.crc32(kind + body) & 0xffffffff))
+    return (b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('>IIBBBBB', width, height, 8, 0, 0, 0, 0))
+            + chunk(b'IDAT', zlib.compress(b''.join(rows), 9)) + chunk(b'IEND', b''))
