@@ -22,8 +22,10 @@ bridge_clouds: false       # also bridge /ALIGNED_POINTS_relayed_<id> (heavy)
 
 # Robot side, used by scripts/m20_stack.sh to start each robot's relay over SSH (robot
 # IPs come from the site file). The robots' image and files are not modified.
-robot_relay: odom          # odom = odometry + SLAM map relays (all RMF/RViz need; light on Wi-Fi)
-                           # full = the image's relays.launch.py; none = start it yourself
+robot_relay: odom          # odom = odometry only, best effort (all RMF and the GUI need;
+                           #   light on Wi-Fi); odom+map = + the live SLAM map (for
+                           #   m20 map-save); full = the image's relays.launch.py (heavy);
+                           #   none = start it yourself.  One-off: M20_RELAY=odom+map
 ssh_user: user
 ssh_key: ""                          # empty: the key from ~/.ssh/config (Host 192.168.123.*)
 robot_container: user-nav_cmd_bridge-1
