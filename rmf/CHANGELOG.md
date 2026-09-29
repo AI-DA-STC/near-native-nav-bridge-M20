@@ -30,6 +30,10 @@ with several real robots at once.
   count non-zero), so the signal, or a stop's "end the mission", could be lost. Fresh
   processes now wait for discovery and for delivery acknowledgements. The GUI was not
   affected (long-lived).
+- **GUI Start list:** it was checked against the site as it was when the `ui` pane
+  started, so a mission needing a zone added later never appeared. The hub now re-reads
+  the site, open pages get the list again when what fits changes (every 2 s), and an
+  empty list says "no mission fits this site".
 - An identical signal within 1 s counts once (a double-click is one request).
 - Site edits are no longer blocked by missions that were already invalid (e.g. a
   mission written before its zone is finished).

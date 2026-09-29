@@ -77,8 +77,11 @@ function fmtElapsed(s) {
 function renderMissions(list) {
   const sel = $('mission-file');
   const keep = sel.value;
-  sel.replaceChildren(...list.map((m) => el('option', { value: m.file }, m.name)));
-  if (keep) sel.value = keep;
+  sel.replaceChildren(...(list.length
+    ? list.map((m) => el('option', { value: m.file }, m.name))
+    : [el('option', { value: '', disabled: true }, 'no mission fits this site')]));
+  if (keep && list.some((m) => m.file === keep)) sel.value = keep;
+  $('start').dataset.none = list.length ? '' : '1';
 }
 
 function render() {
@@ -96,8 +99,10 @@ function render() {
     : (m.error || (m.state === 'aborted' && m.reason) || '');
   $('start').hidden = running;
   $('mission-file').hidden = running;
-  $('start').disabled = !host.up;
-  $('start').title = host.up ? 'run the selected mission'
+  const none = $('start').dataset.none === '1';
+  $('start').disabled = !host.up || none;
+  $('start').title = none ? 'no mission in missions/ fits this site (check: m20 mission <file> --check)'
+    : host.up ? 'run the selected mission'
     : 'no mission host: it runs in the tmux "mission" pane (m20 mission-host)';
 
   // Actions: only what needs the operator now.

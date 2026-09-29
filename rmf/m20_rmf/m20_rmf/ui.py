@@ -272,12 +272,19 @@ class Hub:
 
     # --------------------------------------------------------- commands
     def missions(self):
+        """The missions that fit the site as it is now: the site file is read again, so
+        a zone or place added since the GUI started counts (the list used to be checked
+        against the site as it was at start-up)."""
+        from .mission import check, load
+        try:
+            site = Site.load(self.fleet.site.path)
+        except Exception:  # noqa: BLE001 - mid-edit / invalid: keep the last good one
+            site = self.fleet.site
         out = []
         for d in self.missions_dirs:
             for f in sorted(glob.glob(os.path.join(d, '*.yaml'))):
-                from .mission import check, load
                 try:
-                    ok = not check(load(f), self.fleet.site)
+                    ok = not check(load(f), site)
                 except Exception:  # noqa: BLE001
                     ok = False
                 if ok:
@@ -361,8 +368,25 @@ async def serve_ws(hub, port, period):
             clients.discard(ws)
             sent.pop(ws, None)
 
+    listed = {'missions': None, 't': 0.0}
+
     async def broadcast():
         while True:
+            # Missions and the site are edited while the GUI runs: refresh the Start
+            # list in open pages when what fits changes (checked every 2 s).
+            if time.monotonic() - listed['t'] > 2.0:
+                listed['t'] = time.monotonic()
+                ms = await loop.run_in_executor(None, hub.missions)
+                if ms != listed['missions']:
+                    changed = listed['missions'] is not None
+                    listed['missions'] = ms
+                    if changed:
+                        out = json.dumps({'type': 'missions', 'missions': ms})
+                        for ws in list(clients):
+                            try:
+                                await ws.send(out)
+                            except Exception:  # noqa: BLE001
+                                clients.discard(ws)
             v = hub.snapshot()
             data = json.dumps(v)
             hub.view_pub.publish(String(data=data))
