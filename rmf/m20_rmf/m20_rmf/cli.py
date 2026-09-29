@@ -77,6 +77,8 @@ def _site(a):
     path = _site_path(a)
     if not path:
         sys.exit('no site: pass --site, set M20_SITE, or set site: in m20_stack.yaml')
+    if not os.path.exists(path):
+        sys.exit(f'no site file {path}: start one with  m20 site new {path} --from <robot>')
     return Site.load(path)
 
 
