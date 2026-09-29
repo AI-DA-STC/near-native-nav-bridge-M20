@@ -12,6 +12,20 @@ with several real robots at once.
 
 ## Added
 
+### Map in the console, site editing from the CLI (2026-09-29)
+- **Map panel in the web GUI:** the RViz view in the page. The hub forwards RViz's own
+  `/m20/viz` markers and `/m20/map` (the SLAM map) and the page draws them top-down
+  (`ui/map.js`, canvas; zoom / pan / fit), so it always matches RViz and works on a
+  tablet; RViz itself becomes optional (`M20_RVIZ=false`).
+- **Site editing:** `m20 place ls|set|rm`, `m20 lane add|rm`, `m20 route set|rm`
+  (`siteedit.py`). Line-based, so comments survive; each edit shows a diff and is
+  checked (site loads, no place left without lanes, missions still validate) before it
+  is written; `--from <robot>` records the robot's current pose; `--dry-run`.
+- The RViz markers (and so the GUI map) follow edits to the site file live;
+  `scripts/m20_stack.sh restart <pane>` (e.g. `restart rmf` to route on the new graph).
+- `test_834_corridor.yaml` uses `phase:` steps, so the GUI names each stage.
+- Tests: `test/test_siteedit.py`; 66 passing.
+
 ### One stop, mission host, faster console (2026-09-29, after the first GUI test on 834)
 - **One stop.** The GUI's Abort is gone. STOP ALL, per-robot Stop, `m20 stop` and Ctrl-C
   all do the same thing: the robots stop standing, their tasks are cancelled, and the

@@ -17,6 +17,7 @@ GUI renders, so the two always agree.
 import argparse
 import json
 import math
+import os
 import sys
 
 import rclpy
@@ -183,7 +184,7 @@ def main(argv=None):
         sys.exit('no site: pass --site or set site: in m20_stack.yaml')
     node = rclpy.node.Node('m20_viz')
     pub = node.create_publisher(MarkerArray, '/m20/viz', 10)
-    state = {'view': {}, 'site': Site.load(site_path)}
+    state = {'view': {}, 'site': Site.load(site_path), 'mtime': os.path.getmtime(site_path)}
 
     def on_view(msg):
         state['view'] = json.loads(msg.data)
@@ -215,6 +216,15 @@ def main(argv=None):
             node.get_logger().info(f'/m20/map: live /GRID_MAP_relayed_{rid}')
 
     def tick():
+        # `m20 place/lane/route` edits show up here (and so in the GUI) straight away.
+        try:
+            mtime = os.path.getmtime(site_path)
+            if mtime != state['mtime']:
+                state['mtime'] = mtime
+                state['site'] = Site.load(site_path)
+                node.get_logger().info(f'site file changed: reloaded {site_path}')
+        except Exception as e:  # noqa: BLE001 - keep drawing the last good site
+            node.get_logger().warn(f'site file not reloaded: {e}')
         mk = Markers(state['site'])
         now = node.get_clock().now().nanoseconds / 1e9
         arr = MarkerArray()

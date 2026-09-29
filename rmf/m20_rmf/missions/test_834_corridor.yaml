@@ -3,14 +3,14 @@
 # inside a 2 m corridor.
 name: test_834_corridor
 steps:
-  - log: "patrol the corridor once"
+  - phase: "Patrolling the corridor"
   - patrol: {robots: ["834"], rounds: 1, wait: true}
-  - log: "form up"
+  - phase: "Forming up"
   - form_up: {formation: line}
-  - log: "explore the probe zone"
+  - phase: "Exploring the probe zone"
   - explore: {zone: corridor_probe}
-  - log: "inspect the test box (turn in place)"
+  - phase: "Inspecting the test box"
   - inspect: {target: box_right, robot: "834"}
-  - log: "regroup and go home"
+  - phase: "Regrouping, then home"
   - form_up: {formation: line}
   - return_home: {}

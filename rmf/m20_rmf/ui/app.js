@@ -19,6 +19,8 @@ function connect() {
   ws.onmessage = (e) => {
     const m = JSON.parse(e.data);
     if (m.type === 'view') { view = m.view; render(); }
+    else if (m.type === 'map') MapView.setMap(m.map);
+    else if (m.type === 'scene') MapView.setScene(m.markers);
     else if (m.type === 'missions') renderMissions(m.missions);
     else if (m.type === 'reply') {
       document.querySelectorAll(`[data-cmd="${m.id}"]`).forEach((b) => b.classList.remove('busy'));

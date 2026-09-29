@@ -6,6 +6,8 @@
 #                                  `up` then leaves them alone
 #   scripts/m20_stack.sh attach    re-attach to it
 #   scripts/m20_stack.sh status    containers, panes, robots
+#   scripts/m20_stack.sh restart <pane>   Ctrl-C one pane and start it again, e.g.
+#                                  `restart rmf` after `m20 place/lane/route` edits
 #   scripts/m20_stack.sh down      Ctrl-C every pane (clean shutdown), then close it
 #
 #   M20_RELAY=none|odom|full overrides robot_relay; M20_NO_ATTACH=1 starts detached.
@@ -268,6 +270,35 @@ down() {
   echo "stopped. (Robots keep standing; any goal they had is cancelled only by m20 stop / Ctrl-C of the command.)"
 }
 
+restart() {   # $1 = pane title: rmf | ui | bridge | events | mission | operator | "relay <id>"
+  local name="$*" pane cmd
+  [ -n "$name" ] || die "restart which pane? rmf | ui | bridge | events | mission | operator | 'relay <id>'"
+  tmux has-session -t "=$SESSION" 2>/dev/null || die "stack not running (scripts/m20_stack.sh up)"
+  read_stack
+  FOXY=$(container_for "$FOXY_CFG"); JAZZY=$(container_for "$JAZZY_CFG")
+  pane=$(tmux list-panes -t "=$SESSION:" -F '#{pane_id}	#{@m20_title}' | awk -F'\t' -v n="$name" '$2 == n {print $1}')
+  [ -n "$pane" ] || die "no pane '$name' (panes: $(tmux list-panes -t "=$SESSION:" -F '#{@m20_title}' | paste -sd, -))"
+  case "$name" in
+    rmf) cmd=$(rmf_cmd) ;;
+    ui) cmd=$(ui_cmd) ;;
+    bridge) cmd=$(foxy_cmd) ;;
+    events) cmd=$(events_cmd) ;;
+    mission) cmd=$(mission_cmd) ;;
+    operator) cmd=$(operator_cmd) ;;
+    "relay "*) cmd=$(relay_cmd "${name#relay }") ;;
+    *) die "cannot restart '$name'" ;;
+  esac
+  # Ctrl-C first so the processes in the container end cleanly (killing the pane
+  # would leave them running), then start the same command again in that pane.
+  tmux send-keys -t "$pane" C-c
+  for _ in $(seq 20); do
+    [ "$(tmux display -p -t "$pane" '#{pane_current_command}')" = bash ] && break
+    sleep 1
+  done
+  tmux respawn-pane -k -t "$pane" "$cmd; echo; echo '[$name ended - shell]'; exec bash"
+  echo "restarted $name"
+}
+
 status() {
   read_stack
   echo "containers: foxy=$(container_for "$FOXY_CFG" || true) jazzy=$(container_for "$JAZZY_CFG" || true)"
@@ -286,5 +317,6 @@ case "${1:-}" in
   down) down ;;
   attach) exec tmux attach -t "=$SESSION" ;;
   status) status ;;
+  restart) shift; restart "$@" ;;
   *) sed -n '2,/^set -euo/p' "$0" | sed '$d'; exit 1 ;;
 esac

@@ -6,7 +6,8 @@
 The hub merges the adapter's /m20/robot_status, RMF task states (/m20/task_states),
 the mission runner's /m20/mission, inspection requests/results and operator signals
 into one view (view.py) and publishes it on /m20/fleet_view for the RViz markers. The
-web page renders the same view; its buttons send:
+web page renders the same view, plus the RViz scene (the /m20/viz markers over
+/m20/map, forwarded as-is and drawn top-down in the page); its buttons send:
 
     stop         robot id or all   -> the no-drop stop of `m20 stop`, which also ends the
                                       running mission (there is no separate abort)
@@ -20,19 +21,24 @@ HTTP on :8080 (static page), websocket on :8081 (view out, commands in).
 """
 
 import argparse
+import array
 import asyncio
+import base64
 import functools
 import glob
 import http.server
 import json
+import math
 import os
 import signal
 import sys
 import threading
 import time
 
+from nav_msgs.msg import OccupancyGrid
 from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
 from std_msgs.msg import String
+from visualization_msgs.msg import Marker, MarkerArray
 
 from . import protocol, stack, view
 from .sitefile import Site
@@ -41,6 +47,29 @@ MISSIONS_DIRS = ('/repo/rmf/m20_rmf/missions',)
 HOLD_LAST_MODE = 3.0        # s a robot keeps its last mode between consecutive tasks
 STOPPED_FOR = 15.0          # s a stopped robot shows STOPPED before it reads IDLE
 STALE = 4.0                 # s without a heartbeat before a mission / host counts as gone
+SCENE_STALE = 2.0           # s without /m20/viz before robot markers drop (as in RViz)
+
+
+def marker_json(m):
+    """One visualization_msgs/Marker as the page draws it (top-down, map frame)."""
+    p, q, c = m.pose.position, m.pose.orientation, m.color
+    return {
+        'ns': m.ns, 't': m.type,
+        'p': [round(p.x, 3), round(p.y, 3), round(p.z, 3)],
+        'yaw': round(math.atan2(2 * (q.w * q.z + q.x * q.y), 1 - 2 * (q.y ** 2 + q.z ** 2)), 3),
+        's': [round(m.scale.x, 3), round(m.scale.y, 3), round(m.scale.z, 3)],
+        'c': [round(c.r * 255), round(c.g * 255), round(c.b * 255), round(c.a, 2)],
+        'pts': [[round(v.x, 3), round(v.y, 3), round(v.z, 3)] for v in m.points],
+        'txt': m.text,
+    }
+
+
+def grid_json(msg, version):
+    """nav_msgs/OccupancyGrid -> the page's map layer (cells as base64 int8)."""
+    info = msg.info
+    return {'v': version, 'w': info.width, 'h': info.height, 'res': info.resolution,
+            'origin': [info.origin.position.x, info.origin.position.y],
+            'data': base64.b64encode(array.array('b', msg.data).tobytes()).decode()}
 
 
 class Hub:
@@ -59,6 +88,7 @@ class Hub:
         self.host = {}                  # last /m20/mission_host heartbeat
         self.aborted_at = 0.0           # time of the last "mission aborted" note
         self.lost_noted = None          # start time of the mission last noted as lost
+        self.started = time.time()
         self.kick = None                # () -> push the view now (set by the ws server)
         self.missions_dirs = missions_dirs
         node = self.rmf.node
@@ -70,6 +100,11 @@ class Hub:
         node.create_subscription(String, '/m20/stop', self._on_stop, 10)
         node.create_subscription(String, '/m20/trigger', self._on_trigger, 10)
         node.create_subscription(String, '/m20/mission_host', self._on_host, 10)
+        # The RViz scene, for the page's map panel: the same markers and map RViz draws.
+        self.scene = {'v': 0, 't': 0.0, 'markers': []}
+        self.map = None
+        node.create_subscription(MarkerArray, '/m20/viz', self._on_viz, 10)
+        node.create_subscription(OccupancyGrid, '/m20/map', self._on_map, latched)
         self.view_pub = node.create_publisher(String, '/m20/fleet_view', 10)
 
     # ------------------------------------------------------------ inbound
@@ -94,6 +129,29 @@ class Hub:
                       'alert' if m.get('state') != 'complete' else 'phase')
         if self.kick:
             self.kick()
+
+    def _on_viz(self, msg):
+        markers = []
+        for m in msg.markers:
+            if m.action == Marker.DELETEALL:
+                markers = []
+            elif m.action == Marker.ADD:
+                markers.append(marker_json(m))
+        with self.lock:
+            self.scene = {'v': self.scene['v'] + 1, 't': time.time(), 'markers': markers}
+
+    def _on_map(self, msg):
+        with self.lock:
+            self.map = grid_json(msg, (self.map or {}).get('v', 0) + 1)
+
+    def scene_now(self):
+        """Latest markers; robot markers vanish when viz stops, as their lifetime does."""
+        with self.lock:
+            s = self.scene
+        if time.time() - s['t'] > SCENE_STALE:
+            return {'v': -s['v'], 't': s['t'],     # a distinct version: resent once
+                    'markers': [m for m in s['markers'] if not m['ns'].startswith('robots/')]}
+        return s
 
     def _on_host(self, msg):
         h = json.loads(msg.data)
@@ -171,7 +229,10 @@ class Hub:
             # A stop lasts until the robot gets new work.
             if r['task'] is not None and now - self.stopped.get(r['id'], 0) > 1.0:
                 self.stopped.pop(r['id'], None)
-                self.last_active[r['id']] = (dict(r), now)
+                # Not while the latched task history replays at start-up: finished
+                # tasks would flash by as if they were running.
+                if now - self.started > 5.0:
+                    self.last_active[r['id']] = (dict(r), now)
             elif r['mode'] == 'IDLE':
                 # Consecutive steps leave a moment with no task; keep showing the last
                 # activity for a few seconds instead of flashing IDLE in between.
@@ -272,8 +333,11 @@ async def serve_ws(hub, port, period):
     # Commands and mission changes push the view at once instead of on the next tick.
     hub.kick = lambda: loop.call_soon_threadsafe(wake.set)
 
+    sent = {}                   # ws -> (map version, scene version) it has
+
     async def handler(ws, path=None):
         clients.add(ws)
+        sent[ws] = (0, 0)
         try:
             await ws.send(json.dumps({'type': 'missions', 'missions': hub.missions()}))
             async for raw in ws:
@@ -285,6 +349,7 @@ async def serve_ws(hub, port, period):
                 await ws.send(json.dumps({'type': 'reply', 'id': c.get('id'), **(reply or {})}))
         finally:
             clients.discard(ws)
+            sent.pop(ws, None)
 
     async def broadcast():
         while True:
@@ -292,9 +357,21 @@ async def serve_ws(hub, port, period):
             data = json.dumps(v)
             hub.view_pub.publish(String(data=data))
             msg = json.dumps({'type': 'view', 'view': v})
+            scene, grid = hub.scene_now(), hub.map
+            scene_msg = map_msg = None
             for ws in list(clients):
                 try:
                     await ws.send(msg)
+                    mv, sv = sent.get(ws, (0, 0))
+                    if grid is not None and grid['v'] != mv:
+                        map_msg = map_msg or json.dumps({'type': 'map', 'map': grid})
+                        await ws.send(map_msg)
+                        mv = grid['v']
+                    if scene['v'] != sv:
+                        scene_msg = scene_msg or json.dumps({'type': 'scene', 'markers': scene['markers']})
+                        await ws.send(scene_msg)
+                        sv = scene['v']
+                    sent[ws] = (mv, sv)
                 except Exception:  # noqa: BLE001 - client went away
                     clients.discard(ws)
             wake.clear()

@@ -125,6 +125,7 @@ Open **http://localhost:8080** (or `http://<laptop ip>:8080` from a tablet on th
 | header | mission picker + **Start** (the `mission` pane runs it), **STOP ALL** |
 | stage | mission name, the current **phase** in large type, elapsed time |
 | action card | only when needed: the mission's question with its button (e.g. *Begin scenario*, *Suspicious item at box 1*), or an inspection waiting for a verdict (**Clear** / **Threat**) |
+| map | the **RViz view** in the page: the SLAM map with the site (lanes, places, slots, tracks, targets) and each robot in its mode colour with its path. Scroll to zoom, drag to pan, double-click to fit the site again |
 | robot cards | one per robot: **mode** (colour + word), one detail line (route, zone, target), battery; per-robot **Stop** when no mission is running |
 | signal row | signals the mission offers at any time; pressing one early is fine, it shows **queued** until the mission uses it |
 | log | the last few phases, signals, verdicts and stops |
@@ -134,7 +135,9 @@ Modes (same colours in RViz): **PATROL** · **REGROUP** (forming up) · **EXPLOR
 **SITTING** · **STOPPED** · **OFFLINE**. They come from the label of each robot's RMF task,
 computed once by the status hub (`/m20/fleet_view`) for both GUI and RViz.
 
-**RViz** (opened by the `ui` pane) draws, over the robot's **SLAM map**: the site's lanes
+The page's map and **RViz** show the same thing: the hub forwards RViz's own `/m20/viz`
+markers and `/m20/map` to the page. RViz is optional now (`M20_RVIZ=false
+scripts/m20_stack.sh up` skips it). They draw, over the robot's **SLAM map**: the site's lanes
 and places, formation slots, exploration tracks, targets, and each robot oriented in its
 mode colour with its remaining path. The map is the site's saved map (`map:` in the site
 file) or else the live relayed one. Save a map with `m20 map-save 834 <name>` (needs the
@@ -182,6 +185,37 @@ Every move is **turn in place → walk straight → turn in place**.
 Information only: `m20 status`, `m20 pose 834`, `m20 events`, `m20 graph`,
 `m20 --help`.
 
+### Make your own route (site editing)
+All from the operator pane, against the site in `m20_stack.yaml` (`--site` for another).
+Each edit prints a diff, is checked (the site must load, missions must still validate)
+and only then written; the file's comments stay. `--dry-run` shows the diff only.
+
+```bash
+m20 place ls                                  # places, their lanes, what uses them
+# walk/drive 834 to a spot (controller or m20 go), then record it:
+m20 place set bay_1 --from 834 --link fwd_2   # new place at 834's pose + lane to fwd_2
+m20 place set bay_2 --from 834 --link bay_1   # ... and so on along the way
+m20 route set loop fwd_2 bay_1 bay_2          # a patrol route through them
+# the map in the GUI/RViz shows the change at once. For RMF to route on it (host):
+scripts/m20_stack.sh restart rmf              # robots idle first
+m20 go 834 bay_1                              # try each leg alone first
+m20 patrol 834 --route loop --rounds 1 --wait
+```
+
+| Change | Command |
+|---|---|
+| move a place | `m20 place set bay_1 --from 834` or `m20 place set bay_1 x y [yaw]` (yaw in rad; omitted = keep) |
+| remove a place | `m20 place rm bay_1` — removes its lanes too; refused while a route, formation, zone, target or robot home uses it (it says which) |
+| connect / disconnect | `m20 lane add a b [c …]` (two-way chain) · `m20 lane rm a b` |
+| routes | `m20 route set loop a b c` (create or replace) · `m20 route rm loop` |
+| a robot's own patrol | `robots: "834": {…, route: loop}` in the site file (by hand) |
+
+A place must have at least one lane (RMF could not reach it otherwise), and no edit may
+leave another place without one. Formations, zones and targets are still edited by hand
+in the site file (`sites/lab_834_corridor.yaml` is a small annotated example).
+`scripts/m20_stack.sh restart <pane>` restarts any pane the same way (Ctrl-C, then
+its command again), e.g. `restart ui`, `restart "relay 834"`.
+
 ### The corridor test (`missions/test_834_corridor.yaml`)
 A one-robot rehearsal of the demo's shape (patrol → form up → explore → inspect → form
 up → home) that never leaves a straight 2 m corridor in front of 834's start pose. Site
@@ -205,11 +239,11 @@ why a stop used to send it home).
 1. **STOP ALL** in the GUI, or **Ctrl-C** in the `mission` pane (GUI missions) or in the
    terminal running `m20 go …` / `m20 mission …`.
 2. **`m20 stop 834`** (or `m20 stop` for all) from any Jazzy terminal.
-
-Each also ends whatever mission is running (§5).
 3. **`ros2 run nav_cmd_bridge nav_cmd_bridge cancel --ip <robot ip>`** from the Foxy
    devcontainer — works with RMF down.
 4. **The handheld controller.**
+
+1 and 2 also end whatever mission is running (§5).
 
 Stopping the RMF launch does **not** stop a robot (it keeps its last goal) — cancel it.
 `m20 estop --drop <id>` is the vendor e-stop and **drops the robot to the ground**.

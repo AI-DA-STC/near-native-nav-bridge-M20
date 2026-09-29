@@ -13,6 +13,21 @@ list), default all robots in the site.
     m20 map-save 834 [name]                save the robot's SLAM map (maps/<name>.yaml);
                                            then add `map: ../maps/<name>.yaml` to the site
 
+  Edit the site file (comments kept; shows a diff; checked before writing)
+    m20 place ls                           places, their lanes and what uses them
+    m20 place set scan_1 --from 834 --link fwd_2
+                                           add/move a place to 834's current pose, with
+                                           a lane to fwd_2 (a new place needs --link)
+    m20 place set scan_1 1.5 -6.6 [yaw]    ... or at coordinates (yaw in rad)
+    m20 place rm scan_1                    remove it and its lanes (refused while a
+                                           route/formation/zone/target/home uses it)
+    m20 lane add a b [c ...]               lanes a<->b(<->c), two-way
+    m20 lane rm a b                        remove the lane between a and b
+    m20 route set loop a b c               patrol route (create or replace)
+    m20 route rm loop
+    (each takes --dry-run; --force writes even if a mission would break.
+     RMF uses the new graph after: scripts/m20_stack.sh restart rmf)
+
   Motion (each preempts the robot's current task unless --queue)
     m20 go 834 door_a [--yaw 1.57]         go to a place
     m20 pose-goal 834 x y yaw              off-graph goal (goto_pose action)
@@ -128,6 +143,133 @@ def cmd_graph(a):
           f'formations {list(site.formations)}, zones {list(site.zones)}, '
           f'targets {list(site.targets)}, robots {list(site.robots)}')
     print(f'wrote {nav}\n      {cfg}')
+
+
+# ------------------------------------------------------------------ site edits
+def _missions_near(site_path):
+    import glob
+    d = os.path.join(os.path.dirname(os.path.abspath(site_path)), '..', 'missions')
+    return sorted(glob.glob(os.path.join(d, '*.yaml')))
+
+
+def _edit_site(a, change):
+    """change(SiteText, old Site) edits the text and returns what it did. Shows the diff,
+    checks the result (site + missions), then writes."""
+    from . import siteedit
+    path = _site_path(a)
+    if not path:
+        sys.exit('no site: pass --site, set M20_SITE, or set site: in m20_stack.yaml')
+    with open(path) as f:
+        old_text = f.read()
+    old_site = Site.load(path)
+    ed = siteedit.SiteText(old_text)
+    try:
+        done = change(ed, old_site)
+        site, broken = siteedit.check_text(ed.text(), path, _missions_near(path), old_site)
+    except siteedit.EditError as e:
+        sys.exit(f'not changed: {e}')
+    if broken and not a.force:
+        sys.exit('not changed: this breaks missions:\n  ' + '\n  '.join(broken) +
+                 '\n(fix them, or --force to change the site anyway)')
+    print(siteedit.diff(old_text, ed.text(), path), end='')
+    if a.dry_run:
+        print('(dry run: nothing written)')
+        return
+    with open(path, 'w') as f:
+        f.write(ed.text())
+    print(done)
+    for b in broken:
+        print(f'WARNING: {b}')
+    for w in site.warnings():
+        print(f'WARNING: {w}')
+    print('The GUI/RViz map shows it now. RMF routes with it after: '
+          'scripts/m20_stack.sh restart rmf  (on the host; robots must be idle)')
+
+
+def cmd_place_ls(a):
+    from . import siteedit
+    site = _site(a)
+    print(f'{site.path}')
+    for n, (x, y, yaw) in site.places.items():
+        uses = siteedit.place_uses(site, n)
+        print(f'  {n:<16} x {x:8.3f}  y {y:8.3f}  yaw {math.degrees(yaw):7.1f}°   '
+              f'lanes: {", ".join(siteedit.neighbours(site, n)) or "-"}'
+              + (f'   used by: {", ".join(uses)}' if uses else ''))
+    for k, r in site.routes.items():
+        print(f'  route {k}: {" -> ".join(r)}')
+
+
+def cmd_place_set(a):
+    if a.robot:
+        pose = _read_pose(a.robot)
+        how = f'{a.robot} pose, {time.strftime("%F %T %Z")}'
+    elif len(a.coords) in (2, 3):
+        pose = list(a.coords)
+        how = ''
+    else:
+        sys.exit('where? --from <robot> (its current pose), or x y [yaw]')
+
+    def change(ed, site):
+        new = a.name not in site.places
+        if len(pose) == 2:
+            pose.append(0.0 if new else site.places[a.name][2])
+        if new and not a.link:
+            from .siteedit import EditError
+            raise EditError(f'{a.name} is a new place: give --link <place> so RMF can reach it')
+        ed.set_place(a.name, pose, how)
+        for p in a.link:
+            if not ed.lane_exists(a.name, p):
+                ed.add_lane([a.name, p])
+        return (f'{"added" if new else "moved"} {a.name} at ({pose[0]:.3f}, {pose[1]:.3f}, '
+                f'{pose[2]:.3f})' + (f', lanes to {", ".join(a.link)}' if a.link else ''))
+    _edit_site(a, change)
+
+
+def cmd_place_rm(a):
+    from .siteedit import EditError, neighbours, place_uses
+
+    def change(ed, site):
+        if a.name not in site.places:
+            raise EditError(f'no place {a.name!r}')
+        uses = place_uses(site, a.name)
+        if uses:
+            raise EditError(f'{a.name} is used by {", ".join(uses)}: change those first')
+        ed.remove_place(a.name)
+        return f'removed {a.name} and its lanes to {", ".join(neighbours(site, a.name)) or "-"}'
+    _edit_site(a, change)
+
+
+def cmd_lane_add(a):
+    def change(ed, site):
+        ed.add_lane(a.places)
+        return f'lanes {" <-> ".join(a.places)} added'
+    _edit_site(a, change)
+
+
+def cmd_lane_rm(a):
+    def change(ed, site):
+        ed.remove_lane(a.a, a.b)
+        return f'lane {a.a} <-> {a.b} removed'
+    _edit_site(a, change)
+
+
+def cmd_route_set(a):
+    def change(ed, site):
+        ed.set_route(a.name, a.places)
+        return f'route {a.name}: {" -> ".join(a.places)}'
+    _edit_site(a, change)
+
+
+def cmd_route_rm(a):
+    from .siteedit import EditError
+
+    def change(ed, site):
+        users = [k for k, r in site.robots.items() if r.get('route') == a.name]
+        if users:
+            raise EditError(f'robots {users} patrol {a.name} (robots.<id>.route): change that first')
+        ed.remove_route(a.name)
+        return f'route {a.name} removed'
+    _edit_site(a, change)
 
 
 def _run(a, fn):
@@ -298,6 +440,35 @@ def main(argv=None):
     sp = add('mission', None, (('file',), {}), (('--check',), {'action': 'store_true'}))
     sp.set_defaults(fn=lambda a: _mission(a))
     add('mission-host', lambda a: _mission_host(a))
+
+    def group(name, help_text, actions):
+        g = sub.add_parser(name, help=help_text).add_subparsers(dest='action', required=True)
+        for act, fn, specs in actions:
+            sp = g.add_parser(act)
+            for flags, kw in specs:
+                sp.add_argument(*flags, **kw)
+            if act != 'ls':
+                sp.add_argument('--dry-run', action='store_true', help='show the diff only')
+                sp.add_argument('--force', action='store_true',
+                                help='write even if a mission would break')
+            sp.set_defaults(fn=fn)
+    name = (('name',), {})
+    group('place', 'list / add / move / remove places', [
+        ('ls', cmd_place_ls, []),
+        ('set', cmd_place_set, [name, (('coords',), {'nargs': '*', 'type': float}),
+                                (('--from',), {'dest': 'robot', 'help': 'use this robot\'s pose'}),
+                                (('--link',), {'action': 'append', 'default': [],
+                                               'help': 'also add a lane to this place'})]),
+        ('rm', cmd_place_rm, [name]),
+    ])
+    group('lane', 'add / remove lanes', [
+        ('add', cmd_lane_add, [(('places',), {'nargs': '+'})]),
+        ('rm', cmd_lane_rm, [(('a',), {}), (('b',), {})]),
+    ])
+    group('route', 'set / remove patrol routes', [
+        ('set', cmd_route_set, [name, (('places',), {'nargs': '+'})]),
+        ('rm', cmd_route_rm, [name]),
+    ])
     a = p.parse_args(argv)
     a.fn(a)
 

@@ -27,13 +27,20 @@
 
     <section id="actions" class="actions"></section>
 
-    <section id="robots" class="robots"></section>
-
-    <section id="signals" class="signals" hidden></section>
-
-    <ol id="timeline" class="timeline"></ol>
+    <div class="split">
+      <section class="mapview">
+        <canvas id="map" aria-label="Map: the RViz view of the site and robots"></canvas>
+        <div class="map-hint">scroll zoom · drag pan · double-click fit</div>
+      </section>
+      <div class="side">
+        <section id="robots" class="robots"></section>
+        <section id="signals" class="signals" hidden></section>
+        <ol id="timeline" class="timeline"></ol>
+      </div>
+    </div>
   </main>
 
+  <script src="map.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
