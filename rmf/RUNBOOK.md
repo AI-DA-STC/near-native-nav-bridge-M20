@@ -52,18 +52,21 @@ Jazzy)". After pulling changes to `.devcontainer/rmf-jazzy/`, rebuild that conta
 (`ip -4 addr` → e.g. `192.168.123.196`).
 
 ### 2.3 Each robot
-1. **Relay DDS profile** in the relay container as `/root/fastdds_relay.xml`: copy
-   `robot/fastdds_relay.xml` and set the robot's own Wi-Fi (p2p0) address. It must list
-   the Wi-Fi address *and* `10.21.31.103`, `10.21.32.103`, `10.21.33.103`, with SHM on;
-   otherwise the laptop sees no topics or no `/ODOM`. Edit the address in a copy first
-   (the file in the repo has 834's `192.168.123.102`), then:
-   ```bash
-   scp robot/fastdds_relay.xml user@<ip>:/tmp/ && ssh user@<ip> \
-     'docker cp /tmp/fastdds_relay.xml user-nav_cmd_bridge-1:/root/fastdds_relay.xml'
-   ```
+1. **Wi-Fi:** the robot joins `near-robots-5G` (p2p0) at its fixed `.10x` address.
+   Robots also carry an old `near-robots-2.4G` profile (`192.168.8.x`); give the 5G one a
+   higher priority so a reboot never picks 2.4G (then the robot vanishes from `.10x`):
+   `sudo nmcli connection modify near-robots-5G connection.autoconnect-priority 10`.
 2. **SSH key** so the launcher can start the relay:
    `ssh-copy-id -i ~/.ssh/id_m20.pub user@<ip>` (SETUP §6).
-3. Add the robot to the site file (`robots:` with `ip`, `home`, optional `route`) and to
+3. **Docker without sudo** for that user (the launcher runs `docker` over SSH): `id`
+   must list `docker`; if not, once: `sudo usermod -aG docker user`.
+4. **Relay DDS profile:** nothing to do. The launcher copies `robot/fastdds_relay.xml`
+   (with the robot's IP) into the relay container as `/root/m20_relay_profile.xml` on
+   every start and runs the relays with it. It lists the Wi-Fi address *and*
+   `10.21.31.103`, `10.21.32.103`, `10.21.33.103` with SHM on; without them the laptop
+   sees no topics or no `/ODOM`. The team's own `~/fastdds_relay.xml` on the robots
+   (mounted read-only into the container, without `10.21.31.103`) is not used.
+5. Add the robot to the site file (`robots:` with `ip`, `home`, optional `route`) and to
    `robots:` in `m20_stack.yaml`.
 
 ---
@@ -101,9 +104,8 @@ display (for RViz) and opens RViz and the demo console (§5).
 **Relays on their own:** `scripts/m20_stack.sh relay` starts only the robots' relays (own
 tmux session `m20-relays`); a later `up` leaves them alone. No SSH by hand is needed:
 the robots are powered off daily, so it starts the relay container if it is stopped,
-recreates it from the robot's `~/docker-compose.yml` if it is gone, and installs the
-relay DDS profile from `robot/fastdds_relay.xml` (with the robot's IP) only if the
-container has none. Relays already running by hand? `M20_RELAY=none scripts/m20_stack.sh up`.
+recreates it from the robot's `~/docker-compose.yml` if it is gone, and copies in our
+relay DDS profile (`robot/fastdds_relay.xml` with the robot's IP, §2.3). Relays already running by hand? `M20_RELAY=none scripts/m20_stack.sh up`.
 No RViz wanted? `M20_RVIZ=false`.
 
 **Check in the operator pane before any motion:**
@@ -342,7 +344,7 @@ mission steps in `primitives.py` (both documented at the top).
 # robot relay (laptop terminal)
 ssh -t user@192.168.123.102 'docker exec -it user-nav_cmd_bridge-1 bash'
 source /root/ros2_ws/install/setup.bash
-export ROBOT_ID=834 ROS_DOMAIN_ID=0 FASTRTPS_DEFAULT_PROFILES_FILE=/root/fastdds_relay.xml
+export ROBOT_ID=834 ROS_DOMAIN_ID=0 FASTRTPS_DEFAULT_PROFILES_FILE=/root/m20_relay_profile.xml
 ros2 run nav_cmd_bridge odom_relay --ros-args -r __node:=odom_relay_834 \
   -p input_topic:=/ODOM -p output_topic:=/ODOM_relayed_834 -p frame_prefix:="'834'"
 

@@ -58,7 +58,7 @@ out = {
     'SSH_USER': str(c.get('ssh_user', 'user')),
     'SSH_KEY': os.path.expanduser(str(c.get('ssh_key', ''))),
     'ROBOT_CONTAINER': str(c.get('robot_container', 'user-nav_cmd_bridge-1')),
-    'ROBOT_PROFILE': str(c.get('robot_profile', '/root/fastdds_relay.xml')),
+    'ROBOT_PROFILE': str(c.get('robot_profile', '/root/m20_relay_profile.xml')),
     'ROBOT_COMPOSE_DIR': str(c.get('robot_compose_dir', '~')),
     'ROBOT_COMPOSE_SERVICE': str(c.get('robot_compose_service', 'nav_cmd_bridge')),
     'ROBOTS_DOMAIN': str(c.get('robots_domain', 0)),
@@ -126,18 +126,22 @@ relay_cmd() {   # $1 = robot id
   inner="source /opt/ros/foxy/setup.bash && source /root/ros2_ws/install/setup.bash && export ROBOT_ID=$rid ROS_DOMAIN_ID=$ROBOTS_DOMAIN FASTRTPS_DEFAULT_PROFILES_FILE=$ROBOT_PROFILE && $inner"
   # Robots are powered off daily: the relay container may be stopped, or gone. On the
   # robot: recreate it from its compose file if missing, start it, and install the relay
-  # DDS profile only if the container has none (an existing profile is never replaced).
+  # DDS profile: ours, at a path of our own (robot_profile), refreshed on every start. The
+  # team's own ~/fastdds_relay.xml (mounted read-only into the container on some robots,
+  # and lacking the 10.21.31.103 localizer address) is left alone.
   local remote="set -e
+if ! docker info >/dev/null 2>&1; then
+  echo \"\$(whoami) cannot use docker on robot $rid ($ip). Once, on the robot:\"
+  echo \"  sudo usermod -aG docker \$(whoami)    (then this pane reconnects by itself)\"
+  exit 1
+fi
 C=$ROBOT_CONTAINER
 if ! docker inspect \$C >/dev/null 2>&1; then
   echo \"relay container \$C missing: recreating ($ROBOT_COMPOSE_SERVICE in $ROBOT_COMPOSE_DIR)\"
   cd $ROBOT_COMPOSE_DIR && docker compose up -d $ROBOT_COMPOSE_SERVICE
 fi
 docker start \$C >/dev/null
-if ! docker exec \$C test -f $ROBOT_PROFILE; then
-  echo \"no relay profile in \$C: installing the repo's robot/fastdds_relay.xml for $ip\"
-  docker cp /tmp/m20_relay_profile.xml \$C:$ROBOT_PROFILE
-fi
+docker cp /tmp/m20_relay_profile.xml \$C:$ROBOT_PROFILE
 # A dropped connection leaves the previous relay running inside the container (docker
 # exec does not hang up its process): end it, or the robot would publish twice.
 if docker exec \$C pkill -f '$stale'; then echo 'ended a relay left from a dropped connection'; sleep 1; fi

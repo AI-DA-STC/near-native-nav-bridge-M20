@@ -12,6 +12,18 @@ with several real robots at once.
 
 ## Added
 
+### Three robots: robot-side checks (2026-09-29)
+- **Relay profile:** the launcher now always copies `robot/fastdds_relay.xml` (robot IP
+  substituted) to `/root/m20_relay_profile.xml` in the relay container and runs the
+  relays with it (`robot_profile` in `m20_stack.yaml`). Before, it installed one only if
+  the container had none, and the containers on 665 / 741 mount the team's own
+  `~/fastdds_relay.xml`, which lacks the localizer address `10.21.31.103`: those relays
+  would have shown topics but no odometry (as 834 did before its fix). The team's file
+  is not touched.
+- The relay pane says plainly when the robot user cannot use `docker` (741).
+- Robots: `near-robots-5G` gets `autoconnect-priority 10` (all three, done by hand):
+  741 had booted onto the old `near-robots-2.4G` network as `192.168.8.101`.
+
 ### Exploring an area on request (2026-09-29)
 - **Zones by boundary:** `boundary: [[x, y], …]` (3+ corners) + `spacing` / `margin` /
   `angle`; the site generates a back-and-forth sweep inside it (`sitefile.sweep`),

@@ -27,6 +27,9 @@ robot_relay: odom          # odom = odometry + SLAM map relays (all RMF/RViz nee
 ssh_user: user
 ssh_key: ""                          # empty: the key from ~/.ssh/config (Host 192.168.123.*)
 robot_container: user-nav_cmd_bridge-1
-robot_profile: /root/fastdds_relay.xml # the relay DDS profile inside that container
+robot_profile: /root/m20_relay_profile.xml # our relay DDS profile inside that container:
+                                      # robot/fastdds_relay.xml with the robot's IP, copied
+                                      # in on every relay start (the team's own
+                                      # ~/fastdds_relay.xml on the robot is not used)
 robot_compose_dir: "~"                # where the robot's docker-compose.yml is (recreates
 robot_compose_service: nav_cmd_bridge # the container if it is gone after a power-off)

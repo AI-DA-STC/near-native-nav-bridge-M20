@@ -114,20 +114,15 @@ project. Set the key path as `ssh_key:` in `m20_stack.yaml`.
 
 ## 7. Each robot: the relay DDS profile (once per robot, robot-side state)
 
-Nothing else is installed on the robots; they run the team's image unchanged. But the
-relays need a Fast DDS profile inside the relay container, or the laptop sees no
-topics / no `/ODOM`:
+Nothing is installed on the robots; they run the team's image unchanged. The relays need
+a Fast DDS profile inside the relay container, or the laptop sees no topics / no `/ODOM`;
+`scripts/m20_stack.sh` copies it in on every relay start (`robot/fastdds_relay.xml`
+with the robot's IP, to `/root/m20_relay_profile.xml`), so there is nothing to install.
+The team's own `~/fastdds_relay.xml` on each robot lacks `10.21.31.103` and is not used.
 
-1. Copy `robot/fastdds_relay.xml`, change `192.168.123.102` (robot 834) to the robot's
-   own Wi-Fi address — keep the three `10.21.3x.103` lines.
-2. Install it:
-   ```bash
-   scp my_relay.xml user@<ip>:/tmp/fastdds_relay.xml
-   ssh user@<ip> 'docker cp /tmp/fastdds_relay.xml user-nav_cmd_bridge-1:/root/fastdds_relay.xml'
-   ```
-   It survives container stop/start; a container recreated from the image needs it again.
-
-Done so far: **834** only.
+Per robot, once (RUNBOOK §2.3): the Wi-Fi priority for `near-robots-5G`, your SSH key,
+and the robot user in the `docker` group. Done: 834, 665 (docker group), 741 (not yet
+in the docker group, 2026-09-29).
 
 ## 8. Your settings: `m20_stack.yaml` (repo root)
 
