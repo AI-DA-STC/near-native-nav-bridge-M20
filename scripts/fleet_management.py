@@ -27,7 +27,7 @@ import time
 import rclpy
 from rclpy.node import Node
 from rclpy.utilities import remove_ros_args
-from geometry_msgs.msg import Point, PoseStamped
+from geometry_msgs.msg import Point, Pose, PoseStamped, Quaternion
 from nav_msgs.msg import Odometry
 from std_msgs.msg import String
 from visualization_msgs.msg import Marker, MarkerArray
@@ -36,6 +36,12 @@ MODES        = ("single-waypoint", "multi-waypoint", "multi-waypoint-patrol")
 ARROW_TOPIC  = "/fleet_goal"
 MARKER_TOPIC = "/fleet_goal_markers"
 COLORS = [(0.3, 0.6, 1.0), (1.0, 0.6, 0.2), (0.9, 0.3, 0.9), (0.3, 0.9, 0.4)]
+
+BOX_POSE = Pose(position=Point(x=4.028576043040737, y=-1.7151867644572376, z=0.10705792596173548),
+                orientation=Quaternion(x=-0.009816617024025786, y=0.004273924488796177,
+                                       z=-0.01920510358448826, w=0.9997593352645202))
+BOX_LENGTH_M = 0.60
+BOX_WIDTH_M  = 0.38
 
 # Just past the bridge's own 120 s timeout, so its thread for this waypoint has given up first.
 WP_TIMEOUT_S = 125.0
@@ -67,11 +73,22 @@ def _goal_markers(goal, marker_id, color, text, alpha=1.0):
     return [arrow, label]
 
 
+def _box_marker():
+    box = Marker(ns="box", type=Marker.LINE_STRIP, pose=BOX_POSE)
+    box.header.frame_id = "map"
+    l, w = BOX_LENGTH_M / 2, BOX_WIDTH_M / 2
+    box.points = [Point(x=x, y=y) for x, y in ((l, w), (-l, w), (-l, -w), (l, -w), (l, w))]
+    box.scale.x = 0.03
+    box.color.r = box.color.g = box.color.a = 1.0
+    return box
+
+
 class SingleWaypointFleet(Node):
     prompt = "Draw one arrow per robot in RViz2, then ENTER to send them all at once (c + ENTER clears)"
 
     def __init__(self, robot_ids):
         super().__init__("fleet_management")
+        self.show_box = self.declare_parameter("show_box", False).value
         self.robot_ids = robot_ids
         self.lock = threading.Lock()
         self.pending = {}  # robot id -> PoseStamped, filled in robot_ids order; guarded by lock
@@ -134,12 +151,15 @@ class SingleWaypointFleet(Node):
         for i, rid in enumerate(self.robot_ids):
             if rid in goals:
                 arr.markers += _goal_markers(goals[rid], i, COLORS[i % len(COLORS)], rid)
+        if self.show_box:
+            arr.markers.append(_box_marker())
         self.marker_pub.publish(arr)
 
 
 class MultiWaypointFleet(Node):
     def __init__(self, robot_ids, patrol=False):
         super().__init__("fleet_management")
+        self.show_box = self.declare_parameter("show_box", False).value
         self.robot_ids = robot_ids
         self.patrol = patrol
         self.min_wps = 3 if patrol else 1  # a patrol loops a closed shape, so it needs a polygon
@@ -325,6 +345,8 @@ class MultiWaypointFleet(Node):
                 line.color.a = alpha
                 arr.markers.append(line)
                 marker_id += 1
+        if self.show_box:
+            arr.markers.append(_box_marker())
         self.marker_pub.publish(arr)
 
 
