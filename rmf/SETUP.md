@@ -118,8 +118,19 @@ ssh-keygen -t ed25519 -N "" -C "m20 robots, <your name> laptop" -f ~/.ssh/id_m20
 ssh-copy-id -i ~/.ssh/id_m20.pub user@192.168.123.<robot>     # the robots' password
 ```
 
+Then tell SSH to use it for the robots, in your own `~/.ssh/config` (not in the repo, so
+nobody's key path is committed); the launcher, `ssh` by hand and `scp` all pick it up:
+
+```
+Host 192.168.123.100 192.168.123.101 192.168.123.102
+    User user
+    IdentityFile ~/.ssh/id_m20
+    IdentitiesOnly yes
+```
+
+(Or set `ssh_key:` in `m20_stack.yaml` to the key's path; empty uses the config above.)
 Remove your line from each robot's `~/.ssh/authorized_keys` when you are done with the
-project. Set the key path as `ssh_key:` in `m20_stack.yaml`.
+project.
 
 ## 7. Each robot: the relay DDS profile (once per robot, robot-side state)
 
@@ -138,7 +149,7 @@ in the docker group, 2026-09-29).
 ```yaml
 robots: ["834"]                       # the robots you run (only these are touched)
 site: rmf/m20_rmf/sites/<your site>.yaml
-ssh_key: ~/.ssh/id_m20
+ssh_key: ""                           # empty: the key from ~/.ssh/config (§6)
 robot_relay: odom                     # odometry relay only (light on Wi-Fi)
 ```
 
