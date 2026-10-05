@@ -1,0 +1,23 @@
+# Patrol the triangle; when the operator asks, explore an area for a while, then go back
+# to the patrol. Repeats until STOP.
+#
+# Needs, in sites/triangle.yaml: route `triangle`, and a zone `explore_834` with 3+
+# boundary corners (the robot sweeps the area inside them):
+#   m20 zone corner explore_834 --from 834 --entry explore_entry   (first corner)
+#   m20 zone corner explore_834 --from 834                         (each further corner)
+# The GUI lists this mission once the zone has an area.
+name: triangle_watch
+description: Patrol the triangle; on request, explore the area for 2 minutes, then patrol again.
+
+steps:
+  - repeat:
+      times: forever
+      steps:
+        - phase: "Patrolling the triangle"
+        - patrol: {robots: ["834"], route: triangle}     # in the background until replaced
+        - wait_trigger: {event: explore, label: "Explore the area",
+                         prompt: "Patrolling. Send 834 to explore the area?"}
+        - phase: "Exploring the area"
+        # enters at the zone's entry, sweeps inside the boundary, and after `seconds`
+        # (or when the sweep is done) walks to the zone's exit (default: the entry)
+        - explore: {zone: explore_834, robots: ["834"], seconds: 120}

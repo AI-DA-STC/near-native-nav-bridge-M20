@@ -5,7 +5,7 @@
 # Command-line arguments still override these (e.g. robots:=741,834, --site ...).
 # Paths are relative to this file.
 
-robots: ["834"]            # active robots (ids as in the site file)
+robots: ["834", "665", "741"]   # active robots (ids as in the site file)
 
 robots_domain: 0           # where the robots' relays publish /*_relayed_<id>
 rmf_domain: 20             # Open-RMF + our tools (the Jazzy devcontainer is preset to 20)
@@ -15,7 +15,7 @@ rmf_domain: 20             # Open-RMF + our tools (the Jazzy devcontainer is pre
 laptop_profile: fastdds_profile.xml
 
 # Site file for Open-RMF: places, lanes, routes, formations, zones, targets, robots.
-site: rmf/m20_rmf/sites/lab_834_corridor.yaml
+site: rmf/m20_rmf/sites/triangle.yaml
 
 # Optional bridge extras
 bridge_clouds: false       # also bridge /ALIGNED_POINTS_relayed_<id> (heavy)

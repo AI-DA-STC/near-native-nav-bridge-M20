@@ -5,17 +5,25 @@
 # and see sites/sim_lab.yaml for every section filled in (RUNBOOK section 6).
 
 map_name: L1
-# map: ../maps/<name>.yaml        # optional: saved SLAM map drawn under the GUI/RViz view
+map: ../maps/lab_834.yaml        # 834's saved SLAM map (same frame as these places), drawn under the GUI/RViz view
 
 # Waypoints RMF can route to: [x, y, yaw]. Each needs a lane (except a lone first one).
 places:
   home_834: [-2, -6.533, 0.09]
+  corner_1: [1.08, -6.764, -0.076]   # 834 pose, 2026-09-29 08:28:23 UTC
+  corner_2: [1.107, -4.02, 1.563]   # 834 pose, 2026-09-29 08:28:49 UTC
+  explore_entry: [4.34, -6.705, 0.011]   # 834 pose, 2026-09-29 08:38:49 UTC
 
 # Two-way chains of places; {path: [a, b, c], oneway: true} for one-way.
-lanes: []
+lanes:
+  - [corner_1, home_834]
+  - [corner_2, corner_1]
+  - [corner_2, home_834]
+  - [explore_entry, corner_1]
 
 # Patrol routes: place sequences (m20 route set <name> a b c).
-routes: {}
+routes:
+  triangle: [corner_1, corner_2, home_834]
 
 # Formations: slots are places; assign: nearest (min travel) or fixed (robot order).
 #   muster: {slots: [muster_1, muster_2], assign: nearest}
@@ -23,7 +31,8 @@ formations: {}
 
 # Exploration: robots leave the graph at `entry`, walk their track, come back.
 #   new_area: {entry: gate, dwell: 1.0, tracks: [[[x, y, yaw], [x, y, yaw]]]}
-zones: {}
+zones:
+  explore_834: {entry: explore_entry, spacing: 1.0, boundary: [explore_entry, [5.929, -8.813], [8.493, -6.52], [7.412, -5.507]]}
 
 # Inspection: go to `approach`, face `look_at`, wait `timeout` s for Clear / Threat.
 #   box1: {approach: gate, look_at: [x, y], dwell: 5.0, timeout: 20.0, label: suspicious box}
@@ -32,3 +41,5 @@ targets: {}
 # Robots: vendor UDP address, home place (its RMF parking/charger), default patrol route.
 robots:
   "834": {ip: 192.168.123.102, home: home_834}
+  "665": {ip: 192.168.123.101}
+  "741": {ip: 192.168.123.100}
