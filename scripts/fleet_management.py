@@ -15,11 +15,14 @@ Modes (first argument):
                          a robot drives back to WP1 and loops, until s + ENTER or Ctrl+C.
 
 Every robot runs `nav_cmd_bridge bridge` (plain bridge mode). RViz2's arrows must arrive on
-/fleet_goal. No bridge listens there, so drawing an arrow never moves a robot by itself; only ENTER does.
+/fleet_goal. No bridge listens there, so drawing an arrow never moves a robot by itself; only ENTER
+(or --load) does.
 """
 
 import argparse
+import json
 import math
+import signal
 import sys
 import threading
 import time
@@ -45,6 +48,8 @@ BOX_WIDTH_M  = 0.38
 
 # Just past the bridge's own 120 s timeout, so its thread for this waypoint has given up first.
 WP_TIMEOUT_S = 125.0
+# The bridge sends a goal on 1.3 s after it arrives, then checks it every 1 s: a sooner result is the previous goal's.
+STALE_RESULT_S = 1.8
 
 
 def _quat_to_yaw(q):
@@ -54,6 +59,24 @@ def _quat_to_yaw(q):
 def _describe(goal):
     p = goal.pose.position
     return f"x={p.x:.3f} y={p.y:.3f} yaw={math.degrees(_quat_to_yaw(goal.pose.orientation)):.1f}deg"
+
+
+def _goal(x, y, yaw):
+    goal = PoseStamped()
+    goal.header.frame_id = "map"
+    goal.pose.position.x, goal.pose.position.y = float(x), float(y)
+    goal.pose.orientation.z, goal.pose.orientation.w = math.sin(yaw / 2), math.cos(yaw / 2)
+    return goal
+
+
+def _waypoint(goal):
+    p = goal.pose.position
+    return {"x": round(p.x, 3), "y": round(p.y, 3), "yaw": round(_quat_to_yaw(goal.pose.orientation), 3)}
+
+
+def _read_routes(path):
+    with open(path) as f:
+        return {rid: [_goal(wp["x"], wp["y"], wp["yaw"]) for wp in route] for rid, route in json.load(f).items()}
 
 
 # An arrow at the goal plus a text label above it.
@@ -157,25 +180,31 @@ class SingleWaypointFleet(Node):
 
 
 class MultiWaypointFleet(Node):
-    def __init__(self, robot_ids, patrol=False):
+    def __init__(self, robot_ids, patrol=False, single=False, record=None):
         super().__init__("fleet_management")
         self.show_box = self.declare_parameter("show_box", False).value
         self.robot_ids = robot_ids
         self.patrol = patrol
         self.min_wps = 3 if patrol else 1  # a patrol loops a closed shape, so it needs a polygon
-        self.prompt = ("Draw the current robot's waypoints in RViz2 in order. n + ENTER: next robot, "
-                       "u + ENTER: undo its last arrow, c + ENTER: clear all, ENTER: start every robot")
-        if patrol:
-            self.prompt += ", s + ENTER: stop the patrols"
+        self.max_wps = 1 if single else math.inf
+        self.record_path = record
+        if record:
+            self.prompt = ("Drive the current robot to a waypoint, then ENTER records its pose. n + ENTER: next "
+                           "robot, u + ENTER: undo its last waypoint, c + ENTER: clear all, w + ENTER: save and exit")
+        else:
+            self.prompt = ("Draw the current robot's waypoints in RViz2 in order. n + ENTER: next robot, "
+                           "u + ENTER: undo its last arrow, c + ENTER: clear all, ENTER: start every robot")
+            if patrol:
+                self.prompt += ", s + ENTER: stop the patrols"
         self.lock = threading.Lock()  # guards every member below
         self.pending = {rid: [] for rid in robot_ids}  # routes being drawn, not sent yet
-        self.current = 0   # index in robot_ids that new arrows go to
+        self.current = 0   # index in robot_ids that new waypoints go to
         self.routes = {}   # robot id -> route being driven; removed once finished
         self.next_wp = {}  # robot id -> index in its route of the waypoint being driven to
         self.sent_at = {}  # robot id -> monotonic time that waypoint was sent
         self.laps = {}     # robot id -> patrol lap being driven
         self.stopping = False  # patrol only: robots stop at the waypoint they are driving to
-        self.odom = {}     # robot id -> latest (x, y) on /ODOM_relayed_<id>
+        self.odom = {}     # robot id -> latest pose on /ODOM_relayed_<id>
         self.goal_pubs = {rid: self.create_publisher(PoseStamped, f"/goal_pose_{rid}", 10) for rid in robot_ids}
         for rid in robot_ids:
             self.create_subscription(Odometry, f"/ODOM_relayed_{rid}",
@@ -194,6 +223,10 @@ class MultiWaypointFleet(Node):
             self.undo()
         elif line == "c":
             self.clear()
+        elif line == "" and self.record_path:
+            self.record()
+        elif line == "w" and self.record_path:
+            return self.save()
         elif line == "s" and self.patrol:
             self.stop()
         elif line == "":
@@ -204,17 +237,31 @@ class MultiWaypointFleet(Node):
     def _arrow_cb(self, msg):
         with self.lock:
             rid = self.robot_ids[self.current]
-            self.pending[rid].append(msg)
+            full = len(self.pending[rid]) >= self.max_wps
+            if not full:
+                self.pending[rid].append(msg)
             count = len(self.pending[rid])
+        if full:
+            print(f"[FLEET] Robot {rid} already has its waypoint (u + ENTER undoes it, n + ENTER: next robot)")
+            return
         print(f"[FLEET] Robot {rid} WP {count}: {_describe(msg)}")
         self._publish_markers()
+
+    def record(self):
+        with self.lock:
+            rid = self.robot_ids[self.current]
+            pose = self.odom.get(rid)
+        if pose is None:
+            print(f"[FLEET] Not recorded: no odometry yet on /ODOM_relayed_{rid}")
+            return
+        self._arrow_cb(_goal(pose.position.x, pose.position.y, _quat_to_yaw(pose.orientation)))
 
     def next_robot(self):
         with self.lock:
             self.current = (self.current + 1) % len(self.robot_ids)
             rid = self.robot_ids[self.current]
             count = len(self.pending[rid])
-        print(f"[FLEET] Arrows now go to robot {rid} ({count} WP so far)")
+        print(f"[FLEET] Waypoints now go to robot {rid} ({count} WP so far)")
 
     def undo(self):
         with self.lock:
@@ -222,7 +269,7 @@ class MultiWaypointFleet(Node):
             dropped = self.pending[rid].pop() if self.pending[rid] else None
             count = len(self.pending[rid])
         if dropped is None:
-            print(f"[FLEET] Robot {rid} has no arrows to undo")
+            print(f"[FLEET] Robot {rid} has no waypoints to undo")
         else:
             print(f"[FLEET] Robot {rid}: dropped WP {count + 1}, {count} left")
         self._publish_markers()
@@ -231,8 +278,34 @@ class MultiWaypointFleet(Node):
         with self.lock:
             self.pending = {rid: [] for rid in self.robot_ids}
             self.current = 0
-        print(f"[FLEET] Cleared all arrows; arrows go to robot {self.robot_ids[0]}")
+        print(f"[FLEET] Cleared all waypoints; waypoints go to robot {self.robot_ids[0]}")
         self._publish_markers()
+
+    def save(self):
+        with self.lock:
+            short = [rid for rid in self.robot_ids if len(self.pending[rid]) < self.min_wps]
+            routes = {rid: [_waypoint(goal) for goal in self.pending[rid]] for rid in self.robot_ids}
+        if short:
+            print(f"[FLEET] Not saved: {self._too_few(short)}")
+            return False
+        try:
+            with open(self.record_path) as f:
+                saved = json.load(f)
+        except FileNotFoundError:
+            saved = {}
+        except (OSError, ValueError) as e:
+            print(f"[FLEET] Not saved: cannot read {self.record_path}: {e}")
+            return False
+        kept = [rid for rid in saved if rid not in routes]
+        try:
+            with open(self.record_path, "w") as f:
+                json.dump({**saved, **routes}, f, indent=2)
+        except OSError as e:
+            print(f"[FLEET] Not saved: {e}")
+            return False
+        sizes = ", ".join(f"{rid} ({len(route)} WP)" for rid, route in routes.items())
+        print(f"[FLEET] Saved {sizes} to {self.record_path}" + (f", kept robot {', '.join(kept)}" if kept else ""))
+        return True
 
     def stop(self):
         with self.lock:
@@ -243,9 +316,34 @@ class MultiWaypointFleet(Node):
         else:
             print("[FLEET] No patrol running")
 
+    def load(self, routes):
+        wrong = [rid for rid in self.robot_ids if not self.min_wps <= len(routes.get(rid, [])) <= self.max_wps]
+        if wrong:
+            need = "exactly one" if self.max_wps == 1 else f"at least {self.min_wps}"
+            return f"robot {', '.join(wrong)} needs {need} waypoint(s)"
+        with self.lock:
+            self.pending = {rid: routes[rid] for rid in self.robot_ids}
+        return None
+
+    def run(self):
+        attempt = 0
+        while rclpy.ok() and not self.send_all(report=attempt % 25 == 24):  # says what it waits for every 5 s
+            attempt += 1
+            time.sleep(0.2)
+        while rclpy.ok():
+            with self.lock:
+                if not self.routes:
+                    return
+            time.sleep(0.5)
+
+    def _too_few(self, rids):
+        if self.patrol:
+            return f"robot {', '.join(rids)} has fewer than {self.min_wps} waypoints (a patrol loops a closed shape)"
+        return f"no waypoints yet for robot {', '.join(rids)}"
+
     # All or nothing: a robot without enough waypoints, without a bridge listening, without odometry,
     # or still driving its previous route holds everyone back.
-    def send_all(self):
+    def send_all(self, report=True):
         with self.lock:
             missing = [rid for rid in self.robot_ids if len(self.pending[rid]) < self.min_wps]
             deaf = [rid for rid in self.robot_ids if self.goal_pubs[rid].get_subscription_count() == 0]
@@ -264,11 +362,10 @@ class MultiWaypointFleet(Node):
                 for rid in self.robot_ids:
                     self.goal_pubs[rid].publish(self.routes[rid][0])
                 sizes = ", ".join(f"{rid} ({len(self.routes[rid])} WP)" for rid in self.robot_ids)
-        if missing and self.patrol:
-            print(f"[FLEET] Not sent: robot {', '.join(missing)} has fewer than {self.min_wps} waypoints "
-                  "(a patrol loops a closed shape)")
-        elif missing:
-            print(f"[FLEET] Not sent: no waypoints yet for robot {', '.join(missing)}")
+        if not (sent or report):
+            return False
+        if missing:
+            print(f"[FLEET] Not sent: {self._too_few(missing)}")
         if deaf:
             print(f"[FLEET] Not sent: nothing listens on {', '.join('/goal_pose_' + rid for rid in deaf)} "
                   "(is that bridge running, with ROBOT_ID exported?)")
@@ -280,15 +377,16 @@ class MultiWaypointFleet(Node):
         if sent:
             print(f"[FLEET] Sent: {sizes} are starting")
         self._publish_markers()
+        return sent
 
     def _odom_cb(self, rid, msg):
-        p = msg.pose.pose.position
         with self.lock:
-            self.odom[rid] = (p.x, p.y)
+            self.odom[rid] = msg.pose.pose
 
     def _result_cb(self, rid, msg):
         with self.lock:
-            if rid not in self.routes:
+            if (rid not in self.routes or msg.data == "SUPERSEDED"
+                    or time.monotonic() - self.sent_at[rid] < STALE_RESULT_S):
                 return
             self._advance(rid, msg.data)
         self._publish_markers()
@@ -304,8 +402,8 @@ class MultiWaypointFleet(Node):
     # to WP1), or retires its route once finished or stopped.
     def _advance(self, rid, outcome):
         route, i = self.routes[rid], self.next_wp[rid]
-        x, y = self.odom[rid]
-        print(f"[FLEET] Robot {rid} WP {i + 1}/{len(route)} {outcome} — actual x={x:.3f} y={y:.3f}")
+        p = self.odom[rid].position
+        print(f"[FLEET] Robot {rid} WP {i + 1}/{len(route)} {outcome} — actual x={p.x:.3f} y={p.y:.3f}")
         if self.stopping or (i + 1 == len(route) and not self.patrol):
             laps = self.laps[rid]
             del self.routes[rid], self.next_wp[rid], self.sent_at[rid], self.laps[rid]
@@ -353,33 +451,68 @@ class MultiWaypointFleet(Node):
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("mode", choices=MODES)
-    parser.add_argument("robot_ids", nargs="+",
-                        help="Robot ids in the order their arrows will be drawn, e.g. 741 665 834")
+    parser.add_argument("robot_ids", nargs="*",
+                        help="Robot ids in the order their arrows will be drawn, e.g. 741 665 834 "
+                             "(with --load: every robot in FILE by default)")
+    source = parser.add_mutually_exclusive_group()
+    source.add_argument("--record", metavar="FILE",
+                        help="Drive each robot to its waypoints instead of drawing them: ENTER records the "
+                             "current robot's pose, w + ENTER saves them to FILE (other robots in FILE are kept)")
+    source.add_argument("--load", metavar="FILE",
+                        help="Send the waypoints saved in FILE by --record as soon as every robot is ready, "
+                             "then exit once every robot has finished (a patrol runs until Ctrl+C)")
     args = parser.parse_args(remove_ros_args(sys.argv)[1:])
+    try:
+        routes = _read_routes(args.load) if args.load else {}
+    except (OSError, ValueError, KeyError) as e:
+        parser.error(f"cannot read {args.load}: {e}")
+    robot_ids = args.robot_ids or list(routes)
+    if not robot_ids:
+        parser.error("robot ids are required without --load")
     patrol = args.mode == "multi-waypoint-patrol"
+    single = args.mode == "single-waypoint"
 
     rclpy.init(args=sys.argv)
-    if args.mode == "single-waypoint":
-        node = SingleWaypointFleet(args.robot_ids)
+    if single and not (args.record or args.load):
+        node = SingleWaypointFleet(robot_ids)
     else:
-        node = MultiWaypointFleet(args.robot_ids, patrol=patrol)
-    threading.Thread(target=rclpy.spin, args=(node,), daemon=True).start()
-    print(f"[FLEET] {args.mode}: arrows on {ARROW_TOPIC} go to robots {', '.join(args.robot_ids)} in that "
-          f"order; pending goals are drawn on {MARKER_TOPIC}")
-    if patrol:
+        node = MultiWaypointFleet(robot_ids, patrol=patrol, single=single, record=args.record)
+    problem = node.load(routes) if args.load else None
+    if problem:
+        rclpy.shutdown()
+        sys.exit(f"[FLEET] Not sent: {problem} in {args.load}")
+    signal.signal(signal.SIGTERM, signal.default_int_handler)
+    spin = threading.Thread(target=rclpy.spin, args=(node,), daemon=True)
+    spin.start()
+    ids = ", ".join(robot_ids)
+    if args.load:
+        print(f"[FLEET] {args.mode}: {args.load} goes to robots {ids} once they are ready; "
+              f"routes are drawn on {MARKER_TOPIC}")
+    elif args.record:
+        print(f"[FLEET] {args.mode}: recording robots {ids} in that order into {args.record}; "
+              f"waypoints are drawn on {MARKER_TOPIC}")
+    else:
+        print(f"[FLEET] {args.mode}: arrows on {ARROW_TOPIC} go to robots {ids} in that "
+              f"order; pending goals are drawn on {MARKER_TOPIC}")
+    if patrol and not args.load:
         print("\n[FLEET] !!! PATROL: mark each robot's waypoints as a CLOSED SHAPE, at least 3, in order around it\n"
               "[FLEET] !!! (e.g. the 4 corners of a square: WP1 → WP2 → WP3 → WP4). After its last waypoint a robot\n"
-              "[FLEET] !!! drives straight back to WP1 and loops until s + ENTER or Ctrl+C. Do not redraw WP1 at\n"
+              "[FLEET] !!! drives straight back to WP1 and loops until s + ENTER or Ctrl+C. Do not repeat WP1 at\n"
               "[FLEET] !!! the end: the closing leg WP4 → WP1 is added for you and drawn in RViz2.")
     try:
-        while rclpy.ok():
-            print(f"\n>>> {node.prompt} <<<\n")
-            node.command(input().strip().lower())
+        if args.load:
+            node.run()
+        else:
+            while rclpy.ok():
+                print(f"\n>>> {node.prompt} <<<\n")
+                if node.command(input().strip().lower()):
+                    break
     except (EOFError, KeyboardInterrupt):
         pass
     finally:
         if rclpy.ok():
             rclpy.shutdown()
+        spin.join(5)
 
 
 if __name__ == "__main__":

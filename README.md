@@ -40,7 +40,7 @@ router gateway : 192.168.123.1
 Main Workstation : 192.168.123.160
 Robot 741 : 192.168.123.100
 Robot 665 : 192.168.123.101
-Robot 834 : 192.168.123.102
+Robot 738 : 192.168.123.103
 
 On **robot**, trust the laptop's plain-HTTP registry, then restart docker:
 ```bash
@@ -144,7 +144,7 @@ terminal below needs the Step 3 exports.
 export ROBOT_ID=741
 ros2 run nav_cmd_bridge nav_cmd_bridge bridge --ip 192.168.123.100
 ```
-Likewise 665 with `--ip 192.168.123.101` and 834 with `--ip 192.168.123.102`.
+Likewise 665 with `--ip 192.168.123.101` and 738 with `--ip 192.168.123.103`.
 - Step 2 : Launch rviz with the "2D Goal Pose" tool publishing on /fleet_goal. No bridge listens there, so drawing
 an arrow never moves a robot by itself.
 ```bash
@@ -156,28 +156,64 @@ arrows drawn but not yet sent, coloured per robot and labelled with its id.
 - Step 3 : In another terminal, start fleet_management with a mode and the robot ids in the order you will draw
 their arrows, then follow that mode below
 ```bash
-python3 scripts/fleet_management.py single-waypoint 741 665 834
-python3 scripts/fleet_management.py multi-waypoint 741 665 834
-python3 scripts/fleet_management.py multi-waypoint-patrol 741 665 834
+python3 scripts/fleet_management.py single-waypoint 741 665 738
+python3 scripts/fleet_management.py multi-waypoint 741 665 738
+python3 scripts/fleet_management.py multi-waypoint-patrol 741 665 738
 ```
 
-**single-waypoint** : Draw one arrow per robot in that order (1st arrow → 741, 2nd → 665, 3rd → 834), then press
+**single-waypoint** : Draw one arrow per robot in that order (1st arrow → 741, 2nd → 665, 3rd → 738), then press
 ENTER in the fleet_management terminal: the goals go out back to back and all robots set off together. `c` + ENTER
-clears the arrows so you can redraw them. Nothing is sent until every robot has an arrow and a bridge listening on
-/goal_pose_<id>. Once sent, the next arrows start again from the first robot.
+clears the arrows so you can redraw them.
 
 **multi-waypoint** : Like `bridge queue`, per robot. Draw 741's waypoints in order, `n` + ENTER, draw 665's,
-`n` + ENTER, draw 834's, then ENTER: every robot sets off for its first waypoint together and works through the rest
+`n` + ENTER, draw 738's, then ENTER: every robot sets off for its first waypoint together and works through the rest
 on its own, without waiting for the others. A robot's next waypoint is sent once its /ODOM_relayed_<id> is within
 0.1 m of the current one, or after 125 s. `u` + ENTER drops the current robot's last arrow, `c` + ENTER clears all.
-Nothing is sent until every robot has a waypoint, a bridge listening, odometry, and has finished its previous route.
-The fleet_management terminal prints each ARRIVED / TIMEOUT and when a robot has finished; keep it running until
-then, since it sends the later waypoints.
 
 **multi-waypoint-patrol** : Like `bridge patrol`, per robot. Draw and send exactly as in multi-waypoint, but mark
 each robot's waypoints as a **closed shape**, at least 3, in order around it (e.g. the 4 corners of a square:
-WP1 → WP2 → WP3 → WP4). After its last waypoint a robot drives straight back to WP1 and loops, each robot at its own
-pace; the terminal prints each robot's lap. Do not redraw WP1 at the end: the closing leg (WP4 → WP1) is added for
-you, and /fleet_goal_markers draws it so you can check the shape before ENTER. `s` + ENTER stops the patrols: each
-robot stops at the waypoint it is driving to, and then a new plan can be sent. Ctrl+C in the fleet_management
-terminal also stops sending waypoints, but each robot still drives to the one it already has.
+WP1 → WP2 → WP3 → WP4).
+
+# Recording demo waypoints (demo/record_waypoints.sh)
+
+- Step 1 : Robot side (localization and relays, each robot with its own `ROBOT_ID`) and laptop Steps 1–4 and 6 for
+every robot.
+- Step 2 (optional) : rviz as in Multi-robot Step 2, to see the recorded waypoints on /fleet_goal_markers.
+- Step 3 : From the package root, in a terminal with the laptop Step 3 exports
+```bash
+demo/record_waypoints.sh                  # all phases in order: patrol formation sweep cordon
+demo/record_waypoints.sh sweep cordon     # only these phases
+ONLY="665" demo/record_waypoints.sh patrol   # only these robots; the other robots' waypoints in the file are kept
+R1=741 R2=665 R3=738 PATROL_ROBOTS="741 665" demo/record_waypoints.sh   # ids (default 741 665 738, patrol: all three)
+```
+- Step 4 : In each phase, for each robot in the table's order: drive it with its controller to each waypoint and press
+ENTER there; `n` + ENTER moves on to the next robot. After the last robot, `w` + ENTER saves
+`demo/waypoints/<phase>.json` and starts the next phase. `u` + ENTER undoes the current robot's last waypoint,
+`c` + ENTER clears the phase, Ctrl+C quits without saving the current phase.
+
+| Phase | Robots | Waypoints |
+|---|---|---|
+| patrol | R1 R2 R3 (or PATROL_ROBOTS) | perimeter corners in order, at least 3, first corner not repeated |
+| formation | R1 R2 R3 | 1 per robot: line slots 1, 2, 3 |
+| sweep | R1 R2 R3 | zone 1, 2, 3 waypoints in order; R3's last next to the box |
+| cordon | R1 R2 | 1 per robot: cordon point at zone 3 |
+
+# Running the demo (demo/run_demo.sh)
+
+- Step 1 : `demo/waypoints/` has `patrol.json`, `formation.json`, `sweep.json` and `cordon.json` (recorded above).
+- Step 2 : Robot side (localization and relays, each robot with its own `ROBOT_ID`) and laptop Steps 1–4 and 6 for
+every robot.
+- Step 3 : One plain bridge per robot, as in Multi-robot Step 1.
+- Step 4 (optional) : rviz as in Multi-robot Step 2, to see the routes on /fleet_goal_markers.
+- Step 5 : From the package root, in a terminal with the laptop Step 3 exports
+```bash
+demo/run_demo.sh
+```
+- Step 6 : In the same terminal
+
+| When | Type | Next |
+|---|---|---|
+| patrol running | instruction + ENTER (ENTER alone uses the Zone A instruction) | formation, then plan SR2-01 |
+| `Operator approval (approve/deny):` | `approve` + ENTER | sweep, then cordon, then the script exits |
+| `Operator approval (approve/deny):` | `deny` + ENTER | patrol again |
+| any time | Ctrl+C | script exits; each robot still drives to the waypoint it has |
