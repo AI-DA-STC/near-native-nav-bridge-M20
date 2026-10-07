@@ -1,0 +1,15 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>piper_msgs</name>
+  <version>0.0.0</version>
+  <description>The Aloha's Piper arm messages (ROS 2), field for field the same as ../ros1 so ros1_bridge maps them</description>
+  <maintainer email="srikrishna.rameshiyer@stengg.com">krishna22112023</maintainer>
+  <license>MIT</license>
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  <buildtool_depend>rosidl_default_generators</buildtool_depend>
+  <exec_depend>rosidl_default_runtime</exec_depend>
+  <member_of_group>rosidl_interface_packages</member_of_group>
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

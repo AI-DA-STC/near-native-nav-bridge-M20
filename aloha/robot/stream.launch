@@ -1,0 +1,23 @@
+<!-- Run on the Aloha after the cameras are up: roslaunch stream.launch [fps:=3] [jpeg_quality:=50]
+     Throttles each camera's JPEG color stream to /camera_X/color/image_throttled/compressed for aloha/bridge.sh,
+     since only a throttle on the robot saves link bandwidth. jpeg_quality changes the robot's
+     /camera_X/color/image_raw/compressed for every subscriber; raw images on the robot are untouched. -->
+<launch>
+  <arg name="fps" default="3"/>
+  <arg name="jpeg_quality" default="50"/>
+  <arg name="cameras" default="f l r"/>
+
+  <node pkg="topic_tools" type="throttle" name="throttle_camera_f" if="$(eval 'f' in cameras.split())"
+        args="messages /camera_f/color/image_raw/compressed $(arg fps) /camera_f/color/image_throttled/compressed"/>
+  <node pkg="topic_tools" type="throttle" name="throttle_camera_l" if="$(eval 'l' in cameras.split())"
+        args="messages /camera_l/color/image_raw/compressed $(arg fps) /camera_l/color/image_throttled/compressed"/>
+  <node pkg="topic_tools" type="throttle" name="throttle_camera_r" if="$(eval 'r' in cameras.split())"
+        args="messages /camera_r/color/image_raw/compressed $(arg fps) /camera_r/color/image_throttled/compressed"/>
+
+  <node pkg="dynamic_reconfigure" type="dynparam" name="jpeg_quality_f" if="$(eval 'f' in cameras.split())"
+        args="set /camera_f/color/image_raw/compressed jpeg_quality $(arg jpeg_quality)"/>
+  <node pkg="dynamic_reconfigure" type="dynparam" name="jpeg_quality_l" if="$(eval 'l' in cameras.split())"
+        args="set /camera_l/color/image_raw/compressed jpeg_quality $(arg jpeg_quality)"/>
+  <node pkg="dynamic_reconfigure" type="dynparam" name="jpeg_quality_r" if="$(eval 'r' in cameras.split())"
+        args="set /camera_r/color/image_raw/compressed jpeg_quality $(arg jpeg_quality)"/>
+</launch>

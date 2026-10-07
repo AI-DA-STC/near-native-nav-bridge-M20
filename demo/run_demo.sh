@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Suspicious-item search demo from the waypoints saved by demo/record_waypoints.sh (in WAYPOINTS). Start every
-# robot's bridge first. Ctrl+C ends the demo: no more waypoints are sent, each robot still drives to the one it has.
+# robot's bridge first, and for the Aloha what aloha/run_aloha.sh needs. Ctrl+C ends the demo: no more waypoints are
+# sent, each robot still drives to the one it has, and the Aloha's arms stop where they are.
 set -euo pipefail
 
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
@@ -17,12 +18,20 @@ stop() {
     wait "$pid" || true
 }
 
-for phase in patrol formation sweep cordon; do
+for phase in patrol formation sweep cordon clear; do
     if [[ ! -f $WAYPOINTS/$phase.json ]]; then
         echo "No $WAYPOINTS/$phase.json: record it with demo/record_waypoints.sh $phase" >&2
         exit 1
     fi
 done
+if [[ ! -f $WAYPOINTS/aloha.json ]]; then
+    echo "No $WAYPOINTS/aloha.json: the Aloha's pose at the box, as {\"aloha\": [{\"x\": ..., \"y\": ..., \"yaw\": ...}]}" >&2
+    exit 1
+fi
+if [[ ! -f $WAYPOINTS/manipulator.json ]]; then
+    echo "No $WAYPOINTS/manipulator.json: teach the Aloha's arm poses at the box with aloha/teach_manipulator.sh" >&2
+    exit 1
+fi
 trap 'exit 130' INT
 trap 'kill $(jobs -p) 2>/dev/null || true; wait' EXIT
 
@@ -70,3 +79,11 @@ echo -e "\n=== Cordon: R1 and R2 cordon off zone 3 ===\n"
 fleet single-waypoint cordon true
 wait "$pid"
 echo "[DEMO] Zone 3 cordoned off"
+
+echo -e "\n=== Aloha: R4 clears the way, the Aloha drives to the box, docks and opens the lid ===\n"
+fleet single-waypoint clear true
+wait "$pid"
+echo "[DEMO] Way to the box clear"
+# In the foreground, so that Ctrl+C also stops the arms
+WAYPOINTS=$WAYPOINTS "$HERE/../aloha/run_aloha.sh"
+echo "[DEMO] ALOHA done at the box"

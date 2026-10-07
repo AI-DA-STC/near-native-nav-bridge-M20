@@ -1,0 +1,32 @@
+topics:
+  - {topic: /tf, type: tf2_msgs/msg/TFMessage, queue_size: 100}
+  - {topic: /tf_static, type: tf2_msgs/msg/TFMessage, queue_size: 100, qos: {history: keep_last, depth: 100, durability: transient_local}}
+  - {topic: /map, type: nav_msgs/msg/OccupancyGrid, queue_size: 1, qos: {history: keep_last, depth: 1, durability: transient_local}}
+  - {topic: /scan, type: sensor_msgs/msg/LaserScan, queue_size: 10}
+  - {topic: /amcl_pose, type: geometry_msgs/msg/PoseWithCovarianceStamped, queue_size: 1, qos: {history: keep_last, depth: 1, durability: transient_local}}
+  - {topic: /particlecloud, type: geometry_msgs/msg/PoseArray, queue_size: 1, qos: {history: keep_last, depth: 1, durability: transient_local}}
+  - {topic: /initialpose, type: geometry_msgs/msg/PoseWithCovarianceStamped, queue_size: 10}
+  - {topic: /move_base_simple/goal, type: geometry_msgs/msg/PoseStamped, queue_size: 10}
+  - {topic: /move_base/cancel, type: actionlib_msgs/msg/GoalID, queue_size: 10}
+  - {topic: /move_base/status, type: actionlib_msgs/msg/GoalStatusArray, queue_size: 10}
+  - {topic: /move_base/current_goal, type: geometry_msgs/msg/PoseStamped, queue_size: 10}
+  - {topic: /move_base/GlobalPlanner/plan, type: nav_msgs/msg/Path, queue_size: 1}
+  - {topic: /move_base/DWAPlannerROS/local_plan, type: nav_msgs/msg/Path, queue_size: 1}
+  # Piper arms (start_ms_piper.launch), 200 Hz each. arm_status and end_pose_euler need build_bridge.sh's piper_msgs
+  - {topic: /master/joint_left, type: sensor_msgs/msg/JointState, queue_size: 10}
+  - {topic: /master/joint_right, type: sensor_msgs/msg/JointState, queue_size: 10}
+  - {topic: /puppet/joint_left, type: sensor_msgs/msg/JointState, queue_size: 10}
+  - {topic: /puppet/joint_right, type: sensor_msgs/msg/JointState, queue_size: 10}
+  - {topic: /puppet/end_pose_left, type: geometry_msgs/msg/PoseStamped, queue_size: 10}
+  - {topic: /puppet/end_pose_right, type: geometry_msgs/msg/PoseStamped, queue_size: 10}
+  - {topic: /puppet/end_pose_euler_left, type: piper_msgs/msg/PosCmd, queue_size: 10}
+  - {topic: /puppet/end_pose_euler_right, type: piper_msgs/msg/PosCmd, queue_size: 10}
+  - {topic: /puppet/arm_status_left, type: piper_msgs/msg/PiperStatusMsg, queue_size: 10}
+  - {topic: /puppet/arm_status_right, type: piper_msgs/msg/PiperStatusMsg, queue_size: 10}
+  # Cameras: JPEG color throttled on the robot by robot/stream.launch, decompressed to /camera_X/color/image_raw here
+  - {topic: /camera_f/color/image_throttled/compressed, type: sensor_msgs/msg/CompressedImage, queue_size: 1}
+  - {topic: /camera_l/color/image_throttled/compressed, type: sensor_msgs/msg/CompressedImage, queue_size: 1}
+  - {topic: /camera_r/color/image_throttled/compressed, type: sensor_msgs/msg/CompressedImage, queue_size: 1}
+  # Precise docking: send_goal.py --dock to robot/dock.py on the robot, and its answers
+  - {topic: /aloha/dock/goal, type: geometry_msgs/msg/PoseStamped, queue_size: 10}
+  - {topic: /aloha/dock/result, type: actionlib_msgs/msg/GoalStatus, queue_size: 10}
