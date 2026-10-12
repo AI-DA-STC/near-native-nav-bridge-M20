@@ -180,7 +180,7 @@ class SingleWaypointFleet(Node):
 
 
 class MultiWaypointFleet(Node):
-    def __init__(self, robot_ids, patrol=False, single=False, record=None):
+    def __init__(self, robot_ids, patrol=False, single=False, record=None, append=False):
         super().__init__("fleet_management")
         self.show_box = self.declare_parameter("show_box", False).value
         self.robot_ids = robot_ids
@@ -188,6 +188,7 @@ class MultiWaypointFleet(Node):
         self.min_wps = 3 if patrol else 1  # a patrol loops a closed shape, so it needs a polygon
         self.max_wps = 1 if single else math.inf
         self.record_path = record
+        self.append = append  # recorded waypoints go after those already in the file
         if record:
             self.prompt = ("Drive the current robot to a waypoint, then ENTER records its pose. n + ENTER: next "
                            "robot, u + ENTER: undo its last waypoint, c + ENTER: clear all, w + ENTER: save and exit")
@@ -283,11 +284,7 @@ class MultiWaypointFleet(Node):
 
     def save(self):
         with self.lock:
-            short = [rid for rid in self.robot_ids if len(self.pending[rid]) < self.min_wps]
             routes = {rid: [_waypoint(goal) for goal in self.pending[rid]] for rid in self.robot_ids}
-        if short:
-            print(f"[FLEET] Not saved: {self._too_few(short)}")
-            return False
         try:
             with open(self.record_path) as f:
                 saved = json.load(f)
@@ -295,6 +292,12 @@ class MultiWaypointFleet(Node):
             saved = {}
         except (OSError, ValueError) as e:
             print(f"[FLEET] Not saved: cannot read {self.record_path}: {e}")
+            return False
+        if self.append:  # a robot without new waypoints stays short
+            routes = {rid: saved.get(rid, []) + route if route else route for rid, route in routes.items()}
+        short = [rid for rid, route in routes.items() if len(route) < self.min_wps]
+        if short:
+            print(f"[FLEET] Not saved: {self._too_few(short)}")
             return False
         kept = [rid for rid in saved if rid not in routes]
         try:
@@ -458,6 +461,8 @@ def main():
     source.add_argument("--record", metavar="FILE",
                         help="Drive each robot to its waypoints instead of drawing them: ENTER records the "
                              "current robot's pose, w + ENTER saves them to FILE (other robots in FILE are kept)")
+    parser.add_argument("--append", action="store_true",
+                        help="With --record: add the waypoints after each robot's waypoints already in FILE")
     source.add_argument("--load", metavar="FILE",
                         help="Send the waypoints saved in FILE by --record as soon as every robot is ready, "
                              "then exit once every robot has finished (a patrol runs until Ctrl+C)")
@@ -471,12 +476,14 @@ def main():
         parser.error("robot ids are required without --load")
     patrol = args.mode == "multi-waypoint-patrol"
     single = args.mode == "single-waypoint"
+    if args.append and (not args.record or single):
+        parser.error("--append goes with --record, in a multi-waypoint mode")
 
     rclpy.init(args=sys.argv)
     if single and not (args.record or args.load):
         node = SingleWaypointFleet(robot_ids)
     else:
-        node = MultiWaypointFleet(robot_ids, patrol=patrol, single=single, record=args.record)
+        node = MultiWaypointFleet(robot_ids, patrol=patrol, single=single, record=args.record, append=args.append)
     problem = node.load(routes) if args.load else None
     if problem:
         rclpy.shutdown()

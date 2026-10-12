@@ -16,6 +16,11 @@ RUN apt-get update && apt-get install -y \
 COPY requirements.txt /tmp/requirements.txt
 RUN pip3 install --no-cache-dir -r /tmp/requirements.txt
 
+# The demo's box detector (demo/detect_box.py, YOLO26 from external/lynx-M20-yolo), on CPU
+COPY demo/requirements-detect.txt /tmp/requirements-detect.txt
+RUN pip3 install --no-cache-dir --index-url https://download.pytorch.org/whl/cpu torch==2.4.1 torchvision==0.19.1 \
+    && pip3 install --no-cache-dir -r /tmp/requirements-detect.txt
+
 # ros1_bridge with the Aloha's piper_msgs, for aloha/bridge.sh
 COPY aloha/piper_msgs /tmp/aloha/piper_msgs
 COPY aloha/build_bridge.sh /tmp/aloha/build_bridge.sh

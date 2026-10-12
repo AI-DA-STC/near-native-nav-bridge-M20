@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 # Records the search demo's waypoints by driving each robot with its remote: ENTER in fleet_management saves the
-# robot's current pose. Usage: demo/record_waypoints.sh [patrol] [formation] [sweep] [cordon] [clear]  (default: all)
-# Robot ids: R1, R2, R3 (default 741 665 738), PATROL_ROBOTS (default R1 R2 R3) and R4 (default 834), which clears the
-# Aloha's way to the box; files go to WAYPOINTS (default demo/waypoints). ONLY="<ids>" records just those robots and
-# keeps the others' waypoints in the file.
+# robot's current pose. Usage: demo/record_waypoints.sh [patrol] [formation] [sweep] [cordon]  (default: all four)
+# Robot ids: R1, R2, R3 (default 741 665 738) and PATROL_ROBOTS (default all three); files go to WAYPOINTS
+# (default demo/waypoints). ONLY="<ids>" records just those robots and keeps the others' waypoints in the file.
+# APPEND=1 adds the new waypoints after the ones each robot already has, e.g. ONLY=738 APPEND=1 ... sweep
 set -euo pipefail
 
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 WAYPOINTS=${WAYPOINTS:-$HERE/waypoints}
-R1=${R1:-741} R2=${R2:-665} R3=${R3:-738} R4=${R4:-834}
+R1=${R1:-741} R2=${R2:-665} R3=${R3:-738}
 PATROL_ROBOTS=${PATROL_ROBOTS:-"$R1 $R2 $R3"}
 
 record() {
@@ -21,14 +21,14 @@ record() {
         echo -e "\n=== $phase: none of ONLY=$ONLY takes part, skipped ==="
         return
     fi
-    echo -e "\n=== $phase ($mode, R1=$R1 R2=$R2 R3=$R3 R4=$R4): $what ===\n"
+    echo -e "\n=== $phase ($mode, R1=$R1 R2=$R2 R3=$R3${APPEND:+, appending}): $what ===\n"
     python3 "$HERE/../scripts/fleet_management.py" "$mode" "${robots[@]}" --record "$WAYPOINTS/$phase.json" \
-        --ros-args -p show_box:=true
+        ${APPEND:+--append} --ros-args -p show_box:=true
 }
 
 trap 'exit 130' INT
 mkdir -p "$WAYPOINTS"
-[[ $# -gt 0 ]] || set -- patrol formation sweep cordon clear
+[[ $# -gt 0 ]] || set -- patrol formation sweep cordon
 for phase; do
     case $phase in
         patrol)    record patrol multi-waypoint-patrol \
@@ -41,8 +41,6 @@ for phase; do
                        "$R1" "$R2" "$R3" ;;
         cordon)    record cordon single-waypoint \
                        "R1 and R2 to their cordon points around zone 3, ENTER once per robot" "$R1" "$R2" ;;
-        clear)     record clear single-waypoint \
-                       "R4 out of the Aloha's way to the box, ENTER once" "$R4" ;;
-        *)         echo "Unknown phase '$phase': patrol, formation, sweep, cordon or clear" >&2; exit 1 ;;
+        *)         echo "Unknown phase '$phase': patrol, formation, sweep or cordon" >&2; exit 1 ;;
     esac
 done

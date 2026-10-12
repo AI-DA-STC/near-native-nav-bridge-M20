@@ -1,0 +1,5 @@
+# demo/detect_box.py: the YOLO26 box detector (external/lynx-M20-yolo) on the laptop's system python3 (3.8), on CPU.
+# pip3 install --index-url https://download.pytorch.org/whl/cpu torch==2.4.1 torchvision==0.19.1
+# pip3 install -r demo/requirements-detect.txt
+ultralytics>=8.4,<8.5
+lap>=0.5.12

@@ -1,0 +1,4 @@
+[submodule "external/lynx-M20-yolo"]
+	path = external/lynx-M20-yolo
+	url = https://github.com/NKusesGithub/lynx-M20-yolo.git
+	branch = instance-training-batch-updates

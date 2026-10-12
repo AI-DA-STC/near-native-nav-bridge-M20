@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
 # Suspicious-item search demo from the waypoints saved by demo/record_waypoints.sh (in WAYPOINTS). Start every
-# robot's bridge first, and for the Aloha what aloha/run_aloha.sh needs. Ctrl+C ends the demo: no more waypoints are
-# sent, each robot still drives to the one it has, and the Aloha's arms stop where they are.
+# robot's bridge first, and for the Aloha what aloha/run_aloha.sh needs. From the sweep on, demo/detect_box.py watches
+# R3's camera (only R3's) for the box (R3 default 738); without video after 3 tries, the sweep ends and the cordon starts. Ctrl+C ends the demo: no more waypoints are sent, each robot
+# still drives to the one it has, and the Aloha's arms stop where they are.
 set -euo pipefail
 
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 WAYPOINTS=${WAYPOINTS:-$HERE/waypoints}
 INSTRUCTION="Execute a systematic sweep of Zone A to scan for unattended or anomalous items"
+R3=${R3:-738}
 
 fleet() {
     python3 "$HERE/../scripts/fleet_management.py" "$1" --load "$WAYPOINTS/$2.json" --ros-args -p show_box:=${3:-false} &
@@ -18,7 +20,7 @@ stop() {
     wait "$pid" || true
 }
 
-for phase in patrol formation sweep cordon clear; do
+for phase in patrol formation sweep cordon; do
     if [[ ! -f $WAYPOINTS/$phase.json ]]; then
         echo "No $WAYPOINTS/$phase.json: record it with demo/record_waypoints.sh $phase" >&2
         exit 1
@@ -71,8 +73,18 @@ echo "[DEMO] Plan SR2-01 approved, waiting for every robot to reach its slot"
 wait "$pid"
 
 echo -e "\n=== Sweep: every robot sweeps its zone ===\n"
+python3 "$HERE/detect_box.py" --robot "$R3" --give-up 3 &  # until the demo ends, or 3 tries without video
+detect=$!
 fleet multi-waypoint sweep
-wait "$pid"
+while kill -0 "$pid" 2>/dev/null && kill -0 "$detect" 2>/dev/null; do
+    sleep 1
+done
+if kill -0 "$pid" 2>/dev/null; then  # the detection gave up: the cordon now, each robot drives to the waypoint it has
+    echo "[DEMO] No video from R3's camera: on to the cordon"
+    stop
+else
+    wait "$pid"
+fi
 echo "[DEMO] R3: suspicious item reported next to the box, watching it"
 
 echo -e "\n=== Cordon: R1 and R2 cordon off zone 3 ===\n"
@@ -80,10 +92,22 @@ fleet single-waypoint cordon true
 wait "$pid"
 echo "[DEMO] Zone 3 cordoned off"
 
-echo -e "\n=== Aloha: R4 clears the way, the Aloha drives to the box, docks and opens the lid ===\n"
-fleet single-waypoint clear true
-wait "$pid"
-echo "[DEMO] Way to the box clear"
-# In the foreground, so that Ctrl+C also stops the arms
-WAYPOINTS=$WAYPOINTS "$HERE/../aloha/run_aloha.sh"
+echo -e "\n=== Aloha: drive to the box, dock and open the lid ===\n"
+# On the Aloha's ROS_DOMAIN_ID (aloha/bridge.sh), only for this command: the fleet stays on its own. In the foreground,
+# so that Ctrl+C also stops the arms
+ROS_DOMAIN_ID=1 WAYPOINTS=$WAYPOINTS "$HERE/../aloha/run_aloha.sh"
 echo "[DEMO] ALOHA done at the box"
+
+echo -e "\n=== Verdict: the operator marks the box's contents ===\n"
+verdict=
+until [[ $verdict == anomaly || $verdict == clear ]]; do
+    read -r -p "Operator verdict (anomaly/clear): " verdict
+    verdict=${verdict,,}
+done
+echo "[DEMO] Operator verdict: ${verdict^^}"
+if [[ $verdict == clear ]]; then
+    echo -e "\n=== Return to formation: every robot back to its slot in the line ===\n"
+    fleet single-waypoint formation true
+    wait "$pid"
+    echo "[DEMO] Every robot back in formation"
+fi

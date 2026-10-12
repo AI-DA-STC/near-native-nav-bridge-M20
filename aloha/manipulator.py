@@ -3,14 +3,15 @@
 teach saves both puppet arms' joint positions (/puppet/joint_left, /puppet/joint_right) at every ENTER. run drives the
 puppet arms through the saved poses with /master/joint_left and /master/joint_right, which start_ms_piper.launch only
 follows with mode:=1 auto_enable:=true. Every move starts and stops gently, from the previous pose (from where the arms
-are, for the first) at --speed at most. Ctrl+C stops sending: the arms stay where they are. Run with the bridge's
-ROS_DOMAIN_ID."""
+are, for the first) at --speed at most. Once at pose 3, they hold it 5 s longer while inspect_box.py takes its photo of
+the box's contents. Ctrl+C stops sending: the arms stay where they are. Run with the bridge's ROS_DOMAIN_ID."""
 
 import argparse
 import json
 import math
 import os
 import shutil
+import subprocess
 import sys
 import threading
 import time
@@ -24,7 +25,9 @@ GRIPPER = 6  # position index of the gripper opening, in m; joint0-5 are in rad
 GRIPPER_SPEED = 0.1  # m/s at most
 TOLERANCE = 0.05  # rad: how close joint0-5 get to a pose before the pause there
 SETTLE_S = 5.0  # longest wait for that
-POSE3_DELAY_S = 5.0  # extra seconds at pose 3, on top of --pause
+POSE3_DELAY_S = 5.0  # extra seconds at pose 3, on top of --pause: inspect_box.py takes its photo then
+INSPECT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "inspect_box.py")
+INSPECT_TIMEOUT_S = 60.0  # for its result, after the last pose
 FRESH_S = 0.5  # older puppet positions are not saved
 DEFAULT_FILE = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "demo", "waypoints",
                                              "manipulator.json"))
@@ -120,6 +123,7 @@ def run(node, latest, path, speed, pause):
         return max(abs(p - g) for arm in ARMS
                    for p, g in list(zip(latest[f"/puppet/joint_{arm}"][0].position, pose[arm]))[:GRIPPER])
 
+    inspect = None
     for i, pose in enumerate(poses, 1):
         print(f"Pose {i}/{len(poses)}")
         duration = 1.5 * max(abs(g - s) / (GRIPPER_SPEED if j == GRIPPER else speed)
@@ -138,11 +142,19 @@ def run(node, latest, path, speed, pause):
         if off(pose) > TOLERANCE:
             print(f"  Still {off(pose):.2f} rad off after {SETTLE_S:.0f} s: is start_ms_piper.launch running with "
                   "mode:=1 auto_enable:=true?")
+        if i == 3:  # the box held open: the photo of its contents
+            inspect = subprocess.Popen([sys.executable, INSPECT])
         end = time.monotonic() + pause + (POSE3_DELAY_S if i == 3 else 0.0)
         while time.monotonic() < end:
             send(pose)
             time.sleep(1 / RATE)
         current = pose
+    if inspect is not None:
+        try:
+            inspect.wait(INSPECT_TIMEOUT_S)
+        except subprocess.TimeoutExpired:
+            inspect.kill()
+            print(f"  inspect_box.py stopped: no result after {INSPECT_TIMEOUT_S:.0f} s")
     print(f"Done: the arms stay at pose {len(poses)}")
 
 

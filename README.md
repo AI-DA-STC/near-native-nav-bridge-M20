@@ -184,6 +184,7 @@ every robot.
 demo/record_waypoints.sh                  # all phases in order: patrol formation sweep cordon
 demo/record_waypoints.sh sweep cordon     # only these phases
 ONLY="665" demo/record_waypoints.sh patrol   # only these robots; the other robots' waypoints in the file are kept
+ONLY="738" APPEND=1 demo/record_waypoints.sh sweep   # add waypoints after the ones 738 already has
 R1=741 R2=665 R3=738 PATROL_ROBOTS="741 665" demo/record_waypoints.sh   # ids (default 741 665 738, patrol: all three)
 ```
 - Step 4 : In each phase, for each robot in the table's order: drive it with its controller to each waypoint and press
@@ -214,6 +215,59 @@ demo/run_demo.sh
 | When | Type | Next |
 |---|---|---|
 | patrol running | instruction + ENTER (ENTER alone uses the Zone A instruction) | formation, then plan SR2-01 |
-| `Operator approval (approve/deny):` | `approve` + ENTER | sweep, then cordon, then the script exits |
+| `Operator approval (approve/deny):` | `approve` + ENTER | sweep, cordon, the Aloha at the box, then the verdict |
 | `Operator approval (approve/deny):` | `deny` + ENTER | patrol again |
+| `Operator verdict (anomaly/clear):` | `clear` + ENTER, after the Aloha's photo of the contents | every robot back to its formation slot, then the script exits |
+| `Operator verdict (anomaly/clear):` | `anomaly` + ENTER | the script exits |
 | any time | Ctrl+C | script exits; each robot still drives to the waypoint it has |
+
+Or, instead of Steps 5–6, run it from the operator window, next to the RViz2s:
+```bash
+python3 demo/demo_gui.py
+```
+**Start demo** runs `demo/run_demo.sh` exactly as the terminal would, with ROS_DOMAIN_ID=0 and `fastdds_profile.xml`
+unless the terminal sets them. The banner says what is going on, and turns black when the operator has to act: type
+the instruction and **Send** (empty: the Zone A instruction), then **Approve plan** or **Deny**. The mission plan on the
+left is generated once the instruction is sent and is then executed step by step. The window also shows each robot's
+status (in progress, done, stopped, failed), every plan generated with its status (generating, awaiting approval,
+denied, executing, completed, stopped, failed), and a warning when the fleet cannot send (e.g. a robot not connected).
+**Stop demo** is Ctrl+C; **Show** opens the demo's own output.
+
+## Box detection (demo/detect_box.py)
+
+From the start of the sweep until the demo ends, `run_demo.sh` runs `demo/detect_box.py` on R3's front camera only
+(robot 738, `rtsp://192.168.123.103:8554/video1` from `external/lynx-M20-yolo/live_config.yaml`). The other robots'
+cameras stay off. It runs the YOLO26 box model of the `external/lynx-M20-yolo` submodule (`weights/shiwei.pt`) at
+the config's `inference_fps` on the CPU. Once the tracker has followed a box for 3 frames, it prints
+`[DETECT] Box found by robot 738 at x=… y=… (map), … m away, …, image demo/detections/box_….jpg`. The map position
+comes from R3's `/ODOM_relayed_738` plus the box's distance (the config's depth model) and its bearing in the image.
+The operator window then shows **BOX FOUND** in the banner, and the box's image and map coordinates at the top right.
+A closer view later refines them. The cordon and the Aloha carry on as before.
+
+- Once, after cloning: `git submodule update --init` (the detector and its weights).
+- Once, on the laptop, unless the devcontainer was rebuilt after this was added:
+```bash
+pip3 install --index-url https://download.pytorch.org/whl/cpu torch==2.4.1 torchvision==0.19.1
+pip3 install -r demo/requirements-detect.txt
+```
+- R3's camera must be streaming. Check with `python3 demo/detect_box.py` (Ctrl+C stops it): it prints
+  `[video] connected: rtsp://…` once it has the stream, `[video] cannot open …, retrying` while it has none. Without a
+  stream, the window shows "No video from R3 · 738's camera yet. Retrying…" and the demo goes on.
+- To try the detector alone: `python3 demo/detect_box.py --source external/lynx-M20-yolo/samples/test1.png`.
+
+## Box contents (aloha/inspect_box.py)
+
+When the Aloha's arms reach pose 3 (the lid open), they hold it 5 s longer. In that time, `manipulator.py` runs
+`aloha/inspect_box.py`, which takes one photo from `/camera_r/color/image_raw` (ROS_DOMAIN_ID=1, the right wrist camera
+through `aloha/bridge.sh` and `robot/stream.launch`). It then runs the YOLO26 tools model,
+`external/lynx-M20-yolo/weights/tools_seg.pt`, on that one photo. The classes are screwdriver, drill, pliers, case,
+scissors and object. It prints `[INSPECT] Box contents: screwdriver 0.56, object 0.39; image demo/detections/contents_….jpg`.
+The operator window shows the photo, with the objects outlined, under the box's image, with the list of objects.
+It then asks at once for the operator's verdict: **Anomaly** or **Clear**. After **Clear**, R1, R2 and R3 go back to
+their formation slots (`formation.json`), the mission plan's last step, and the demo ends once they are there. After
+**Anomaly**, the demo ends at once and that step shows as skipped. A verdict given before `run_demo.sh` asks is kept until it asks. Click either image, or **⤢ Enlarge**, to
+see it in a window of its own. Maximize that window (or double-click it, or press F) to fill the screen; Esc closes it.
+
+- `tools_seg.pt` is on the detector repo's `instance-training-batch-updates` branch. The submodule is pinned to that
+  branch's commit (`.gitmodules` names the branch).
+- To try it alone, with the bridge up: `ROS_DOMAIN_ID=1 python3 aloha/inspect_box.py`.
