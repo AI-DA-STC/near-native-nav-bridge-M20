@@ -1,0 +1,7 @@
+/* VerdictPanel: Command Center design system, components/bundle.css */
+.cc-verdict { display: flex; flex-direction: column; gap: 8px; }
+.cc-verdict__buttons { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.cc-verdict__hint { margin: 0; font-size: 12px; line-height: 17px; color: var(--text-muted); }
+.cc-verdict.is-decided { flex-direction: row; align-items: center; flex-wrap: wrap; gap: 10px; }
+.cc-verdict__label { font-size: 10.5px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--text-muted); }
+.cc-verdict__when { font-size: 12px; color: var(--text-muted); }

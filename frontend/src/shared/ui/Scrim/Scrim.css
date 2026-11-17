@@ -1,0 +1,4 @@
+/* Overlay scrim, shared by ConfirmModal and Lightbox: Command Center design system, components/bundle.css */
+.cc-scrim { position: fixed; inset: 0; z-index: var(--z-modal); display: grid; place-items: center; padding: 24px; background: color-mix(in srgb, var(--bg) 72%, transparent); }
+.cc-scrim--dark { z-index: var(--z-lightbox); background: color-mix(in srgb, var(--bg) 90%, transparent); }
+.cc-scrim.is-inline { position: relative; inset: auto; z-index: auto; padding: 24px; border-radius: var(--radius-md); }

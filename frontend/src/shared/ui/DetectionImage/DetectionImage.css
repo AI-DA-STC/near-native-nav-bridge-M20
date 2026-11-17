@@ -1,0 +1,20 @@
+/* DetectionImage: Command Center design system, components/bundle.css */
+.cc-detimg { position: relative; margin: 0; width: 100%; overflow: hidden; border-radius: var(--radius-sm); background: var(--surface-well); border: 1px solid var(--line); }
+.cc-detimg > img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.cc-detimg.is-dim > img { filter: saturate(.6) brightness(.8); }
+.cc-detimg__none { width: 100%; height: 100%; background: repeating-linear-gradient(-45deg, transparent 0 8px, var(--surface) 8px 10px); }
+.cc-detbox { position: absolute; border: 1px solid var(--finding-line); }
+.cc-detbox.is-faint { opacity: .6; }
+.cc-detbox__c { position: absolute; width: 10px; height: 10px; border: 0 solid var(--finding); }
+.cc-detbox__c.is-tl { left: -2px; top: -2px; border-left-width: 2.5px; border-top-width: 2.5px; }
+.cc-detbox__c.is-tr { right: -2px; top: -2px; border-right-width: 2.5px; border-top-width: 2.5px; }
+.cc-detbox__c.is-br { right: -2px; bottom: -2px; border-right-width: 2.5px; border-bottom-width: 2.5px; }
+.cc-detbox__c.is-bl { left: -2px; bottom: -2px; border-left-width: 2.5px; border-bottom-width: 2.5px; }
+.cc-detbox__label { position: absolute; left: -2px; bottom: calc(100% + 4px); padding: 1px 6px; border-radius: var(--radius-xs); background: var(--finding); color: var(--finding-ink); font: 700 10.5px/14px var(--font-mono); white-space: nowrap; }
+.cc-detbox__label.is-inside { bottom: auto; top: 4px; left: 4px; }
+.cc-detimg__expand {
+  position: absolute; right: 6px; bottom: 6px; display: grid; place-items: center; width: 26px; height: 26px;
+  border-radius: var(--radius-sm); border: 1px solid var(--line-strong); background: color-mix(in srgb, var(--bg) 75%, transparent);
+  color: var(--text); cursor: zoom-in;
+}
+.cc-detimg__expand:hover { background: var(--surface-raised-2); }

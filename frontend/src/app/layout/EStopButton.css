@@ -1,0 +1,12 @@
+/* EStopButton: Command Center design system, components/bundle.css */
+.cc-estop {
+  height: var(--control-h); padding: 0 18px;
+  border-radius: var(--radius-sm); border: 1px solid var(--fault);
+  background: linear-gradient(180deg, var(--estop), var(--estop-2));
+  color: var(--danger-ink); font: 700 13px/1 var(--font-sans); letter-spacing: .1em;
+  box-shadow: var(--shadow-estop); cursor: pointer; white-space: nowrap;
+  text-shadow: 0 1px 0 color-mix(in srgb, var(--bg) 35%, transparent);
+}
+.cc-estop:hover { filter: brightness(1.1); }
+.cc-estop:active { transform: translateY(1px); filter: brightness(.95); }
+.cc-estop--lg { height: 44px; padding: 0 26px; font-size: 15px; }

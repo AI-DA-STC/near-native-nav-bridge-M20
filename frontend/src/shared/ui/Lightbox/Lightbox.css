@@ -1,0 +1,5 @@
+/* Lightbox: Command Center design system, components/bundle.css */
+.cc-lightbox { margin: 0; width: min(880px, 100%); padding: 14px; border-radius: var(--radius-lg); background: var(--surface); border: 1px solid var(--line-strong); box-shadow: var(--shadow-modal); }
+.cc-lightbox__head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.cc-lightbox__cap { flex: 1; min-width: 0; font-weight: 600; color: var(--text); }
+.cc-lightbox__meta { margin-top: 10px; color: var(--text-2); font: 400 12px/18px var(--font-mono); }

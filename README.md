@@ -53,30 +53,19 @@ docker pull --platform linux/arm64 192.168.123.160:5000/m20-bridge:foxy
 docker tag  192.168.123.160:5000/m20-bridge:foxy m20-bridge:foxy     # restore the clean name
 ```
 
-# localization on robot
+# Robot side setup
 
 - Step 1 : Connect to the router WiFi "near-robots-5G" 
-- Step 2 : SSH into the robot like so : 
+- Step 2 : SSH into the robot with its IP from the table above, password = ' (single quote)
 ```bash
-ssh user@192.168.8.101, password = ' (single quote)
+ssh user@<robot_ip>
 ```
-- Step 3 : Robot localization verification
+- Step 3 : Run the relay node to convert DeepRobotics topics to ROS topics 
 
-ensure robot is localized on the preloaded SLAM map by running the following on the robot
 ```bash
 su
-source /opt/ros/foxy/setup.bash
-rviz2
-```
-- on the rviz, look for the 3D ODOM position of the robot, it should somewhat reflect its current position. 
-If it is drifting, select "2D Pose Estimate", then click and extend the arrow to set the location and heading.
-- After the robot relozalises, close and save rviz
-
-- Step 4 : Run the relay node to convert DeepRobotics topics to ROS topics 
-
-```bash
 docker compose up -d nav_cmd_bridge
-docker exec -it nav_cmd_bridge bash
+docker compose exec nav_cmd_bridge bash
 export ROBOT_ID=<robot_id>
 export ROS_DOMAIN_ID=0
 ros2 launch nav_cmd_bridge relays.launch.py 
@@ -87,6 +76,18 @@ wait for atleast 2 mins for the above relay node to start, you should see a bunc
 and prefixes every frame id except `map` (`<robot_id>/base_link`), so any number of robots can share one
 `ROS_DOMAIN_ID`. All robots publish TF into the shared `/tf_relayed` and `/tf_static_relayed`, so they
 must all run the same map. Left unset you get the original single-robot names.
+
+- Step 4 : Localize the robot on the preloaded SLAM map, from the laptop's rviz (rviz2 on the robot is too slow).
+In a laptop terminal with the laptop side Step 3 exports:
+```bash
+rviz2 --ros-args -r /tf:=/tf_relayed -r /tf_static:=/tf_static_relayed -r /initialpose:=/initialpose_relayed_<robot_id>
+```
+Set Fixed Frame to `map` (the robot's localizer only knows `map`, not the `<robot_id>/` frames) and enable
+/ODOM_relayed_<id> and /GRID_MAP_relayed_<id>. The odometry should roughly match where the robot stands. If it is
+drifting, select "2D Pose Estimate", then click and extend the arrow to set the location and heading: the robot's
+`initialpose_relay_<id>` hands it to the localizer as `/initialpose`. To localize several robots from one rviz, add
+one "2D Pose Estimate" tool per robot with topic /initialpose_relayed_<id>. The tool's default topic, /initialpose,
+reaches no robot.
 
 # Laptop side setup
 
@@ -105,10 +106,11 @@ ros2 topic hz /ODOM_relayed_<robot_id>
 ```
 - Step 5 : Launch rviz on the robots' shared TF. Do not relay TF into `/tf`: the robots would relay it back in a loop.
 ```bash
-rviz2 --ros-args -r /tf:=/tf_relayed -r /tf_static:=/tf_static_relayed -r /goal_pose:=/goal_pose_<robot_id>
+rviz2 --ros-args -r /tf:=/tf_relayed -r /tf_static:=/tf_static_relayed -r /goal_pose:=/goal_pose_<robot_id> -r /initialpose:=/initialpose_relayed_<robot_id>
 ```
 Set Fixed Frame to `map`. Per robot id, enable /ALIGNED_POINTS_relayed_<id>, /ODOM_relayed_<id> and
 /NAV_POINTS_relayed_<id>, plus one /GRID_MAP_relayed_<id>, and add a "2D Goal Pose" tool with topic /goal_pose_<id>.
+"2D Pose Estimate" relocalizes the robot, as in robot side Step 4.
 The goal arrow disappears once drawn, so the bridge publishes the waypoints back: Add → By topic →
 /waypoint_markers_<id> → MarkerArray. Each waypoint shows as a numbered arrow, green while it is the current target.
 - Step 6 : Before you run any nav commands, on the robot controller, standup the robot from controller

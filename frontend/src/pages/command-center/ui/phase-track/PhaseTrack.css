@@ -1,0 +1,68 @@
+/* PhaseTrack: Command Center design system, components/bundle.css */
+.cc-track { min-width: 0; padding: 8px 10px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-md); box-shadow: var(--shadow-panel); }
+.cc-track__row { display: grid; align-items: stretch; column-gap: 6px; row-gap: 2px; margin: 0; padding: 0; list-style: none; }
+.cc-track__head { display: flex; flex-direction: column; justify-content: center; gap: 2px; padding-left: 4px; }
+.cc-track__label { font-size: 10.5px; font-weight: 600; letter-spacing: .08em; color: var(--text-muted); line-height: 14px; }
+.cc-track__label.is-failed { color: var(--fault-text); }
+.cc-track__count { font: 700 26px/28px var(--font-sans); font-variant-numeric: tabular-nums; color: var(--text); }
+.cc-track__count small { font-size: 14px; font-weight: 600; color: var(--text-muted); }
+.cc-phase {
+  position: relative; display: flex; flex-direction: column; gap: 3px; min-width: 0;
+  padding: 8px 10px 9px; border-radius: var(--radius-sm); border: 1px solid transparent;
+  transition: background var(--dur-base) var(--ease-standard), border-color var(--dur-base) var(--ease-standard);
+}
+.cc-phase__top { display: flex; align-items: center; gap: 6px; min-width: 0; min-height: 18px; }
+.cc-phase__n { flex: none; font: 600 11px/1 var(--font-mono); color: var(--text-muted); }
+.cc-phase__name { min-width: 0; font-size: 13.5px; font-weight: 600; line-height: 17px; color: var(--text-2); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow-wrap: anywhere; }
+
+.cc-phase__you {
+  margin-left: auto; flex: none; display: inline-flex; align-items: center; gap: 3px; height: 16px; padding: 0 5px;
+  border-radius: var(--radius-xs); border: 1px solid var(--accent-line); color: var(--accent);
+  font: 700 9.5px/1 var(--font-mono); letter-spacing: .06em;
+}
+.cc-phase__top .cc-phase__time { margin-left: auto; font-size: 13px; }
+.cc-phase__top .cc-badge { min-width: 0; overflow: hidden; }
+.cc-phase__meta { display: flex; align-items: center; gap: 6px; min-height: 18px; font-size: 12px; color: var(--text-muted); white-space: nowrap; overflow: hidden; }
+.cc-phase__time { font: 500 12px/1 var(--font-mono); font-variant-numeric: tabular-nums; color: var(--text-muted); }
+.cc-phase__time.is-live { color: var(--live); font-weight: 600; }
+.cc-phase__note { color: var(--text-2); overflow: hidden; text-overflow: ellipsis; }
+.cc-phase__turn { color: var(--accent); font-weight: 700; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; }
+.cc-phase__sub { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 12px; font: 500 12.5px/18px var(--font-mono); color: var(--text-2); }
+.cc-phase__subitem { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+.cc-phase__subitem b { color: var(--rc); font-weight: 700; }
+.cc-phase__subdot { flex: none; width: 7px; height: 7px; border-radius: 2px; background: var(--rc); }
+.cc-phase__rail { margin-top: auto; height: 4px; border-radius: var(--radius-pill); background: var(--surface-raised-2); overflow: hidden; }
+.cc-phase__rail > span { display: block; height: 100%; border-radius: inherit; background-color: var(--rail, transparent); }
+.cc-phase.is-done { --rail: var(--ok); }
+.cc-phase.is-done .cc-phase__name { color: var(--text-2); }
+.cc-phase.is-pending .cc-phase__name { color: var(--text-muted); font-weight: 500; }
+.cc-phase.is-pending .cc-phase__rail { background: var(--surface-raised); }
+.cc-phase.is-active { background: var(--surface-raised-2); border-color: var(--live-line); --rail: var(--live); }
+.cc-phase.is-active .cc-phase__name { display: block; font-size: 28px; line-height: 32px; font-weight: 700; color: var(--text); letter-spacing: -.01em; white-space: nowrap; text-overflow: ellipsis; }
+.cc-phase.is-active { gap: 3px; }
+.cc-phase.is-active .cc-phase__rail > span {
+  background-image: repeating-linear-gradient(-45deg, transparent 0 5px, color-mix(in srgb, var(--bg) 30%, transparent) 5px 10px);
+  background-size: 20px 100%; animation: cc-stripe 1s linear infinite;
+}
+.cc-phase.is-waiting { background: var(--accent-fill); border-color: var(--accent); --rail: var(--accent); animation: cc-hot var(--dur-pulse) var(--ease-pulse) infinite; }
+.cc-phase.is-waiting .cc-phase__you { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.cc-phase.is-failed { background: var(--fault-fill); border-color: var(--fault-line); --rail: var(--fault); }
+.cc-phase.is-failed .cc-phase__name, .cc-phase.is-failed .cc-phase__note { color: var(--fault-text); }
+.cc-phase.is-failed .cc-phase__meta { white-space: normal; align-items: flex-start; }
+.cc-phase.is-failed .cc-phase__note { font-weight: 600; }
+.cc-phase.is-stopped { --rail: var(--unknown); }
+.cc-phase.is-skipped .cc-phase__name { color: var(--text-muted); font-weight: 500; text-decoration: line-through; text-decoration-color: var(--unknown); }
+.cc-phase.is-active .cc-phase__n, .cc-phase.is-waiting .cc-phase__n, .cc-phase.is-failed .cc-phase__n, .cc-phase.is-failed .cc-phase__time { color: var(--text-2); }
+.cc-phase.is-skipped .cc-phase__rail { background: repeating-linear-gradient(90deg, var(--line-strong) 0 4px, transparent 4px 8px); }
+.cc-phase.is-skipped .cc-phase__rail > span { background: none; }
+.cc-phase.is-decision.is-done .cc-phase__you, .cc-phase.is-decision.is-skipped .cc-phase__you { border-color: var(--line-strong); color: var(--text-muted); }
+.cc-track__loop { position: relative; grid-row: 2; display: flex; align-items: center; justify-content: center; height: 20px; }
+.cc-track__loopline { position: absolute; left: 6%; right: 6%; top: 50%; border-top: 1.5px dashed var(--unknown); }
+.cc-track__loopline::before { content: ''; position: absolute; left: -3px; top: -5.5px; border-style: solid; border-width: 5px 7px 5px 0; border-color: transparent var(--unknown) transparent transparent; }
+.cc-track__looplabel { position: relative; display: inline-flex; align-items: center; gap: 5px; padding: 0 8px; background: var(--surface); color: var(--text-2); font-size: 11.5px; font-weight: 600; white-space: nowrap; }
+.cc-track--compact { padding: 6px 8px; }
+.cc-track--compact .cc-phase { padding: 5px 8px 6px; }
+.cc-track--compact .cc-phase.is-active .cc-phase__name { font-size: 20px; line-height: 24px; }
+.cc-track--compact .cc-phase > .cc-phase__name { -webkit-line-clamp: 1; font-size: 13px; }
+.cc-track--compact .cc-phase.is-active > .cc-phase__name { font-size: 20px; line-height: 24px; }
+.cc-track--compact .cc-track__count { font-size: 20px; line-height: 22px; }

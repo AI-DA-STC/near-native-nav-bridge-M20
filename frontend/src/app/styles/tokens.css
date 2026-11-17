@@ -1,0 +1,240 @@
+/* Command Center — generated from tokens.json */
+:root, [data-theme="dark"] {
+  --bg: #000000; /* Page ground: the body behind every panel, the gaps between panels, the strip under the tab bar. The darkest field after surface-well. */
+  --bg-2: #0b1017; /* Second page tone: the tab bar band and the map's ground inside the scene panel. Pair with bg; never use for a panel. */
+  --surface: #111823; /* Panels and cards: Operator, Fleet, Timeline, Output, robot cards, the plan card, modals. The default ground for text. */
+  --surface-raised: #18212e; /* Raised inside a panel: indicator tiles, secondary buttons, segmented controls, telemetry pills, inactive phase cells, the top of the header gradient. */
+  --surface-raised-2: #212c3c; /* Second raise: the selected tab, hover on raised controls, the active phase cell, the active lane cell. text-muted is too faint here for small text (4.1:1): use text-2. */
+  --surface-well: #070a0f; /* Wells: terminal panes, text inputs, the 'what was measured' boxes, code. The deepest field; every text colour reads on it. */
+  --line: #232d3c; /* Hairlines: panel borders, the divider under a panel's title row, table rules, map grid every 5 m. Decorative (1.3:1 on surface): never the only edge of a control. */
+  --line-strong: #2f3b4d; /* Control borders: buttons, inputs, pills, kbd, raised tiles. The console's value: 1.6:1 on surface, under the 3:1 a control boundary needs, so a control never depends on this edge alone — it also has a label, a placeholder or a fill step. Checkbox boxes use text-muted instead. */
+  --text: #e9eff7; /* Primary text and figures on every ground (12:1 or more), including tinted status fills. */
+  --text-2: #bcc8d8; /* Secondary text: panel titles, task lines, body copy under a heading, terminal output. 8:1 or more on every ground. */
+  --text-muted: #7e8c9f; /* Muted text: timestamps, units, footers, placeholders, pending phases, labels. 4.7:1 or more on bg, bg-2, surface, surface-raised and surface-well. Not on surface-raised-2 (4.1:1) or on the accent and finding tints (3.8–4.2:1): use text-2 there. */
+  --accent: #58a6ff; /* The one accent: interactive / your turn. Primary button fill, the WAITING FOR YOU chip, the hot panel border, the selected tab underline, the focus ring, links. As text it reads on every ground (5.6:1 or more). Never for status, never for decoration. */
+  --accent-ink: #06121f; /* Text and icons on an accent fill (primary buttons, the WAITING FOR YOU chip, the tab count badge): 7.5:1. */
+  --accent-fill: #58a6ff21; /* 13 % accent tint: the selected robot card, the operator's decision cell in the phase track, a hot input's ground. */
+  --accent-line: #58a6ff80; /* 50 % accent: the border of an accent-tinted element and the selected robot's ring on the map. */
+  --accent-glow: #58a6ff1f; /* The faint blue radial glow behind the header band and around a hot panel. Light only, never a fill for text. */
+  --live: #7ee0ff; /* Secondary accent for code and live highlights: commands in a terminal ($ ros2 …), the FLEET tag, the running phase's progress and border, a just-updated value, the LIVE camera badge. Reads on every ground (9:1 or more). Not interactive: never a button. */
+  --live-ink: #06121f; /* Text on a solid live fill (the LIVE camera badge): 12.6:1. */
+  --live-fill: #7ee0ff1a; /* 10 % live tint: the running phase cell, a value flash, the FLEET tag ground. */
+  --live-line: #7ee0ff80; /* 50 % live: the running phase's border and tag outlines (3.8:1 on surface). */
+  --ok: #3fb950; /* Status ok: dots, the 3 px rail, done ✓ marks, bars. Pair with a word or icon: under deuteranopia ok and fault look alike (ΔE 4). */
+  --ok-text: #7ee787; /* Status ok as text (OK, running, IN SLOT, pass): on any ground or on ok-fill (9.5:1). */
+  --ok-fill: #3fb95021; /* 13 % ok tint behind ok-text: the ALL SYSTEMS GO chip, the running badge, a passing health box. */
+  --ok-line: #3fb95080; /* 50 % ok border on ok-fill (the source's chip edge, 2.7:1: the fill and text carry the state, not this edge). */
+  --warn: #d8a11d; /* Status warning: dots, rails, ▲ icons, the amber dot on fleet-wide action buttons. Pair with a word. */
+  --warn-text: #e3b341; /* Warning as text (STALE 4 s, NO POSITION, [WARN] lines, attention chips): on any ground or on warn-fill (7.4:1). */
+  --warn-fill: #d8a11d21; /* 13 % warning tint behind warn-text: attention chips, warning badges. */
+  --warn-line: #d8a11d80; /* 50 % warning border on warn-fill. */
+  --fault: #f0564f; /* Status fault: dots, rails, ✕ icons, the E-STOP border. A system failure only: never a finding, never ANOMALY. As text use fault-text. */
+  --fault-text: #ff9c93; /* Fault as text (FAILED, NOT CONNECTED, NOT CONFIRMED): on any ground or on fault-fill (7.7:1). */
+  --fault-fill: #f0564f21; /* 13 % fault tint behind fault-text: the failed phase cell, fault chips, the E-STOP result rows that did not confirm. */
+  --fault-line: #f0564f80; /* 50 % fault border on fault-fill. */
+  --blocked: #5a6472; /* Blocked upstream / not applicable: grey dots, rails and borders (a box below a failure, a device not used). The console's value: 2.97:1 on surface, just under 3:1 for a mark, so blocked items always carry their words (blocked upstream, not used). Never a text colour. */
+  --blocked-fill: #5a647221; /* 13 % grey tint for blocked or skipped items. */
+  --blocked-line: #5a647280; /* 50 % grey border on blocked-fill. */
+  --unknown: #7d8794; /* Not checked / unknown / stopped ■ / skipped –: the lighter grey dot and mark. As text only on surface and darker (4.9:1). */
+  --finding: #d4f064; /* Findings, never faults: the box on the map and its confidence halo, detection outlines on camera frames, BOX FOUND, ANOMALY, the DETECT and INSPECT tags. Lime sits clear of fault red and stays the one yellow-green on the map; under colour blindness it reads as the lightest yellow, so keep the ⌖ reticle and the word with it. Text on every ground (11:1 or more). */
+  --finding-ink: #10140a; /* Text and icons on a solid finding fill (the BOX FOUND and ANOMALY badges): 14.6:1. */
+  --finding-fill: #d4f06421; /* 13 % finding tint: the BOX FOUND card ground, the finding marker in the phase track. */
+  --finding-line: #d4f06480; /* 50 % finding: corner brackets and card borders of findings (4.3:1 on surface). */
+  --robot-r1: #5eead4; /* R1 · 741 identity: map glyph, trail, route, lane swatch, R1 tag. Aqua, moved off #7ee0ff because that value is already live. Always beside the label. */
+  --robot-r2: #b392f0; /* R2 · 665 identity: map glyph, trail, route, lane swatch, R2 tag. Always beside the label (close to accent under protanopia). */
+  --robot-r3: #f778ba; /* R3 · 738 identity: map glyph, trail, route, sight line to the box, lane swatch, R3 tag. Always beside the label. */
+  --robot-aloha: #f0e3c8; /* ALOHA identity (warm white): its rectangle glyph and arm dots, path, dock pose, lane swatch, ALOHA tag. Always beside the label. */
+  --danger: #b3261e; /* Destructive fill: Land now, Force stop, the confirm button of Stop mission. Text danger-ink. */
+  --danger-line: #d93a31; /* Border of a danger button. */
+  --danger-ink: #ffffff; /* Text on danger and on the E-STOP gradient (6.5:1 on danger, 4.8:1 on estop). */
+  --estop: #d1392f; /* E-STOP gradient, top stop. Used only by the E-STOP button and the E-STOP banner's header. */
+  --estop-2: #a9241d; /* E-STOP gradient, bottom stop. */
+  --map-ground: var(--bg-2); /* The map's ground and unknown cells of the occupancy grid (alias of bg-2). */
+  --map-free: #101823; /* Free cells of the occupancy grid: a hair lighter than map-ground. */
+  --map-wall: #5f6b7d; /* Occupied cells (walls, obstacles): 3.3:1 on map-free. */
+  --map-grid: #151d29; /* 1 m grid lines on the map. Every fifth line uses line. */
+  --zone-line: var(--text-muted); /* Dashed zone outlines and the ZONE 1–3 labels (5.6:1 on map-ground). */
+  --zone-fill: #e9eff708; /* Faint fill inside a zone (3 % text). */
+  --shadow-panel: inset 0 1px 0 #ffffff08, 0 6px 18px #00000040; /* Panels and cards at rest. */
+  --shadow-float: 0 10px 28px #00000080; /* Things floating over the map: the toolbar, the legend chip, menus, toasts, the prototype switcher. */
+  --shadow-modal: 0 0 0 1px #2f3b4d, 0 28px 70px #000000b3; /* Confirm modals and the lightbox. */
+  --shadow-hot: 0 0 0 1px #58a6ff, 0 0 26px #58a6ff33; /* A hot panel (the operator's turn): accent ring plus glow, pulsing on dur-pulse. */
+  --shadow-estop: 0 0 0 1px #f0564f, 0 4px 14px #f0564f40; /* The E-STOP button. */
+  --focus-ring: 0 0 0 2px #080b10, 0 0 0 4px #58a6ff; /* Keyboard focus on every control: a 2 px page-colour gap, then 2 px solid accent (7:1 on surface, visible on accent fills through the gap). */
+}
+:root {
+  --space-2: 2px; /* Hairline gaps: between a status mark and its count, inside segmented bars. */
+  --space-4: 4px; /* Icon to label inside chips, pills and tags. */
+  --space-6: 6px; /* Between chips in a row, label to value in a tile, lane rows. */
+  --space-8: 8px; /* Between panels (panel-gap), between tiles, button groups. */
+  --space-10: 10px; /* Inside tiles and robot cards. */
+  --space-12: 12px; /* Inside panels (panel-pad); the page gutter at 1440×900. */
+  --space-14: 14px; /* Button side padding; header side padding. */
+  --space-16: 16px; /* Between groups inside a panel; modal padding. */
+  --space-20: 20px; /* Modal and lightbox padding, around the E-STOP banner. */
+  --space-24: 24px; /* Between header groups. */
+  --space-32: 32px; /* Empty-state padding. */
+  --radius-xs: 4px; /* kbd hints and timeline tags only. */
+  --radius-sm: 7px; /* Controls and inner tiles: buttons, inputs, segmented controls, indicator tiles, phase cells, lane cells. */
+  --radius-md: 10px; /* Panels, robot cards, the plan card, health boxes, the map toolbar and legend. */
+  --radius-lg: 14px; /* Modals, the lightbox, the E-STOP banner, toasts. */
+  --radius-pill: 999px; /* Pills, chips, badges, the state chip, status dots. */
+  --rail-w: 3px; /* The status rail down the left edge of robot cards, fleet tiles, indicator tiles and health boxes. */
+  --header-h: 56px; /* Header band height. */
+  --tabbar-h: 40px; /* Tab bar height. */
+  --control-h: 32px; /* Default button, input and state-chip height; E-STOP. */
+  --control-h-sm: 26px; /* Small buttons, telemetry pills, map toolbar controls. */
+  --control-h-lg: 40px; /* Decision buttons in the Operator panel (Approve plan, ANOMALY, CLEAR). */
+  --track-h: 96px; /* Phase track height at 1440×900 (76px at 1280×720). */
+  --lane-h: 24px; /* One task lane row. */
+  --gutter: 12px; /* Page edge to the first panel (8px at 1280×720). */
+  --panel-gap: 8px; /* Between panels. */
+  --panel-pad: 12px; /* Inside a panel. */
+  --side-w: 392px; /* Right column (Operator, Suspicious item, Fleet) at 1440 wide; 344px at 1280. */
+  --dur-fast: 120ms; /* Hover and press. */
+  --dur-base: 200ms; /* Panels opening, a phase cell expanding, toasts entering. */
+  --dur-flow: 1100ms; /* One cycle of a moving dashed line: data flowing, the route being driven. */
+  --dur-pulse: 2400ms; /* The slow pulse of WAITING FOR YOU and of a hot panel's glow. */
+  --dur-turn: 9s; /* One turn of the brandmark while a mission runs. */
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1); /* Every transition. */
+  --ease-pulse: cubic-bezier(0.4, 0, 0.6, 1); /* Pulses (in and out). */
+  --alpha-tint: 0.13; /* Status and accent tints (the -fill tokens). */
+  --alpha-dim: 0.55; /* Pending phases and not-yet-active lane cells. */
+  --alpha-disabled: 0.45; /* Disabled controls (with their reason beside them). */
+  --z-float: 20; /* Map toolbar and legend. */
+  --z-header: 30; /* Header band. */
+  --z-toast: 60; /* Toasts. */
+  --z-modal: 80; /* Confirm modals. */
+  --z-lightbox: 90; /* Image lightbox. */
+  --z-estop: 100; /* The E-STOP result banner: above everything. */
+  --z-proto: 1000; /* The prototype-only state switcher. */
+  --font-sans: system-ui, -apple-system, "Segoe UI", Ubuntu, Cantarell, "Noto Sans", "DejaVu Sans", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, "DejaVu Sans Mono", monospace;
+  --text-display-phase: 700 28px/32px var(--font-sans); /* The running phase's name in the phase track. One per screen. */
+  --text-figure: 600 20px/24px var(--font-sans); /* The large tabular value on a robot card (distance to goal). Set font-variant-numeric: tabular-nums. */
+  --text-chip: 700 13px/16px var(--font-sans); /* The header state chip and the E-STOP label. Set in capitals. */
+  --text-title-lg: 600 16px/22px var(--font-sans); /* The header title, the operator's question, modal titles. */
+  --text-title: 600 14.5px/20px var(--font-sans); /* Card and tile titles: robot cards, the plan card, health boxes, phase names. */
+  --text-body: 400 13.5px/20px var(--font-sans); /* Default text. */
+  --text-body-sm: 400 13px/18px var(--font-sans); /* Dense rows: task lines, lane cells, attention chips, list items. */
+  --text-caption: 400 12px/16px var(--font-sans); /* Footers, meta, the reason under a disabled button. text-muted. */
+  --text-panel-title: 700 11.5px/16px var(--font-sans); /* Panel title rows, in text-2, set in capitals. */
+  --text-label: 600 10.5px/14px var(--font-sans); /* Labels above values (indicator tiles, pill labels, lane and column heads), in text-muted, set in capitals. */
+  --text-state-word: 700 11px/14px var(--font-sans); /* A robot's state word, in its status text colour, set in capitals. */
+  --text-clock: 600 22px/26px var(--font-mono); /* The mission clock (elapsed). Tabular. */
+  --text-mono: 400 12.5px/18px var(--font-mono); /* IDs, coordinates, poses, timeline rows, durations. */
+  --text-mono-sm: 400 11.5px/17px var(--font-mono); /* Terminal output, plan history, map labels. */
+  --text-mono-label: 600 10.5px/14px var(--font-mono); /* Timeline tags, the header's mono subtitle, scale-bar labels. */
+}
+.display-phase {
+  font-family: var(--font-sans);
+  font-size: 28px;
+  line-height: 32px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+.figure {
+  font-family: var(--font-sans);
+  font-size: 20px;
+  line-height: 24px;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+.chip {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 16px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+}
+.title-lg {
+  font-family: var(--font-sans);
+  font-size: 16px;
+  line-height: 22px;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+.title {
+  font-family: var(--font-sans);
+  font-size: 14.5px;
+  line-height: 20px;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+.body {
+  font-family: var(--font-sans);
+  font-size: 13.5px;
+  line-height: 20px;
+  font-weight: 400;
+  letter-spacing: 0;
+}
+.body-sm {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 400;
+  letter-spacing: 0;
+}
+.caption {
+  font-family: var(--font-sans);
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 400;
+  letter-spacing: 0;
+}
+.panel-title {
+  font-family: var(--font-sans);
+  font-size: 11.5px;
+  line-height: 16px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+.label {
+  font-family: var(--font-sans);
+  font-size: 10.5px;
+  line-height: 14px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+}
+.state-word {
+  font-family: var(--font-sans);
+  font-size: 11px;
+  line-height: 14px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+.clock {
+  font-family: var(--font-mono);
+  font-size: 22px;
+  line-height: 26px;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+.mono {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  line-height: 18px;
+  font-weight: 400;
+  letter-spacing: 0;
+}
+.mono-sm {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  line-height: 17px;
+  font-weight: 400;
+  letter-spacing: 0;
+}
+.mono-label {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  line-height: 14px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("../fonts/JetBrainsMono-latin-wght.woff2") format("woff2");
+  font-weight: 100 800;
+  font-style: normal;
+  font-display: swap;
+}

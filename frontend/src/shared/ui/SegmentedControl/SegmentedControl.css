@@ -1,0 +1,10 @@
+/* SegmentedControl: Command Center design system, components/bundle.css */
+.cc-seg { display: inline-flex; flex: none; padding: 2px; gap: 2px; border-radius: var(--radius-sm); border: 1px solid var(--line-strong); background: var(--surface-well); }
+.cc-seg__opt {
+  display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 12px;
+  border: 0; border-radius: calc(var(--radius-sm) - 2px); background: transparent;
+  color: var(--text-2); font-size: 12.5px; font-weight: 600; line-height: 1; cursor: pointer;
+}
+.cc-seg__opt:hover { color: var(--text); background: var(--surface-raised); }
+.cc-seg__opt.is-on, .cc-seg__opt.is-on:hover { background: var(--accent); color: var(--accent-ink); }
+.cc-seg--md .cc-seg__opt { height: 28px; padding: 0 14px; font-size: 13.5px; }

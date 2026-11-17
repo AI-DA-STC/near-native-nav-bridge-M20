@@ -1,0 +1,23 @@
+/* AppHeader: Command Center design system, components/bundle.css */
+.cc-header { position: relative; z-index: var(--z-header); }
+.cc-header__bar {
+  display: flex; align-items: center; gap: 16px; height: var(--header-h); padding: 0 var(--space-14);
+  background:
+    radial-gradient(520px 130px at 160px -20px, var(--accent-glow), transparent 72%),
+    linear-gradient(180deg, var(--surface-raised), var(--surface));
+  border-bottom: 1px solid var(--line);
+}
+.cc-header__brand { display: flex; align-items: center; gap: 11px; min-width: 0; flex: none; }
+.cc-header__names { min-width: 0; }
+.cc-header__title { font-size: 16px; font-weight: 600; line-height: 20px; color: var(--text); white-space: nowrap; }
+.cc-header__sub { font: 500 11px/14px var(--font-mono); color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 260px; }
+.cc-header__spacer { flex: 1; min-width: 8px; }
+.cc-header__actions { display: flex; align-items: center; gap: 8px; flex: none; }
+.cc-header__nav {
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  height: var(--tabbar-h); padding: 0 var(--space-12); background: var(--bg-2); border-bottom: 1px solid var(--line);
+}
+.cc-header__pills { display: flex; align-items: center; gap: 6px; min-width: 0; overflow: hidden; flex: none; }
+.cc-header__attn { flex: 1; min-width: 0; display: flex; justify-content: center; overflow: hidden; }
+.cc-header__attn .cc-attnrow { flex-wrap: nowrap; }
+.cc-header__attn .cc-attn { min-height: 26px; padding-top: 2px; padding-bottom: 2px; white-space: nowrap; }

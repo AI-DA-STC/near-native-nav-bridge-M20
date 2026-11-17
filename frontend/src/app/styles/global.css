@@ -1,0 +1,10 @@
+/* The app fills the window and the page itself never scrolls: panels scroll inside. Below 1280×720 (not a supported
+   size) the shell keeps its minimum and the window scrolls rather than clipping. */
+html, body, #root { height: 100%; }
+body { overflow: auto; }
+
+/* 1280×720 and other windows below 1440×900: the compact layout's tokens. Keep this query in step with
+   COMPACT_LAYOUT_QUERY in shared/config. */
+@media (max-width: 1399px), (max-height: 859px) {
+  :root { --gutter: 8px; --side-w: 344px; --track-h: 76px; }
+}

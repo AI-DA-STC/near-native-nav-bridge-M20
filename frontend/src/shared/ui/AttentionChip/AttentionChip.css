@@ -1,0 +1,12 @@
+/* AttentionChip, AttentionRow: Command Center design system, components/bundle.css */
+.cc-attnrow { display: flex; flex-wrap: wrap; gap: 6px; }
+.cc-attn {
+  display: inline-flex; align-items: center; gap: 7px; max-width: 100%; min-height: 28px; padding: 4px 12px 4px 10px;
+  border-radius: var(--radius-pill); border: 1px solid transparent; font-size: 13px; line-height: 18px; text-align: left;
+}
+button.cc-attn { cursor: pointer; }
+.cc-attn--warn { background: var(--warn-fill); border-color: var(--warn-line); color: var(--warn-text); }
+.cc-attn--fault { background: var(--fault-fill); border-color: var(--fault-line); color: var(--fault-text); }
+.cc-attn--ok { background: var(--ok-fill); border-color: var(--ok-line); color: var(--ok-text); }
+.cc-attn__text { min-width: 0; }
+.cc-attn__fix { color: var(--text-2); }

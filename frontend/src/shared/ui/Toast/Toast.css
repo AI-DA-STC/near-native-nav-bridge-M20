@@ -1,0 +1,15 @@
+/* Toast, ToastRegion: Command Center design system, components/bundle.css */
+.cc-toasts { position: fixed; right: 16px; bottom: 16px; z-index: var(--z-toast); display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
+.cc-toasts.is-inline { position: relative; right: auto; bottom: auto; align-items: flex-start; }
+.cc-toast { display: flex; align-items: flex-start; gap: 10px; width: 340px; max-width: 100%; padding: 10px 12px; border-radius: var(--radius-lg); background: var(--surface-raised); border: 1px solid var(--line-strong); box-shadow: var(--shadow-float); }
+.cc-toast__icon { margin-top: 2px; color: var(--text-2); }
+.cc-toast--ok .cc-toast__icon { color: var(--ok-text); }
+.cc-toast--warn .cc-toast__icon { color: var(--warn-text); }
+.cc-toast--fault .cc-toast__icon { color: var(--fault-text); }
+.cc-toast--finding .cc-toast__icon { color: var(--finding); }
+.cc-toast--accent .cc-toast__icon { color: var(--accent); }
+.cc-toast__text { flex: 1; min-width: 0; }
+.cc-toast__title { font-size: 13.5px; font-weight: 600; line-height: 20px; color: var(--text); }
+.cc-toast__body { font-size: 12.5px; line-height: 18px; color: var(--text-2); }
+.cc-toast__x { flex: none; padding: 3px; border: 0; border-radius: 4px; background: none; color: var(--text-muted); cursor: pointer; }
+.cc-toast__x:hover { color: var(--text); background: var(--surface-raised-2); }

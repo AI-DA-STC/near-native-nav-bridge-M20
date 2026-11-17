@@ -1,0 +1,7 @@
+/* OperatorPrompt: Command Center design system, components/bundle.css */
+.cc-oprompt { display: flex; flex-direction: column; gap: 8px; }
+.cc-oprompt__eyebrow { display: inline-flex; align-items: center; gap: 6px; font-size: 10.5px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); line-height: 14px; }
+.cc-oprompt__q { margin: 0; font-size: 16px; line-height: 22px; font-weight: 600; color: var(--text); }
+.cc-oprompt__detail { margin: 0; color: var(--text-2); font-size: 13px; line-height: 19px; }
+.cc-oprompt__actions { display: flex; gap: 8px; margin-top: 4px; }
+.cc-oprompt__actions > * { flex: 1; }

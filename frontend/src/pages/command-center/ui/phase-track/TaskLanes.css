@@ -1,0 +1,30 @@
+/* TaskLanes: Command Center design system, components/bundle.css */
+.cc-lanes { display: flex; flex-direction: column; gap: 3px; }
+.cc-lanes.is-embedded { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line); }
+.cc-lane { display: grid; column-gap: 6px; align-items: stretch; }
+.cc-lane__head { display: flex; align-items: center; padding-left: 4px; min-width: 0; }
+.cc-lane__cell {
+  position: relative; display: flex; align-items: center; gap: 5px; min-width: 0;
+  height: var(--lane-h); padding: 0 8px; border-radius: 5px; border: 1px solid transparent;
+  font-size: 12px; line-height: 16px; color: var(--text-muted); overflow: hidden;
+}
+.cc-lane__text { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cc-lane__mark { flex: none; }
+.cc-lane__cell.is-done .cc-lane__mark { color: var(--ok-text); }
+.cc-lane__cell.is-active { background: var(--surface-raised-2); border-color: color-mix(in srgb, var(--rc) 45%, transparent); box-shadow: inset 3px 0 0 var(--rc); padding-left: 10px; color: var(--text); font-weight: 600; }
+.cc-lane__prog { position: absolute; left: 3px; right: 0; bottom: 0; height: 2px; }
+.cc-lane__prog > span { display: block; height: 100%; background: var(--rc); }
+.cc-lane__cell.is-idle, .cc-lane__cell.is-wait { background: repeating-linear-gradient(-45deg, transparent 0 5px, color-mix(in srgb, var(--line) 45%, transparent) 5px 7px); }
+.cc-lane__cell.is-wait { color: var(--text-2); }
+.cc-lane__cell.is-wait .cc-lane__mark { color: var(--text-muted); }
+.cc-lane__cell.is-preview { border: 1px dashed color-mix(in srgb, var(--rc) 65%, transparent); color: var(--text-2); }
+.cc-lane__cell.is-failed { background: var(--fault-fill); border-color: var(--fault-line); color: var(--fault-text); }
+.cc-lane__cell.is-stopped .cc-lane__mark { color: var(--unknown); }
+.cc-lane__cell.is-skipped { color: var(--text-muted); }
+.cc-lane__cell.is-skipped .cc-lane__text { text-decoration: line-through; }
+.cc-lanes--bars .cc-lane__cell { height: 10px; padding: 0 2px; border: 0; background: none; box-shadow: none; }
+.cc-lane__bar { flex: 1; height: 4px; border-radius: 2px; background: var(--surface-raised); overflow: hidden; }
+.cc-lane__bar > span { display: block; height: 100%; border-radius: inherit; background: var(--rc); }
+.cc-lanes--bars .cc-lane__cell.is-done .cc-lane__bar > span { opacity: .45; }
+.cc-lanes--bars .cc-lane__cell.is-preview .cc-lane__bar { background: none; border: 1px dashed var(--rc); height: 6px; }
+.cc-lanes--bars .cc-lane__cell.is-empty .cc-lane__bar, .cc-lanes--bars .cc-lane__cell.is-idle .cc-lane__bar { background: none; }

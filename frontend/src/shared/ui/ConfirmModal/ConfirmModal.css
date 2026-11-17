@@ -1,0 +1,10 @@
+/* ConfirmModal: Command Center design system, components/bundle.css */
+.cc-modal { width: min(460px, 100%); padding: 20px; border-radius: var(--radius-lg); background: var(--surface); border: 1px solid var(--line-strong); box-shadow: var(--shadow-modal); }
+.cc-modal__title { display: flex; align-items: center; gap: 8px; margin: 0 0 10px; font-size: 16px; line-height: 22px; font-weight: 600; color: var(--text); }
+.cc-modal--accent .cc-modal__title .cc-icon { color: var(--accent); }
+.cc-modal--danger .cc-modal__title .cc-icon { color: var(--fault-text); }
+.cc-modal--finding .cc-modal__title .cc-icon { color: var(--finding); }
+.cc-modal__body { color: var(--text-2); font-size: 13.5px; line-height: 20px; }
+.cc-modal__body p { margin: 0 0 8px; }
+.cc-modal__body p:last-child { margin-bottom: 0; }
+.cc-modal__actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }

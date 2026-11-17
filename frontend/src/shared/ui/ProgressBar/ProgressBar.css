@@ -1,0 +1,17 @@
+/* ProgressBar: Command Center design system, components/bundle.css */
+.cc-bar { position: relative; display: flex; width: 100%; border-radius: var(--radius-pill); background: var(--surface-raised-2); overflow: hidden; --bar: var(--live); }
+.cc-bar--ok { --bar: var(--ok); }
+.cc-bar--warn { --bar: var(--warn); }
+.cc-bar--fault { --bar: var(--fault); }
+.cc-bar--accent { --bar: var(--accent); }
+.cc-bar--finding { --bar: var(--finding); }
+.cc-bar--blocked { --bar: var(--unknown); }
+.cc-bar__fill { display: block; height: 100%; background: var(--bar); border-radius: inherit; transition: width var(--dur-base) var(--ease-standard); }
+.cc-bar--seg { background: transparent; gap: 3px; overflow: visible; }
+.cc-bar__seg { flex: 1; display: flex; height: 100%; background: var(--surface-raised-2); border-radius: var(--radius-pill); overflow: hidden; }
+.cc-bar.is-animated .cc-bar__fill {
+  background-color: var(--bar);
+  background-image: repeating-linear-gradient(-45deg, transparent 0 5px, color-mix(in srgb, var(--bg) 22%, transparent) 5px 10px);
+  background-size: 20px 100%;
+  animation: cc-stripe .9s linear infinite;
+}

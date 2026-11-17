@@ -1,0 +1,23 @@
+/* PlanCard: Command Center design system, components/bundle.css */
+.cc-plan { position: relative; display: flex; flex-direction: column; gap: 10px; padding: 12px; border-radius: var(--radius-md); background: var(--surface-raised); border: 1px solid var(--line-strong); }
+.cc-plan.is-hot { border-color: var(--accent); box-shadow: var(--shadow-hot); animation: cc-hot var(--dur-pulse) var(--ease-pulse) infinite; }
+.cc-plan.is-preview { border-style: dashed; }
+.cc-plan__head { display: flex; align-items: flex-start; gap: 10px; }
+.cc-plan__titles { flex: 1; min-width: 0; }
+.cc-plan__eyebrow { font-size: 10.5px; font-weight: 700; letter-spacing: .08em; color: var(--text-muted); line-height: 14px; }
+.cc-plan__eyebrow .cc-mono { color: var(--text-2); letter-spacing: .02em; }
+.cc-plan__title { margin-top: 1px; font-size: 15px; font-weight: 600; line-height: 20px; color: var(--text); }
+.cc-plan__summary { color: var(--text-muted); font-weight: 500; }
+.cc-plan__instr { margin: 0; padding: 7px 10px; border-radius: var(--radius-sm); background: var(--surface-well); border: 1px solid var(--line); color: var(--text-2); font-size: 12.5px; line-height: 18px; }
+.cc-plan__instr-label { display: block; margin-bottom: 1px; font-size: 10px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--text-muted); }
+.cc-plan__robots { display: flex; flex-direction: column; gap: 7px; margin: 0; padding: 0; list-style: none; }
+.cc-plan__row { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 6px; align-items: start; }
+.cc-plan__row > .cc-rtag { height: 19px; }
+.cc-plan__steps { display: flex; flex-wrap: wrap; align-items: center; margin: 0; padding: 0; list-style: none; font-size: 13px; line-height: 19px; color: var(--text); }
+.cc-plan__step { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+.cc-plan__step + .cc-plan__step::before { content: '→'; margin: 0 7px; color: var(--text-muted); }
+.cc-plan__step.is-done { color: var(--text-muted); }
+.cc-plan__step.is-active { color: var(--text); font-weight: 600; }
+.cc-plan__step.is-failed { color: var(--fault-text); }
+.cc-plan__actions { display: flex; gap: 8px; }
+.cc-plan__actions > .cc-btn { flex: 1; }

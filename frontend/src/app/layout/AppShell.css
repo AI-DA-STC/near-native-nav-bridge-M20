@@ -1,0 +1,15 @@
+/* The header band over the screen, filling the window; below 1280×720 the window scrolls instead of clipping */
+.cc-shell {
+  display: grid; grid-template-rows: auto minmax(0, 1fr); grid-template-columns: minmax(0, 1fr);
+  height: 100%; min-width: 1280px; min-height: 720px; background: var(--bg);
+}
+.cc-shell__main { min-width: 0; min-height: 0; }
+.cc-shell__connecting { display: grid; place-items: center; height: 100%; margin: 0; color: var(--text-muted); }
+
+/* E-STOP stays one click away while a confirm modal or the lightbox dims the page: the header gives up its stacking
+   context so the button sits above the scrims. A deliberate change from the design system's header. */
+.cc-shell .cc-header { z-index: auto; }
+.cc-shell .cc-estop { position: relative; z-index: calc(var(--z-lightbox) + 1); }
+
+/* A long attention row clips at its end rather than at both sides */
+.cc-shell .cc-header__attn { justify-content: safe center; }

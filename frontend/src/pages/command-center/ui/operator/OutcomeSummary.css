@@ -1,0 +1,15 @@
+/* OutcomeSummary: Command Center design system, components/bundle.css */
+.cc-outcome { display: flex; flex-direction: column; gap: 10px; }
+.cc-outcome__head { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 10px; }
+.cc-outcome__word { font-size: 18px; font-weight: 600; line-height: 24px; color: var(--text); }
+.cc-outcome--ok .cc-outcome__head > .cc-icon { color: var(--ok-text); }
+.cc-outcome--finding .cc-outcome__head > .cc-icon { color: var(--finding); }
+.cc-outcome--fault .cc-outcome__head > .cc-icon { color: var(--fault-text); }
+.cc-outcome--neutral .cc-outcome__head > .cc-icon { color: var(--unknown); }
+.cc-outcome__total { margin-left: auto; font-size: 18px; font-weight: 600; color: var(--text); }
+.cc-outcome__reason { margin: 0; padding: 8px 10px; border-radius: var(--radius-sm); background: var(--surface-raised); border: 1px solid var(--line); color: var(--text-2); font-size: 13px; line-height: 19px; }
+.cc-outcome--fault .cc-outcome__reason { background: var(--fault-fill); border-color: var(--fault-line); color: var(--fault-text); }
+.cc-outcome__facts { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin: 0; }
+.cc-outcome__facts > div { min-width: 0; padding: 6px 9px; border-radius: var(--radius-sm); background: var(--surface-raised); }
+.cc-outcome__facts dt { font-size: 10.5px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--text-muted); line-height: 14px; }
+.cc-outcome__facts dd { margin: 2px 0 0; font-size: 13px; font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

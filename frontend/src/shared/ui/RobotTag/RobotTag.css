@@ -1,0 +1,11 @@
+/* RobotTag: Command Center design system, components/bundle.css */
+.cc-rtag { display: inline-flex; align-items: center; gap: 6px; flex: none; white-space: nowrap; font-size: 13.5px; line-height: 1; }
+.cc-rtag__dot { flex: none; width: 9px; height: 9px; border-radius: 3px; background: var(--rc); }
+.cc-rtag__bar { flex: none; width: 3px; height: 14px; border-radius: 2px; background: var(--rc); }
+.cc-rtag__label { font-weight: 700; color: var(--rc); }
+.cc-rtag__id { color: var(--text-muted); font-family: var(--font-mono); font-size: .9em; }
+.cc-rtag__extra { color: var(--text-2); }
+.cc-rtag--sm { font-size: 12px; gap: 5px; }
+.cc-rtag--sm .cc-rtag__dot { width: 8px; height: 8px; border-radius: 2px; }
+.cc-rtag--sm .cc-rtag__bar { height: 12px; }
+.cc-rtag--lg { font-size: 15px; gap: 7px; }

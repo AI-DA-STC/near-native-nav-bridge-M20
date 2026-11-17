@@ -1,0 +1,12 @@
+/* Toggle: Command Center design system, components/bundle.css */
+.cc-toggle { position: relative; display: inline-flex; align-items: center; gap: 7px; flex: none; cursor: pointer; color: var(--text-2); font-size: 12.5px; line-height: 1; user-select: none; }
+.cc-toggle input { position: absolute; opacity: 0; width: 1px; height: 1px; margin: 0; pointer-events: none; }
+.cc-toggle__box {
+  display: inline-grid; place-items: center; width: 16px; height: 16px; border-radius: 4px;
+  border: 1px solid var(--text-muted); background: var(--surface-well); color: transparent;
+  transition: background var(--dur-fast) var(--ease-standard), border-color var(--dur-fast) var(--ease-standard);
+}
+.cc-toggle:hover .cc-toggle__box { border-color: var(--text-2); }
+.cc-toggle input:checked + .cc-toggle__box { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.cc-toggle.is-disabled { opacity: var(--alpha-disabled); cursor: not-allowed; }
+.cc-toggle__label { color: var(--text-2); }

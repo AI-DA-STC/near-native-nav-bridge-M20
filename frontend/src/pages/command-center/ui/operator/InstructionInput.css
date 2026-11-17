@@ -1,0 +1,11 @@
+/* InstructionInput: Command Center design system, components/bundle.css */
+.cc-instr { display: flex; flex-direction: column; gap: 6px; }
+.cc-instr__label { font-size: 10.5px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--text-muted); line-height: 14px; }
+.cc-instr__row { display: flex; gap: 8px; align-items: flex-start; }
+.cc-instr__field { flex: 1; }
+.cc-instr.is-hot .cc-instr__field { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-fill); }
+.cc-instr.is-hot .cc-instr__label { color: var(--accent); }
+.cc-instr__hint { font-size: 12px; line-height: 18px; color: var(--text-muted); }
+.cc-instr__hint .cc-kbd { height: 16px; font-size: 10px; }
+.cc-instr__reason { display: inline-flex; align-items: flex-start; gap: 5px; color: var(--text-2); }
+.cc-instr__reason .cc-icon { margin-top: 2px; color: var(--text-muted); }

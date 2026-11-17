@@ -1,0 +1,20 @@
+/* EStopBanner: Command Center design system, components/bundle.css */
+.cc-estopban {
+  position: fixed; left: 50%; top: 12px; z-index: var(--z-estop); width: min(760px, calc(100% - 24px)); transform: translateX(-50%);
+  border-radius: var(--radius-lg); background: var(--surface); border: 1px solid var(--fault); box-shadow: var(--shadow-modal); overflow: hidden;
+}
+.cc-estopban.is-inline { position: relative; left: auto; top: auto; width: 100%; transform: none; }
+.cc-estopban__head { display: flex; align-items: center; gap: 14px; min-height: 44px; padding: 6px 10px 6px 16px; background: linear-gradient(180deg, var(--estop), var(--estop-2)); color: var(--danger-ink); }
+.cc-estopban__title { font-size: 15px; font-weight: 800; letter-spacing: .1em; }
+.cc-estopban__at { font-size: 13px; }
+.cc-estopban__sum { font-size: 13px; font-weight: 600; }
+.cc-estopban__spacer { flex: 1; }
+.cc-estopban__head .cc-btn { background: color-mix(in srgb, var(--bg) 30%, transparent); border-color: color-mix(in srgb, var(--danger-ink) 45%, transparent); color: var(--danger-ink); }
+.cc-estopban__rows { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; margin: 0; padding: 10px 12px 12px; list-style: none; }
+.cc-estopban__row { display: flex; align-items: center; gap: 10px; min-height: 38px; padding: 6px 12px; border-radius: var(--radius-sm); background: var(--surface-raised); border: 1px solid var(--line); font-size: 13px; }
+.cc-estopban__res { margin-left: auto; display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+.cc-estopban__row.is-ok .cc-estopban__res { color: var(--ok-text); }
+.cc-estopban__row.is-pending .cc-estopban__res { color: var(--text-2); }
+.cc-estopban__row.is-bad { background: var(--fault-fill); border-color: var(--fault-line); }
+.cc-estopban__row.is-bad .cc-estopban__res { color: var(--fault-text); }
+.cc-estopban__why { color: var(--text-2); }

@@ -1,0 +1,7 @@
+/* Kbd: Command Center design system, components/bundle.css */
+.cc-kbd {
+  display: inline-flex; align-items: center; height: 18px; padding: 0 5px;
+  border-radius: var(--radius-xs); border: 1px solid var(--line-strong);
+  background: var(--surface-well); color: var(--text-2);
+  font: 500 11px/1 var(--font-mono); letter-spacing: 0; white-space: nowrap;
+}

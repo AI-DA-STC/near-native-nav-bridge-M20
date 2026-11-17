@@ -1,0 +1,12 @@
+/* Timeline: Command Center design system, components/bundle.css */
+.cc-timeline { margin: 0; padding: 0; list-style: none; overflow: auto; font: 400 12.5px/18px var(--font-mono); font-variant-ligatures: none; container-type: inline-size; }
+@container (max-width: 330px) {
+  .cc-timeline__row { grid-template-columns: 62px minmax(0, 1fr); row-gap: 2px; }
+  .cc-timeline__text { grid-column: 1 / -1; padding-left: 8px; }
+}
+.cc-timeline__row { display: grid; grid-template-columns: 62px 74px minmax(0, 1fr); align-items: start; gap: 8px; padding: 4px 4px; border-radius: 4px; }
+.cc-timeline__row.is-fresh { animation: cc-flash 2.4s var(--ease-standard) 1; }
+.cc-timeline__time { color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.cc-timeline__text { color: var(--text); overflow-wrap: anywhere; }
+.cc-timeline__row > .cc-logtag { justify-self: start; min-width: 0; width: 100%; }
+.cc-timeline__empty { padding: 8px 4px; color: var(--text-muted); font-family: var(--font-sans); }

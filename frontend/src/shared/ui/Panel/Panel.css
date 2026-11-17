@@ -1,0 +1,19 @@
+/* Panel: Command Center design system, components/bundle.css */
+.cc-panel {
+  display: flex; flex-direction: column; min-height: 0; min-width: 0;
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-md);
+  box-shadow: var(--shadow-panel);
+}
+.cc-panel__head { display: flex; align-items: center; gap: 10px; min-height: 40px; padding: 8px var(--panel-pad); border-bottom: 1px solid var(--line); }
+.cc-panel__title { margin: 0; font-size: 11.5px; line-height: 16px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--text-2); white-space: nowrap; }
+.cc-panel__meta { margin-left: auto; display: flex; align-items: center; gap: 8px; min-width: 0; color: var(--text-muted); font-size: 12.5px; }
+.cc-panel__body { padding: var(--panel-pad); min-height: 0; }
+.cc-panel--flush > .cc-panel__body { padding: 0; }
+.cc-panel--scroll > .cc-panel__body { flex: 1; overflow: auto; }
+.cc-panel__foot { padding: 8px var(--panel-pad); border-top: 1px solid var(--line); }
+.cc-panel.is-hot { border-color: var(--accent); box-shadow: var(--shadow-hot); animation: cc-hot var(--dur-pulse) var(--ease-pulse) infinite; }
+.cc-panel.is-hot > .cc-panel__head .cc-panel__title { color: var(--accent); }
+.cc-panel__toggle { display: inline-flex; align-items: center; gap: 6px; padding: 2px 4px 2px 0; border: 0; border-radius: 4px; background: none; color: var(--text-2); cursor: pointer; }
+.cc-panel__chev { transition: transform var(--dur-base) var(--ease-standard); }
+.cc-panel.is-collapsed .cc-panel__chev { transform: rotate(-90deg); }
+.cc-panel.is-collapsed > .cc-panel__head { border-bottom: 0; }

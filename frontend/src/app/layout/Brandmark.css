@@ -1,0 +1,8 @@
+/* Brandmark: Command Center design system, components/bundle.css */
+.cc-brandmark { display: block; flex: none; }
+.cc-brandmark__orbit { fill: none; stroke: var(--line-strong); stroke-width: 1.3; }
+.cc-brandmark__sat { fill: var(--text); }
+.cc-brandmark__ring { fill: none; stroke: var(--accent-line); stroke-width: 1.4; }
+.cc-brandmark__hub { fill: var(--accent); }
+.cc-brandmark__sats { transform-box: view-box; transform-origin: 50% 50%; }
+.cc-brandmark.is-running .cc-brandmark__sats { animation: cc-spin var(--dur-turn) linear infinite; }

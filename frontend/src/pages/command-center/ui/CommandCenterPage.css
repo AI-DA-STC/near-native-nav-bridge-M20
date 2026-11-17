@@ -1,0 +1,31 @@
+/* The main screen: the phase track full width, then the fleet, the map and a side column of Operator, Suspicious item
+   and History. The page never scrolls; panels scroll inside, History giving way first. */
+.cc-ccpage {
+  display: grid; grid-template-rows: auto minmax(0, 1fr); grid-template-columns: minmax(0, 1fr); gap: var(--panel-gap);
+  height: 100%; min-height: 0; padding: 10px var(--gutter) var(--gutter);
+}
+.cc-ccpage__main {
+  display: grid; grid-template-columns: 320px minmax(0, 1fr) var(--side-w); gap: var(--panel-gap);
+  min-width: 0; min-height: 0;
+}
+.cc-ccpage.is-compact { padding-top: 6px; }
+.cc-ccpage.is-compact .cc-ccpage__main { grid-template-columns: 284px minmax(0, 1fr) var(--side-w); }
+
+.cc-ccpage__fleet { display: flex; flex-direction: column; gap: 6px; min-height: 0; overflow: auto; }
+
+.cc-ccpage__side { display: flex; flex-direction: column; gap: var(--panel-gap); min-height: 0; overflow: hidden; }
+/* each panel keeps at least its title row, and its body scrolls inside */
+.cc-ccpage__side > .cc-panel { flex: 0 1 auto; min-height: 41px; overflow: hidden; }
+/* the operator's turn outranks the finding: the suspicious item gives way first, then the operator scrolls inside */
+.cc-ccpage__side > .cc-ccpage__item { flex-shrink: 8; }
+.cc-ccpage__side > .cc-ccpage__history { flex: 1 1 0; min-height: 41px; }
+.cc-ccpage__side > .cc-ccpage__history.is-collapsed { flex: none; }
+.cc-ccpage__history-pad { padding: 6px 8px; }
+.cc-ccpage__history-pad > .cc-term { height: 100%; }
+
+/* The collapsed History bar keeps the last event in view */
+.cc-ccpage__last { display: inline-flex; align-items: center; gap: 6px; min-width: 0; font-size: 11.5px; color: var(--text-2); white-space: nowrap; }
+.cc-ccpage__last-text { overflow: hidden; text-overflow: ellipsis; }
+
+/* The bring-up checklist wraps in the side column's width */
+.cc-ccpage__operator .cc-stepper { flex-wrap: wrap; }

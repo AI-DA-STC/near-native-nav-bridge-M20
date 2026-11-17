@@ -1,0 +1,16 @@
+/* Tabs: Command Center design system, components/bundle.css */
+.cc-tabs { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.cc-tab {
+  position: relative; display: inline-flex; align-items: center; gap: 8px;
+  height: 30px; padding: 0 14px; border: 0; border-radius: var(--radius-sm);
+  background: transparent; color: var(--text-2); font-size: 13.5px; cursor: pointer; white-space: nowrap;
+}
+.cc-tab:hover:not(:disabled) { color: var(--text); background: var(--surface-raised); }
+.cc-tab:disabled { color: var(--text-muted); cursor: not-allowed; }
+.cc-tab.is-active { background: var(--surface-raised-2); color: var(--text); }
+.cc-tab.is-active::after { content: ''; position: absolute; left: 12px; right: 12px; bottom: -5px; height: 2px; border-radius: 2px; background: var(--accent); }
+.cc-tab__count {
+  display: inline-grid; place-items: center; min-width: 20px; height: 16px; padding: 0 5px;
+  border-radius: var(--radius-pill); background: var(--accent); color: var(--accent-ink);
+  font-size: 11px; font-weight: 700; line-height: 1;
+}

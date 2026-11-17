@@ -1,0 +1,11 @@
+/* StatusDot: Command Center design system, components/bundle.css */
+.cc-dot { position: relative; display: inline-block; flex: none; border-radius: 50%; background: var(--dot, var(--ok)); }
+.cc-dot--ok { --dot: var(--ok); }
+.cc-dot--warn { --dot: var(--warn); }
+.cc-dot--fault { --dot: var(--fault); }
+.cc-dot--blocked { --dot: var(--blocked); }
+.cc-dot--unknown, .cc-dot--neutral { --dot: var(--unknown); }
+.cc-dot--live { --dot: var(--live); }
+.cc-dot--accent { --dot: var(--accent); }
+.cc-dot--finding { --dot: var(--finding); }
+.cc-dot.is-pulse::after { content: ''; position: absolute; inset: 0; border-radius: 50%; background: var(--dot); animation: cc-ping 1.8s var(--ease-pulse) infinite; }

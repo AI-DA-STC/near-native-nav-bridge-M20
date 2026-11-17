@@ -1,0 +1,34 @@
+/* Button: Command Center design system, components/bundle.css */
+.cc-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  height: var(--control-h); padding: 0 var(--space-14);
+  border-radius: var(--radius-sm); border: 1px solid var(--line-strong);
+  background: var(--surface-raised); color: var(--text);
+  font-size: 13.5px; font-weight: 500; line-height: 1; white-space: nowrap;
+  cursor: pointer; user-select: none;
+  transition: background var(--dur-fast) var(--ease-standard), border-color var(--dur-fast) var(--ease-standard), filter var(--dur-fast) var(--ease-standard);
+}
+.cc-btn:hover:not(:disabled) { background: var(--surface-raised-2); }
+.cc-btn:active:not(:disabled) { transform: translateY(1px); }
+.cc-btn--sm { height: var(--control-h-sm); padding: 0 10px; font-size: 12.5px; gap: 5px; }
+.cc-btn--lg { height: var(--control-h-lg); padding: 0 18px; font-size: 14.5px; font-weight: 600; }
+.cc-btn--primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
+.cc-btn--primary:hover:not(:disabled) { background: var(--accent); filter: brightness(1.1); }
+.cc-btn--primary .cc-kbd { background: var(--accent-ink); border-color: var(--accent-ink); color: var(--text); }
+.cc-btn--danger { background: var(--danger); border-color: var(--danger-line); color: var(--danger-ink); }
+.cc-btn--danger:hover:not(:disabled) { background: var(--danger); filter: brightness(1.12); }
+.cc-btn--danger .cc-kbd { background: color-mix(in srgb, var(--bg) 55%, transparent); border-color: transparent; color: var(--danger-ink); }
+.cc-btn--ghost { background: transparent; border-color: transparent; color: var(--text-2); }
+.cc-btn--ghost:hover:not(:disabled) { background: var(--surface-raised); color: var(--text); }
+.cc-btn--finding { background: var(--finding-fill); border-color: var(--finding-line); color: var(--finding); font-weight: 700; letter-spacing: .05em; }
+.cc-btn--finding:hover:not(:disabled) { background: var(--finding-fill); border-color: var(--finding); }
+.cc-btn--finding .cc-kbd { color: var(--finding); }
+.cc-btn.is-pressed { background: var(--accent-fill); border-color: var(--accent-line); color: var(--accent); }
+.cc-btn:disabled { opacity: var(--alpha-disabled); cursor: not-allowed; }
+.cc-btn--block { width: 100%; }
+.cc-btn .cc-kbd { margin-left: 3px; }
+.cc-btn-wrap { display: inline-flex; flex-direction: column; align-items: flex-start; gap: 5px; max-width: 100%; }
+.cc-btn-wrap--right { flex-direction: row; align-items: center; gap: 10px; }
+.cc-btn-wrap--block { display: flex; align-items: stretch; }
+.cc-btn-reason { display: inline-flex; align-items: flex-start; gap: 5px; color: var(--text-2); font-size: 12px; line-height: 16px; }
+.cc-btn-reason .cc-icon { margin-top: 1px; color: var(--text-muted); }

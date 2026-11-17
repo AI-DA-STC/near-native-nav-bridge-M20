@@ -56,8 +56,10 @@ RELAYS = [
     # nav_msgs/OccupancyGrid (latched: reliable+transient_local already default)
     ('occupancygrid_relay','grid_map_relay',          '/GRID_MAP',              '/GRID_MAP_relayed',              None),
 
-    # geometry_msgs/PoseWithCovarianceStamped
-    ('posewithcov_relay',  'initialpose_relay',       '/initialpose',           '/initialpose_relayed',           None),
+    # laptop -> AOS: laptop rviz's "2D Pose Estimate" publishes /initialpose_relayed; this relay
+    # renames to /initialpose, which the AOS localizer subscribes to. Laptop-only direction: an
+    # AOS -> laptop relay on the same pair would bounce every pose back and forth forever.
+    ('posewithcov_relay',  'initialpose_relay',       '/initialpose_relayed',   '/initialpose',                   None),
 
     # laptop -> AOS: laptop publishes /goal_pose_relayed; this relay renames to /goal_pose
     # which nav_bridge_node already subscribes to.

@@ -1,0 +1,14 @@
+/* Terminal: Command Center design system, components/bundle.css */
+.cc-term { display: flex; flex-direction: column; gap: 8px; min-height: 0; }
+.cc-term__out {
+  margin: 0; padding: 10px 12px; min-height: 0; overflow: auto; border-radius: var(--radius-sm);
+  background: var(--surface-well); border: 1px solid var(--line);
+  font: 400 12px/18px var(--font-mono); font-variant-ligatures: none; color: var(--text-2); white-space: pre-wrap; overflow-wrap: anywhere;
+}
+.cc-term__line.is-cmd { color: var(--live); }
+.cc-term__prompt { color: var(--text-muted); }
+.cc-term__line.is-section { color: var(--text); font-weight: 700; }
+.cc-term__line.is-warn { color: var(--warn-text); }
+.cc-term__line.is-error { color: var(--fault-text); }
+.cc-term__in { display: flex; gap: 8px; }
+.cc-term__in .cc-input { min-height: var(--control-h-sm); height: var(--control-h-sm); padding: 3px 10px; font-size: 12.5px; }
