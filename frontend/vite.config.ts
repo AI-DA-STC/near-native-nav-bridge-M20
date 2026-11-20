@@ -13,7 +13,11 @@ export default defineConfig({
     alias: { '@/app': layer('app'), '@/pages': layer('pages'), '@/shared': layer('shared') },
   },
   test: {
-    environment: 'jsdom',
-    setupFiles: ['./vitest.setup.ts'],
+    projects: [
+      // The page, in jsdom
+      { extends: true, test: { name: 'app', include: ['src/**/*.test.{ts,tsx}'], environment: 'jsdom', setupFiles: ['./vitest.setup.ts'] } },
+      // The setup server (server/), in Node: its terminals are real pseudo-terminals
+      { extends: true, test: { name: 'server', include: ['server/**/*.test.ts'], environment: 'node' } },
+    ],
   },
 })

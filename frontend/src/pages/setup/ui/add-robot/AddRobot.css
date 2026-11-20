@@ -1,0 +1,54 @@
+/* AddRobot: new this round. The bay when the Add seat is selected: the README's robots, another robot by ID and IP,
+   and what the setup will do. */
+.cc-addbay { display: grid; grid-template-columns: minmax(520px, 1.2fr) minmax(0, 1fr); gap: var(--gutter); height: 100%; min-height: 0; }
+.cc-add, .cc-add__how { min-height: 0; }
+.cc-add__body { display: grid; gap: 18px; }
+.cc-add__heading { margin: 0 0 6px; font-size: 11.5px; line-height: 16px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--text-muted); }
+
+.cc-add__list { list-style: none; margin: 0; padding: 0; }
+.cc-add__row {
+  display: grid; grid-template-columns: minmax(120px, 1fr) 132px 104px 86px 104px; align-items: center; gap: 12px;
+  padding: 8px 0; border-bottom: 1px solid var(--line);
+}
+.cc-add__row:last-child { border-bottom: 0; }
+.cc-add__who { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.cc-add__name { font: 700 16px/22px var(--font-mono); color: var(--text); }
+.cc-add__row.is-offline .cc-add__name { color: var(--text-muted); }
+.cc-add__ip { font: 400 12.5px/18px var(--font-mono); color: var(--text-2); }
+.cc-add__kind { font-size: 12.5px; color: var(--text-muted); }
+.cc-add__presence { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; }
+.cc-add__row > .cc-btn { justify-self: end; }
+.cc-add__all { margin: 0; color: var(--text-muted); }
+
+.cc-add__form { display: grid; gap: 8px; }
+.cc-add__fields { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; }
+.cc-add__field { display: grid; gap: 4px; font-size: 12px; color: var(--text-2); }
+.cc-add__field:nth-child(2) { width: 104px; }
+.cc-add__field--login { flex: 1 1 280px; }
+.cc-add__input { font-family: var(--font-mono); font-size: 13px; height: var(--control-h); width: 100%; min-width: 0; }
+/* user@ip, as ssh takes it */
+.cc-add__login { display: flex; align-items: center; gap: 4px; }
+.cc-add__user { flex: 0 0 92px; }
+.cc-add__at { font: 400 13px/1 var(--font-mono); color: var(--text-muted); }
+.cc-add__ip-input { flex: 1 1 140px; }
+.cc-add__secret { position: relative; display: block; width: 168px; }
+.cc-add__password { padding-right: 48px; }
+.cc-add__show {
+  position: absolute; right: 4px; top: 50%; transform: translateY(-50%); height: calc(var(--control-h) - 8px); padding: 0 6px;
+  border: 0; border-radius: var(--radius-xs); background: none; color: var(--text-muted); font: 600 11px/1 var(--font-sans); cursor: pointer;
+}
+.cc-add__show:hover { color: var(--text); }
+.cc-add__show:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.cc-add__note { margin: 0; color: var(--text-muted); font-size: 12.5px; }
+.cc-add__note code, .cc-add__lead code { font: 400 12px/18px var(--font-mono); color: var(--text); }
+.cc-add__error { margin: 0; padding: 8px 10px; border-radius: var(--radius-sm); background: var(--fault-fill); color: var(--fault-text); font-size: 12.5px; }
+
+.cc-add__how > .cc-panel__body { display: grid; gap: 12px; align-content: start; }
+.cc-add__lead { margin: 0; color: var(--text-2); font-size: 13px; line-height: 19px; }
+.cc-add__lead b { color: var(--text); font-weight: 600; }
+.cc-add__steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.cc-add__steps li { display: grid; grid-template-columns: 14px 96px minmax(0, 1fr); gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--line); }
+.cc-add__steps li:last-child { border-bottom: 0; }
+.cc-add__letter { font: 500 11.5px/18px var(--font-mono); color: var(--text-muted); text-align: center; }
+.cc-add__step { font-weight: 600; color: var(--text); }
+.cc-add__purpose { color: var(--text-2); font-size: 12.5px; }

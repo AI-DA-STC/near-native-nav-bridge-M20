@@ -1,25 +1,37 @@
-import { useState } from 'react'
-import { Outlet } from 'react-router'
+import { useState, type ReactNode } from 'react'
+import { Outlet, useLocation } from 'react-router'
 import { useMissionSnapshot, type EStopFacts } from '@/shared/api'
 import { formatTimeOfDay } from '@/shared/lib'
 import { Toast, ToastRegion, dismissToast, useToasts } from '@/shared/ui/Toast'
 import { ScenarioSwitcher } from '../prototype/ScenarioSwitcher'
 import { EstopBanner } from './EstopBanner'
 import { Header } from './Header'
+import { SetupHeader } from './SetupHeader'
+import { useSetupToasts } from './setup-toasts'
 import './AppShell.css'
 
-/** The app-wide shell: the header band, the screen under it, and what sits above everything */
+/** The app-wide shell: the header band, the screen under it, and what sits above everything. The Command center has
+ * the mission's header; Setup and Terminals have the fleet setup's. */
 export function AppShell() {
   const snap = useMissionSnapshot()
+  const mission = useLocation().pathname.startsWith('/mission')
+  useSetupToasts()
   return (
     <div className="cc-shell">
-      {snap ? <Header snap={snap} /> : null}
-      <main className="cc-shell__main">{snap ? <Outlet /> : <p className="cc-shell__connecting">Connecting to the mission…</p>}</main>
+      {!mission ? <SetupHeader /> : snap ? <Header snap={snap} /> : null}
+      <main className="cc-shell__main">
+        <Outlet />
+      </main>
       {snap?.estop ? <MissionEstopBanner estop={snap.estop} /> : null}
       <ToastHost />
-      <ScenarioSwitcher />
+      {mission ? <ScenarioSwitcher /> : null}
     </div>
   )
+}
+
+/** The Command center once the mission's first snapshot is in */
+export function MissionGate({ children }: { children: ReactNode }) {
+  return useMissionSnapshot() ? children : <p className="cc-shell__connecting">Connecting to the mission…</p>
 }
 
 /** The E-STOP report stays until the operator dismisses it */

@@ -2,7 +2,14 @@
 
 The operator console for the coordinated search & discovery demo: three Lynx M20 Pro robot dogs and a Mobile ALOHA search an area for a suspicious box, cordon it off and open it, while one operator gives the instruction, approves the plan and judges the contents. It replaces `demo/demo_gui.py`'s window.
 
-This round it runs on a **scenario replay** of the brief's 16 states (`demo/command_center_design_prompt.md`, section 5). The mission backend that will stream live snapshots does not exist yet; [For the backend](#for-the-backend) says what it must send.
+It opens on a landing page (`/`); **Launch** goes through the operator's steps:
+- **Setup** (`/setup`): the robots join a lobby one at a time, and the setup server in `server/` brings each one up by typing its commands into terminals on this workstation (the package README's for an M20, `start_aloha.sh` and `aloha/bridge.sh` for the ALOHA).
+- **Routes** (`/routes`): the mission plans in `demo/waypoints/<date>_<time>/`, each with a preview, and new routes recorded robot by robot with `demo/record_waypoints.sh`. **Use this plan** points `demo/waypoints/current` at one.
+- The **Command center** (`/mission`), with Fleet health and Log, opens once both are confirmed.
+
+**Terminals** (`/terminals`) shows the terminals, live. How to launch it, for the operator: [`../README_gui.md`](../README_gui.md).
+
+The **Command center** (`/mission`) still runs on a **scenario replay** of the brief's 16 states (`demo/command_center_design_prompt.md`, section 5). The mission backend that will stream live snapshots does not exist yet; [For the backend](#for-the-backend) says what it must send.
 
 ## Run
 
@@ -10,11 +17,11 @@ This round it runs on a **scenario replay** of the brief's 16 states (`demo/comm
 |---|---|
 | Node | 24 LTS (`.nvmrc`). The devcontainer installs it (`.devcontainer/Dockerfile`). |
 | Install | `npm install` (its own dependencies; nothing is shared with the ROS or Python side) |
-| Develop | `npm run dev`: http://localhost:5173, also reachable on the robots' LAN (`--host`) |
-| Build | `npm run build`, then `npm run preview`. `dist/` is self-contained: no CDN, no external font, no map tiles. |
-| Check | `npm test` (Vitest), `npm run lint` (oxlint, then Steiger's FSD rules), `npm run typecheck` |
+| Develop | `npm run dev`: the page (Vite, hot reload) and the setup server, one process on http://localhost:5173. It listens on 127.0.0.1 only: `HOST=0.0.0.0` opens it to the LAN, and with it shells on the robots. |
+| Build | `npm run build`, then `npm start`: the built `dist/` and the setup server. `dist/` is self-contained: no CDN, no external font, no map tiles. |
+| Check | `npm test` (Vitest: the page in jsdom, the server in Node), `npm run lint` (oxlint, then Steiger's FSD rules), `npm run typecheck` (the app, the configs and the server) |
 
-The **PROTOTYPE** pill at the bottom left steps through the brief's 16 states (← / → anywhere). `?state=7` opens on one of them. Its ★ marks this round's states. The operator's commands work against the replay:
+The Command center opens once Setup and Routes are confirmed; `MISSION_UNLOCKED=1 npm run dev` opens it straight away, on the replay. There, the **PROTOTYPE** pill at the bottom left steps through the brief's 16 states (← / → anywhere). `/mission?state=7` opens on one of them. Its ★ marks this round's states. The operator's commands work against the replay:
 - Send moves on to Formation, and the plan arrives about 5 s later.
 - Approve plan starts the Sweep; Deny goes back to Patrol.
 - ANOMALY ends the mission; CLEAR returns the dogs to their slots.
@@ -30,6 +37,7 @@ The **PROTOTYPE** pill at the bottom left steps through the brief's 16 states (�
 
 **Deliberate changes from the design system:**
 - **E-STOP stays one click away while a confirm modal or the lightbox dims the page** (`src/app/layout/AppShell.css`).
+- **Setup and Terminals have no E-STOP.** Setting up moves no robot, so E-STOP is on the Command center only (`src/app/layout/SetupHeader.tsx`).
 - **A robot that has not confirmed an E-STOP shows E-STOP NOT CONFIRMED, never STOPPED.**
 - **The verdict's photo sits beside its object list in the Operator panel,** so ANOMALY and CLEAR stay in view.
 - **During plan approval the Operator panel shows the plan card alone,** with Approve and Deny.
@@ -43,25 +51,37 @@ src/
   app/                         the app-wide shell and wiring
     entrypoint.tsx, router.tsx
     mission-source.ts          connects the mission source once (replay now; the live source goes here)
+    setup-source.ts            connects the setup server's socket once
     layout/                    header (state chip, clock, pills, attention chips), E-STOP banner, toasts;
-                               mission-controls.ts: Start, Stop mission, Force stop, E-STOP (only the app sends them)
+                               mission-controls.ts: Start, Stop mission, Force stop, E-STOP (only the app sends them);
+                               SetupHeader and setup-toasts.ts: the header and toasts of Setup, Routes and Terminals
+                               (no E-STOP); flow.ts and nav-tabs.ts: Setup, then Routes, then the Command center;
+                               FlowRoutes.tsx: the landing page's Launch and the Command center's lock
     prototype/                 the scenario switcher (prototype only, never with a live source)
     styles/, fonts/
-  pages/command-center/        the main screen
+  pages/landing/               the hero video, the console's name, the two logos and Launch
+  pages/setup/                 the lobby's seats (roster/, with the robot images), the selected robot's steps and
+                               prompts (bay/; its terminals are under Terminals), adding a robot with its login (add-robot/);
+                               model/: what a seat and a step say; api/: the lobby's commands
+  pages/routes/                the plans and their preview (one small map per phase), a recording session and its
+                               recorder; model/: the phases' rules and the preview's extent; api/: its commands
+  pages/terminals/             every terminal the setup opened, by robot, then the Routes recorder's
+  pages/command-center/        the mission screen
     ui/                        phase track and task lanes, fleet, map, Operator, Suspicious item, History
     model/                     snapshot → what each block shows (phases, lanes, robot states, map layers, the
                                operator's turn): every rule about what a fact means lives here
     api/                       the page's commands: instruction, plan decision, verdict; the site map
     lib/                       map projection, the phase columns the track and lanes share
   shared/
-    ui/<Component>/            the context-free kit, one public API per component
-    api/                       the mission contract, the client, and the scenario replay (mission-scenarios/)
+    ui/<Component>/            the context-free kit, one public API per component (XtermPane: a live terminal)
+    api/                       the mission contract, the client, and the scenario replay (mission-scenarios/);
+                               setup-protocol.ts and setup-stream.ts: the setup server's facts and its socket
     lib/, config/              formatting (true minus, 91 %, 1:47); robot identity and colours
 ```
 
 There is no `entities/` or `features/` layer yet, as the brief's section 9 explains. Add one when it is earned:
 - the robot-state rules move to `entities/robot` when a Fleet health page needs them too;
-- the map renderer moves to `shared/ui` when the Routes page does.
+- the map renderer moves to `shared/ui` when another page needs the Command center's map (Routes draws its own small one).
 
 ## The data: a thin client
 
@@ -76,6 +96,20 @@ The page derives everything it shows from those facts. The replay in `shared/api
 **To go live**, implement `MissionSource` over the backend and connect it in `src/app/mission-source.ts`; no UI code changes.
 - Typically a WebSocket carries the snapshots and the commands, with the site map fetched once.
 - The source must emit at least once a second, since every clock on screen follows `serverTime`.
+
+## The setup server
+
+`server/` is a small Node server, TypeScript run by Node 24 as it is (type stripping). `npm run dev` and `npm start` start it with the page, on one port.
+- `main.ts`: the HTTP server (Vite in middleware mode, or `dist/`) and the WebSocket `/api/setup`, which refuses other origins.
+- `setup-hub.ts`: the robots added in the lobby with their logins (`server/robots.json`, not in git, mode 0600; passwords never go to a browser), whether they answer (`presence.ts`: a TCP connect every 2 s), their setup runs and terminals, the plans and the recording session, and the operator's flow (Setup and Routes confirmed). It sends the browsers a snapshot on every change, and the output of the terminals they open. `GET /api/plans/<id>` serves a plan's waypoints for its preview.
+- `m20-setup.ts`: an M20's six steps. It types the README's commands (`readme-commands.ts`) into two pseudo-terminals (`terminal-session.ts`) once the prompt is back, and reads what they printed (`shell-prompt.ts`, `command-output.ts`): the commands are typed as written, so there are no exit codes. `step-shell.ts` and `ssh-login.ts` hold what both kinds do alike: typing, the step runner, ssh with a password prompt when it is refused.
+- `aloha-setup.ts`: the ALOHA's four steps: ssh as agilex, `bash start_aloha.sh` (left attached to its tmux; detached with Ctrl+b d, never Ctrl+C), its eight parts checked on its ROS master (`ros1-master.ts`: XML-RPC `getSystemState`, no ROS 1 needed here), then `aloha/bridge.sh` and the ALOHA's topics on ROS_DOMAIN_ID=1.
+- `route-plans.ts`: the plan folders of `demo/waypoints` (or `PLANS_DIR`), their completeness by the README's table, a session as a copy of its base, and `current`. `route-recorder.ts` types `ONLY="<id>" WAYPOINTS=… demo/record_waypoints.sh <phase>` into the Routes terminal and sends fleet_management.py's keys; `fleet-output.ts` reads its `[FLEET]` lines.
+- `ros-checks.ts`: what it checks without typing: a relay already publishing `/ODOM_relayed_<id>` before it launches one, the poses arriving on `/initialpose_relayed_<id>`, a robot's odometry while it is recorded, and the ALOHA's topics on ROS_DOMAIN_ID=1.
+- `rviz-config.ts`: the RViz of step e. It writes `server/rviz/robot_<id>.rviz` (not in git) from `robot.rviz` with `ROBOT_ID` replaced, and rviz2 is typed with `-d` and that file in front of the README's arguments, so each robot's window shows its own map, odometry and waypoints and is named after it.
+- node-pty comes from `@lydell/node-pty`, pinned: it ships a Linux binary, while the upstream package compiles on install and focal's g++ 9 cannot build it for Node 24.
+
+`readme-commands.test.ts` fails when README.md, `launch/relays.launch.py` or `aloha/robot/start_aloha.sh` no longer say what the server types or expects. `m20-setup.test.ts`, `aloha-setup.test.ts` and `route-recorder.test.ts` run the steps and the recorder against scripted terminals.
 
 ## For the backend
 

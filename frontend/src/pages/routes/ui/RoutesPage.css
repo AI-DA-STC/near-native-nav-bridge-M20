@@ -1,0 +1,14 @@
+/* RoutesPage: new this round. The plans (or a recording session) on the left, the selected plan's preview on the
+   right. */
+.cc-routes {
+  display: grid; grid-template-columns: minmax(440px, 40%) minmax(0, 1fr); gap: var(--gutter);
+  height: 100%; padding: var(--gutter); min-height: 0;
+}
+.cc-routes__connecting { display: grid; place-items: center; height: 100%; margin: 0; color: var(--text-muted); }
+.cc-routes__plans { min-height: 0; }
+.cc-routes__plans > .cc-panel__body { display: grid; gap: 12px; align-content: start; }
+.cc-routes__count { font-size: 12px; color: var(--text-muted); }
+.cc-routes__lead { margin: 0; color: var(--text-2); font-size: 12.5px; line-height: 18px; }
+.cc-routes__lead code { font: 400 12px/18px var(--font-mono); color: var(--text); }
+.cc-routes__actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
+.cc-routes__error { flex-basis: 100%; margin: 0; color: var(--fault-text); font-size: 12.5px; text-align: right; }

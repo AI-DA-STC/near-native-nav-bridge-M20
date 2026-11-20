@@ -30,7 +30,7 @@ INSPECT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "inspect_box.
 INSPECT_TIMEOUT_S = 60.0  # for its result, after the last pose
 FRESH_S = 0.5  # older puppet positions are not saved
 DEFAULT_FILE = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "demo", "waypoints",
-                                             "manipulator.json"))
+                                             "current", "manipulator.json"))
 
 
 def spin(node):

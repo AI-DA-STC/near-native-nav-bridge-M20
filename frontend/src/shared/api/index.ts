@@ -29,3 +29,46 @@ export type {
 export { fetchSiteMap, sendCommand } from './client'
 export { createReplaySource, isReplaySource } from './mission-scenarios/replay-source'
 export type { ReplaySource, ReplayState } from './mission-scenarios/replay-source'
+export {
+  connectSetup,
+  createSetupSocket,
+  fetchPlanRoutes,
+  sendSetupCommand,
+  setupSource,
+  terminalStream,
+  useSetupConnection,
+  useSetupSnapshot,
+} from './setup-stream'
+export type { SetupConnection, SetupResult, SetupSource, TerminalStream } from './setup-stream'
+export type {
+  CommandPlace,
+  CommandStatus,
+  FlowFacts,
+  PlanPhaseFacts,
+  PlanRecording,
+  PlanRoutes,
+  PlanSummary,
+  PoseFact,
+  Presence,
+  PromptChoice,
+  RecorderKey,
+  RecordingFacts,
+  RelayState,
+  RobotKind,
+  RobotSetupFacts,
+  RobotSuggestion,
+  RoutePhase,
+  RouteSessionFacts,
+  SetupCommand,
+  SetupPrompt,
+  SetupRunState,
+  SetupSnapshot,
+  SetupStepFacts,
+  SetupStepKey,
+  SetupStepStatus,
+  StepCheck,
+  StepCommand,
+  TerminalRole,
+  TerminalSessionFacts,
+  WaypointFact,
+} from './setup-protocol'

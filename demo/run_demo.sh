@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
-# Suspicious-item search demo from the waypoints saved by demo/record_waypoints.sh (in WAYPOINTS). Start every
+# Suspicious-item search demo from a plan's waypoints (WAYPOINTS, default demo/waypoints/current: the plan picked
+# under Routes in the Command Center, or recorded with demo/record_waypoints.sh). Start every
 # robot's bridge first, and for the Aloha what aloha/run_aloha.sh needs. From the sweep on, demo/detect_box.py watches
 # R3's camera (only R3's) for the box (R3 default 738); without video after 3 tries, the sweep ends and the cordon starts. Ctrl+C ends the demo: no more waypoints are sent, each robot
 # still drives to the one it has, and the Aloha's arms stop where they are.
 set -euo pipefail
 
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-WAYPOINTS=${WAYPOINTS:-$HERE/waypoints}
+WAYPOINTS=${WAYPOINTS:-$HERE/waypoints/current}
 INSTRUCTION="Execute a systematic sweep of Zone A to scan for unattended or anomalous items"
 R3=${R3:-738}
 

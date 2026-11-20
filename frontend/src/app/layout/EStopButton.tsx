@@ -10,7 +10,7 @@ export interface EStopButtonProps extends Omit<ComponentProps<'button'>, 'onClic
   label?: string
 }
 
-/** The emergency stop: one click stops every robot at once. The rightmost item of the header, on every screen. */
+/** The emergency stop: one click stops every robot at once. The rightmost item of the Command center's header. */
 export function EStopButton({ onClick, size = 'md', label = 'E-STOP', className, ...rest }: EStopButtonProps) {
   return (
     <button type="button" className={cx('cc-estop', `cc-estop--${size}`, className)} onClick={onClick} {...rest}>

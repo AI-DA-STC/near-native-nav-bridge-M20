@@ -47,6 +47,7 @@ On **robot**, trust the laptop's plain-HTTP registry, then restart docker:
 # /etc/docker/daemon.json   (<WS_IP> = laptop's address on the 10.21.31.x LAN)
 { "insecure-registries": ["192.168.123.160:5000"] }
 sudo systemctl restart docker
+```
 
 ```bash
 docker pull --platform linux/arm64 192.168.123.160:5000/m20-bridge:foxy
@@ -70,7 +71,7 @@ export ROBOT_ID=<robot_id>
 export ROS_DOMAIN_ID=0
 ros2 launch nav_cmd_bridge relays.launch.py 
 ```
-wait for atleast 2 mins for the above relay node to start, you should see a bunch of topics being published. 
+wait for atleast 5s for the above relay node to start, you should see a bunch of topics being published. 
 
 `ROBOT_ID` suffixes every relayed topic and relay node name (`/ODOM_relayed_<robot_id>`, `odom_relay_<robot_id>`)
 and prefixes every frame id except `map` (`<robot_id>/base_link`), so any number of robots can share one
@@ -191,7 +192,7 @@ R1=741 R2=665 R3=738 PATROL_ROBOTS="741 665" demo/record_waypoints.sh   # ids (d
 ```
 - Step 4 : In each phase, for each robot in the table's order: drive it with its controller to each waypoint and press
 ENTER there; `n` + ENTER moves on to the next robot. After the last robot, `w` + ENTER saves
-`demo/waypoints/<phase>.json` and starts the next phase. `u` + ENTER undoes the current robot's last waypoint,
+`demo/waypoints/current/<phase>.json` (the plan in use) and starts the next phase. `u` + ENTER undoes the current robot's last waypoint,
 `c` + ENTER clears the phase, Ctrl+C quits without saving the current phase.
 
 | Phase | Robots | Waypoints |
@@ -203,7 +204,9 @@ ENTER there; `n` + ENTER moves on to the next robot. After the last robot, `w` +
 
 # Running the demo (demo/run_demo.sh)
 
-- Step 1 : `demo/waypoints/` has `patrol.json`, `formation.json`, `sweep.json` and `cordon.json` (recorded above).
+- Step 1 : `demo/waypoints/current` has `patrol.json`, `formation.json`, `sweep.json` and `cordon.json` (recorded above). Each plan
+is a dated folder of `demo/waypoints`; `current` points at the one in use, picked under Routes in the Command Center
+(README_gui.md).
 - Step 2 : Robot side (localization and relays, each robot with its own `ROBOT_ID`) and laptop Steps 1–4 and 6 for
 every robot.
 - Step 3 : One plain bridge per robot, as in Multi-robot Step 1.

@@ -22,3 +22,8 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# The setup server's robots on this workstation
+server/robots.json
+server/robots.json.*
+server/rviz/

@@ -2,17 +2,43 @@ import { act, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { connectMission, createReplaySource, type ReplaySource } from '@/shared/api'
+import { connectMission, connectSetup, createReplaySource, type ReplaySource, type SetupSnapshot, type SetupSource } from '@/shared/api'
 import { routes } from './router'
 
 /* The whole app on the scenario replay: each of the brief's 16 states, and the operator's flows */
 
 let source: ReplaySource
 
-function renderApp(state: number) {
+/** The setup server's facts: Setup and Routes confirmed unless said otherwise */
+function setupFacts(flow: Partial<SetupSnapshot['flow']> = {}): SetupSnapshot {
+  return {
+    serverTime: Date.now(),
+    robots: [],
+    suggestions: [],
+    sessions: [],
+    flow: { setupConfirmedAt: 1, plan: { id: '2026-10-07_15-59-41', confirmedAt: 2 }, unlocked: false, ...flow },
+    plans: [],
+    session: null,
+  }
+}
+
+function connectSetupFacts(snapshot: SetupSnapshot) {
+  const setup: SetupSource = {
+    status: () => 'open',
+    subscribe: () => () => undefined,
+    getSnapshot: () => snapshot,
+    send: async () => ({ ok: true, error: null }),
+    terminal: () => ({ attach: () => () => undefined, input: () => undefined, resize: () => undefined }),
+    planRoutes: () => Promise.reject(new Error('no plans here')),
+  }
+  connectSetup(setup)
+}
+
+function renderApp(state: number, path = '/mission', setup = setupFacts()) {
   source = createReplaySource({ state })
   connectMission(source)
-  render(<RouterProvider router={createMemoryRouter(routes)} />)
+  connectSetupFacts(setup)
+  render(<RouterProvider router={createMemoryRouter(routes, { initialEntries: [path] })} />)
   return userEvent.setup({ advanceTimers: (ms) => vi.advanceTimersByTime(ms) })
 }
 
@@ -113,6 +139,15 @@ describe('the operator’s flows', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('3/4 confirmed')
   })
 
+  it('E-STOP is on the Command center only: setting up moves no robot', async () => {
+    const user = renderApp(7, '/setup')
+    expect(screen.queryByRole('button', { name: 'E-STOP' })).toBeNull()
+    await user.click(screen.getByRole('tab', { name: 'Terminals' }))
+    expect(screen.queryByRole('button', { name: 'E-STOP' })).toBeNull()
+    await user.click(screen.getByRole('tab', { name: 'Command center' }))
+    expect(screen.getByRole('button', { name: 'E-STOP' })).toBeEnabled()
+  })
+
   it('Stop mission has a confirm step, and becomes Force stop 8 s later', async () => {
     const user = renderApp(7)
     await user.click(screen.getByRole('button', { name: /^Stop mission/ }))
@@ -139,5 +174,32 @@ describe('the operator’s flows', () => {
     expect(snapshot().run.outcome).toBe('anomaly')
     expect(screen.getByText('ENDED')).toBeInTheDocument()
     expect(screen.queryByText('ENDED (FAILED)')).toBeNull()
+  })
+})
+
+describe('the way through the console', () => {
+  it('opens on the landing page; Launch goes to the step not confirmed yet', async () => {
+    const user = renderApp(1, '/', setupFacts({ setupConfirmedAt: null, plan: null }))
+    expect(screen.getByRole('heading', { name: 'Command Center' })).toBeInTheDocument()
+    expect(screen.getByRole('img', { name: 'ST Engineering' })).toBeInTheDocument()
+    expect(screen.getByRole('img', { name: 'NEAR LAB' })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Launch' }))
+    expect(screen.getByRole('tab', { name: 'Setup' })).toHaveAttribute('aria-selected', 'true')
+  })
+
+  it('locks the Command center, Fleet health and Log until Setup and Routes are confirmed', () => {
+    renderApp(1, '/mission', setupFacts({ plan: null }))
+    // Sent on to the step that is missing
+    expect(screen.getByRole('tab', { name: 'Routes' })).toHaveAttribute('aria-selected', 'true')
+    for (const name of ['Command center', 'Fleet health', 'Log']) {
+      expect(screen.getByRole('tab', { name })).toBeDisabled()
+      expect(screen.getByRole('tab', { name })).toHaveAttribute('title', 'Confirm Setup and Routes first')
+    }
+  })
+
+  it('opens the Command center once both are confirmed', () => {
+    renderApp(1, '/mission')
+    expect(screen.getByRole('tab', { name: 'Command center' })).toBeEnabled()
+    expect(screen.getByRole('tab', { name: 'Fleet health' })).toHaveAttribute('title', 'Comes in a later round')
   })
 })

@@ -1,0 +1,13 @@
+/* SetupPage: new this round. The bay (the selected robot's setup) above the lobby's seats. */
+.cc-setup {
+  display: grid; grid-template-rows: auto minmax(0, 1fr) auto; grid-template-columns: minmax(0, 1fr);
+  gap: var(--gutter); height: 100%; padding: var(--gutter);
+}
+.cc-setup__bay { grid-row: 2; min-height: 0; }
+.cc-setup > .cc-roster { grid-row: 3; }
+.cc-setup__lost {
+  grid-row: 1; margin: 0; padding: 8px 12px; border-radius: var(--radius-sm);
+  background: var(--warn-fill); border: 1px solid var(--warn-line); color: var(--warn-text); font-size: 13px;
+}
+.cc-setup--waiting { grid-template-rows: minmax(0, 1fr); }
+.cc-setup__connecting { display: grid; place-items: center; margin: 0; color: var(--text-muted); }

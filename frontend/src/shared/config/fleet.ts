@@ -8,6 +8,8 @@ export interface RobotIdentity {
   /** The ID the scripts name the robot by ("Robot 665"); the ALOHA has none */
   id: string
   kind: 'dog' | 'aloha'
+  /** Its static IP on the robots' router (README: "near-robots-5G"), what the setup lobby suggests */
+  ip: string
   /** The identity colour, as a CSS value: map glyph, trail, route, lane, tags */
   color: string
 }
@@ -16,10 +18,11 @@ export interface RobotIdentity {
 export const ROBOT_KEYS: readonly RobotKey[] = ['r1', 'r2', 'r3', 'aloha']
 
 export const FLEET: Readonly<Record<RobotKey, RobotIdentity>> = {
-  r1: { key: 'r1', label: 'R1', id: '741', kind: 'dog', color: 'var(--robot-r1)' },
-  r2: { key: 'r2', label: 'R2', id: '665', kind: 'dog', color: 'var(--robot-r2)' },
-  r3: { key: 'r3', label: 'R3', id: '738', kind: 'dog', color: 'var(--robot-r3)' },
-  aloha: { key: 'aloha', label: 'ALOHA', id: '', kind: 'aloha', color: 'var(--robot-aloha)' },
+  r1: { key: 'r1', label: 'R1', id: '741', kind: 'dog', ip: '192.168.123.100', color: 'var(--robot-r1)' },
+  r2: { key: 'r2', label: 'R2', id: '665', kind: 'dog', ip: '192.168.123.101', color: 'var(--robot-r2)' },
+  r3: { key: 'r3', label: 'R3', id: '738', kind: 'dog', ip: '192.168.123.103', color: 'var(--robot-r3)' },
+  // The devcontainer's "agilex" host
+  aloha: { key: 'aloha', label: 'ALOHA', id: '', kind: 'aloha', ip: '192.168.123.200', color: 'var(--robot-aloha)' },
 }
 
 export function robotOf(key: RobotKey): RobotIdentity {

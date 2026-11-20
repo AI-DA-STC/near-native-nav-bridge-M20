@@ -15,6 +15,8 @@ export interface AppHeaderProps {
   /** Turns the brandmark */
   running?: boolean
   state?: MissionState
+  /** Overrides the state chip's word: the setup's own states ("SETTING UP") */
+  stateLabel?: string
   stateDetail?: ReactNode
   /** mm:ss */
   clock?: string
@@ -22,6 +24,7 @@ export interface AppHeaderProps {
   clockRunning?: boolean
   /** Start mission · Stop mission · Force stop */
   actions?: ReactNode
+  /** The E-STOP's action. Without one the header has no E-STOP: Setup and Terminals, where no mission runs. */
   onEStop?: () => void
   tabs?: TabItem[]
   tab?: string
@@ -32,12 +35,13 @@ export interface AppHeaderProps {
   className?: string
 }
 
-/** The header band and the tab bar under it. Fixed at the top; nothing goes right of E-STOP. */
+/** The header band and the tab bar under it. Fixed at the top; nothing goes right of E-STOP, where there is one. */
 export function AppHeader({
   title = 'Command Center',
   subtitle,
   running = false,
   state = 'ready',
+  stateLabel,
   stateDetail,
   clock,
   clockLabel,
@@ -61,11 +65,11 @@ export function AppHeader({
             {subtitle ? <div className="cc-header__sub">{subtitle}</div> : null}
           </div>
         </div>
-        <StateChip state={state} detail={stateDetail} />
+        <StateChip state={state} label={stateLabel} detail={stateDetail} />
         {clock ? <MissionClock time={clock} label={clockLabel} running={clockRunning ?? running} /> : null}
         <div className="cc-header__spacer" />
         {actions ? <div className="cc-header__actions">{actions}</div> : null}
-        <EStopButton onClick={onEStop} />
+        {onEStop ? <EStopButton onClick={onEStop} /> : null}
       </div>
       {tabs || pills.length || attention ? (
         <div className="cc-header__nav">

@@ -2,12 +2,13 @@
 # Records the search demo's waypoints by driving each robot with its remote: ENTER in fleet_management saves the
 # robot's current pose. Usage: demo/record_waypoints.sh [patrol] [formation] [sweep] [cordon]  (default: all four)
 # Robot ids: R1, R2, R3 (default 741 665 738) and PATROL_ROBOTS (default all three); files go to WAYPOINTS
-# (default demo/waypoints). ONLY="<ids>" records just those robots and keeps the others' waypoints in the file.
+# (default demo/waypoints/current, the plan in use: the Command Center's Routes records each session into a new dated
+# folder of demo/waypoints instead). ONLY="<ids>" records just those robots and keeps the others' waypoints in the file.
 # APPEND=1 adds the new waypoints after the ones each robot already has, e.g. ONLY=738 APPEND=1 ... sweep
 set -euo pipefail
 
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-WAYPOINTS=${WAYPOINTS:-$HERE/waypoints}
+WAYPOINTS=${WAYPOINTS:-$HERE/waypoints/current}
 R1=${R1:-741} R2=${R2:-665} R3=${R3:-738}
 PATROL_ROBOTS=${PATROL_ROBOTS:-"$R1 $R2 $R3"}
 

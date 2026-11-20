@@ -1,0 +1,47 @@
+/* StepList: new this round. One row per setup step (mark, a–e, name, result, time); an open row shows the README
+   commands it types, in a terminal well, each with its own mark. */
+.cc-setupsteps { list-style: none; margin: 0; padding: 0; }
+.cc-setupstep { border-bottom: 1px solid var(--line); }
+.cc-setupstep:last-child { border-bottom: 0; }
+
+.cc-setupstep__head {
+  display: grid; grid-template-columns: 16px 12px 124px minmax(0, 1fr) auto; align-items: center; gap: 10px;
+  width: 100%; padding: 10px 2px; border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer;
+}
+.cc-setupstep__head:focus-visible { outline: none; box-shadow: var(--focus-ring); border-radius: var(--radius-xs); }
+.cc-setupstep__letter { font: 500 11.5px/16px var(--font-mono); color: var(--text-muted); text-align: center; }
+.cc-setupstep__title { font-weight: 600; color: var(--text); white-space: nowrap; }
+.cc-setupstep__detail { min-width: 0; color: var(--text-2); font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cc-setupstep__time { font: 400 11.5px/16px var(--font-mono); color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.cc-setupstep.is-pending .cc-setupstep__title { color: var(--text-2); }
+.cc-setupstep.is-pending .cc-setupstep__detail { color: var(--text-muted); }
+.cc-setupstep.is-active .cc-setupstep__title { color: var(--live); }
+.cc-setupstep.is-decision .cc-setupstep__title { color: var(--accent); }
+.cc-setupstep.is-failed .cc-setupstep__title { color: var(--fault-text); }
+
+/* The list spans the bay; what opens under a step keeps a readable width */
+.cc-setupstep__body { display: grid; gap: 10px; max-width: 1000px; padding: 0 2px 14px 38px; }
+
+.cc-cmds {
+  list-style: none; margin: 0; padding: 8px 10px; display: grid; gap: 4px;
+  background: var(--surface-well); border: 1px solid var(--line); border-radius: var(--radius-sm);
+  font: 400 12px/18px var(--font-mono); font-variant-ligatures: none;
+}
+.cc-cmd { display: grid; grid-template-columns: 62px minmax(0, 1fr) 14px; column-gap: 8px; align-items: start; }
+.cc-cmd__where { color: var(--text-muted); font-size: 11px; }
+.cc-cmd__text { color: var(--live); overflow-wrap: anywhere; font: inherit; }
+.cc-cmd__prompt { color: var(--text-muted); }
+.cc-cmd.is-pending .cc-cmd__text, .cc-cmd.is-skipped .cc-cmd__text { color: var(--text-muted); }
+.cc-cmd.is-skipped .cc-cmd__text { text-decoration: line-through; text-decoration-color: var(--line-strong); }
+.cc-cmd.is-failed .cc-cmd__text { color: var(--fault-text); }
+.cc-cmd__mark { margin-top: 2px; }
+.cc-cmd__note { grid-column: 2 / 4; color: var(--text-muted); font-size: 11.5px; overflow-wrap: anywhere; }
+.cc-cmd.is-failed .cc-cmd__note { color: var(--fault-text); }
+
+.cc-checks { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 3px 16px; }
+.cc-check { display: flex; align-items: center; gap: 6px; min-width: 0; font: 400 12px/18px var(--font-mono); font-variant-ligatures: none; color: var(--text-2); }
+/* The label stays whole; a long value (node names) gives way */
+.cc-check__label { flex: none; white-space: nowrap; }
+.cc-check__value { margin-left: auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
+
+.cc-setupstep__error { margin: 0; padding: 8px 10px; border-radius: var(--radius-sm); background: var(--fault-fill); color: var(--fault-text); font: 400 12px/18px var(--font-mono); overflow-wrap: anywhere; }

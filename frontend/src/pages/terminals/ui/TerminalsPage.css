@@ -1,0 +1,24 @@
+/* TerminalsPage: new this round. The setup's terminals by robot (left) and the one in front, full height (right). */
+.cc-terms { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: var(--gutter); height: 100%; padding: var(--gutter); }
+.cc-terms__list, .cc-terms__view { min-height: 0; }
+.cc-terms__group + .cc-terms__group { margin-top: 14px; }
+.cc-terms__robot { display: flex; align-items: center; gap: 8px; margin: 0 0 6px; font: 700 15px/20px var(--font-mono); color: var(--text); }
+.cc-terms__ip { font: 400 12px/16px var(--font-mono); color: var(--text-muted); }
+.cc-terms__sessions { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.cc-terms__session {
+  display: grid; gap: 2px; width: 100%; padding: 8px 10px; text-align: left; font: inherit; color: inherit; cursor: pointer;
+  background: var(--surface-raised); border: 1px solid var(--line); border-radius: var(--radius-sm);
+}
+.cc-terms__session:hover { border-color: var(--line-strong); }
+.cc-terms__session.is-selected { border-color: var(--accent); background: var(--accent-fill); }
+.cc-terms__session:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.cc-terms__role { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-weight: 600; color: var(--text); }
+.cc-terms__activity { font: 400 11.5px/16px var(--font-mono); color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.cc-terms__view > .cc-panel__body { flex: 1; display: flex; min-height: 0; min-width: 0; }
+.cc-terms__body { display: flex; flex-direction: column; gap: 8px; flex: 1; min-height: 0; min-width: 0; padding: 10px var(--panel-pad) var(--panel-pad); }
+.cc-terms__about { margin: 0; color: var(--text-muted); font-size: 12.5px; }
+.cc-terms__xterm { flex: 1; }
+.cc-terms__since { font: 400 12px/16px var(--font-mono); color: var(--text-muted); }
+.cc-terms__empty { display: grid; place-content: center; justify-items: center; gap: 12px; height: 100%; margin: 0; color: var(--text-muted); }
+.cc-terms__empty p { margin: 0; }

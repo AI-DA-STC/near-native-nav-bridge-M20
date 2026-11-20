@@ -59,7 +59,8 @@ def draw_phase(ax, title, routes, colors, closed):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--waypoints", type=Path, default=HERE / "waypoints", help="directory of <phase>.json")
+    parser.add_argument("--waypoints", type=Path, default=HERE / "waypoints" / "current",
+                        help="a plan: directory of <phase>.json (default demo/waypoints/current, the plan in use)")
     parser.add_argument("--save", type=Path, help="write the figure to this file instead of showing it")
     args = parser.parse_args()
 

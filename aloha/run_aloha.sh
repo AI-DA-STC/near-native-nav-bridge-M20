@@ -1,14 +1,14 @@
 #!/bin/bash
-# The Aloha's part of the demo: drive to the box (demo/waypoints/aloha.json) with send_goal.py and dock precisely onto
-# it, then go through the arm poses taught there with teach_manipulator.sh (demo/waypoints/manipulator.json) at
+# The Aloha's part of the demo: drive to the box (aloha.json) with send_goal.py and dock precisely onto
+# it, then go through the arm poses taught there with teach_manipulator.sh (manipulator.json) at
 # 0.5 rad/s, 1 s at each. The arms only move once the Aloha has docked. Needs aloha/bridge.sh, the robot's navigation,
 # dock.py and start_ms_piper.launch with mode:=1 auto_enable:=true (robot/start_aloha.sh starts them). Files go in
-# WAYPOINTS (default demo/waypoints). Ctrl+C stops it.
+# WAYPOINTS (default demo/waypoints/current, the plan in use). Ctrl+C stops it.
 source /opt/ros/foxy/setup.bash
 set -euo pipefail
 
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-WAYPOINTS=${WAYPOINTS:-$HERE/../demo/waypoints}
+WAYPOINTS=${WAYPOINTS:-$HERE/../demo/waypoints/current}
 for file in aloha manipulator; do
     if [[ ! -f $WAYPOINTS/$file.json ]]; then
         echo "No $WAYPOINTS/$file.json" >&2

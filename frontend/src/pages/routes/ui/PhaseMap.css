@@ -1,0 +1,28 @@
+/* PhaseMap: new this round. A phase's routes on the map frame, after demo/viz_phases.py: lines in the robots' colours,
+   the first waypoint ringed, a tick for each heading, the box outlined. Strokes keep their width at any size. */
+.cc-phasemap { display: grid; grid-template-rows: auto minmax(0, 1fr); margin: 0; min-width: 0; min-height: 0; }
+.cc-phasemap__head { display: flex; align-items: baseline; gap: 8px; padding: 0 2px 4px; min-width: 0; }
+.cc-phasemap__title { font-size: 11.5px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--text-2); }
+.cc-phasemap__note { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11.5px; color: var(--text-muted); }
+.cc-phasemap__svg {
+  width: 100%; height: 100%; min-height: 0; display: block;
+  background: var(--surface-well); border: 1px solid var(--line); border-radius: var(--radius-sm);
+}
+.cc-phasemap__grid line { stroke: var(--line); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.cc-phasemap__box { fill: none; stroke: var(--text-2); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+
+.cc-phasemap__route polyline { fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
+.cc-phasemap__heading { stroke: currentColor; stroke-width: 1.4; vector-effect: non-scaling-stroke; }
+.cc-phasemap__wp { fill: currentColor; stroke: var(--surface-well); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.cc-phasemap__first { fill: var(--surface-well); stroke: currentColor; stroke-width: 2; vector-effect: non-scaling-stroke; }
+.cc-phasemap__label { fill: var(--text); font: 600 .42px/1 var(--font-mono); }
+.cc-phasemap__route.is-dim { opacity: .3; }
+.cc-phasemap__route.is-live polyline { stroke-dasharray: 5 3; }
+
+.cc-phasemap__pose circle { fill: none; stroke: currentColor; stroke-width: 2.4; vector-effect: non-scaling-stroke; }
+.cc-phasemap__pose line { stroke: currentColor; stroke-width: 2.4; vector-effect: non-scaling-stroke; }
+@media (prefers-reduced-motion: no-preference) {
+  .cc-phasemap__pose circle { animation: cc-phasemap-pose 1.6s ease-in-out infinite; }
+}
+@keyframes cc-phasemap-pose { 50% { stroke-opacity: .35; } }
+.cc-phasemap.is-large .cc-phasemap__label { font-size: .34px; }

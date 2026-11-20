@@ -1,0 +1,102 @@
+/* Roster: new this round, not in the design system. The lobby's seats along the bottom of the setup page: a robot that
+   joined stands on its floor line; one that does not answer stays in its seat, faded. */
+.cc-roster { display: grid; gap: 8px; min-width: 0; }
+.cc-roster__head { display: flex; align-items: center; gap: 12px; min-height: var(--control-h); }
+.cc-roster__title { margin: 0; font-size: 11.5px; line-height: 16px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--text-2); }
+.cc-roster__summary { color: var(--text-muted); font-size: 12.5px; }
+.cc-roster__spacer { flex: 1; }
+.cc-roster__slots {
+  list-style: none; margin: 0; padding: 0;
+  display: grid; grid-template-columns: repeat(var(--slots), minmax(0, 1fr)); gap: var(--gutter);
+}
+.cc-roster__slot { display: flex; min-width: 0; }
+
+.cc-slot {
+  position: relative; display: flex; flex-direction: column; align-items: stretch; width: 100%; min-width: 0;
+  padding: 10px 14px 12px; text-align: left; color: inherit; font: inherit;
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-md); box-shadow: var(--shadow-panel);
+  cursor: pointer; transition: border-color var(--dur-fast) var(--ease-standard), background var(--dur-fast) var(--ease-standard);
+}
+/* The robot's identity colour, as a short rule along the top edge */
+.cc-slot::before {
+  content: ''; position: absolute; top: -1px; left: 14px; width: 28px; height: 2px; border-radius: 0 0 2px 2px;
+  background: var(--rc, transparent);
+}
+.cc-slot--add::before, .cc-slot--empty::before { display: none; }
+.cc-slot:hover { border-color: var(--line-strong); }
+.cc-slot.is-selected { border-color: var(--accent); background: var(--surface-raised); }
+.cc-slot:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+
+.cc-slot__top { display: flex; align-items: center; justify-content: space-between; min-height: 20px; }
+.cc-slot__no { font: 500 11px/16px var(--font-mono); color: var(--text-muted); letter-spacing: .04em; }
+
+/* The floor the model stands on */
+.cc-slot__stage {
+  position: relative; display: flex; align-items: flex-end; justify-content: center;
+  height: 128px; margin: 2px -14px 10px; border-bottom: 1px solid var(--line-strong);
+}
+.cc-slot__stage::after {
+  content: ''; position: absolute; left: 22%; right: 22%; bottom: -5px; height: 10px;
+  background: radial-gradient(closest-side, #000000b3, transparent); pointer-events: none;
+}
+.cc-slot__model {
+  position: relative; z-index: 1; max-width: 86%; max-height: 120px; margin-bottom: -2px;
+  object-fit: contain; user-select: none;
+  transition: opacity 420ms var(--ease-standard), filter 420ms var(--ease-standard);
+}
+.cc-slot.is-checking .cc-slot__model { opacity: .5; filter: grayscale(.7); }
+.cc-slot.is-offline .cc-slot__model { opacity: .26; filter: grayscale(1); }
+
+.cc-slot__name { font: 700 22px/26px var(--font-mono); font-variant-ligatures: none; color: var(--text); letter-spacing: -.01em; }
+.cc-slot.is-offline .cc-slot__name { color: var(--text-muted); }
+.cc-slot__sub { font: 400 12px/18px var(--font-mono); font-variant-ligatures: none; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cc-slot__status { display: flex; align-items: center; gap: 7px; margin-top: 8px; font-size: 11.5px; line-height: 16px; font-weight: 700; letter-spacing: .08em; }
+.cc-slot__detail { margin-top: 2px; font-size: 12.5px; line-height: 18px; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cc-slot.is-offline .cc-slot__detail { color: var(--text-muted); }
+
+/* The six steps, one tick each */
+.cc-slot__ticks { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 3px; margin-top: 10px; }
+.cc-slot__tick { height: 3px; border-radius: 2px; background: var(--line-strong); }
+.cc-slot__tick.is-done { background: var(--ok); }
+.cc-slot__tick.is-active { background: var(--live); }
+.cc-slot__tick.is-decision { background: var(--accent); }
+.cc-slot__tick.is-failed { background: var(--fault); }
+.cc-slot__tick.is-stopped, .cc-slot__tick.is-skipped { background: var(--unknown); }
+
+/* Walking in: the model rises onto its floor */
+.cc-slot.is-joining { border-color: var(--accent-line); }
+.cc-slot.is-joining .cc-slot__model { animation: cc-slot-join 640ms var(--ease-standard) both; }
+@keyframes cc-slot-join {
+  from { opacity: 0; transform: translateY(18px); }
+  to { opacity: 1; transform: none; }
+}
+
+.cc-slot--add .cc-slot__stage { align-items: center; }
+.cc-slot--add .cc-slot__stage::after { display: none; }
+.cc-slot__plus {
+  display: grid; place-items: center; width: 48px; height: 48px; border-radius: 50%;
+  border: 1px solid var(--line-strong); color: var(--text-2);
+  transition: border-color var(--dur-fast) var(--ease-standard), color var(--dur-fast) var(--ease-standard);
+}
+.cc-slot--add:hover .cc-slot__plus, .cc-slot--add.is-selected .cc-slot__plus { border-color: var(--accent); color: var(--accent); }
+.cc-slot__name--add { font: 600 15px/26px var(--font-sans); letter-spacing: 0; }
+
+.cc-slot--empty { cursor: default; background: transparent; box-shadow: none; border-color: var(--line); opacity: .55; }
+.cc-slot--empty:hover { border-color: var(--line); }
+.cc-slot--empty .cc-slot__stage::after { display: none; }
+
+/* 1280×720 and other short windows: smaller seats, so the bay keeps its steps in view (as global.css's compact query) */
+@media (max-width: 1399px), (max-height: 859px) {
+  .cc-slot { padding: 8px 12px 10px; }
+  .cc-slot__stage { height: 84px; margin: 0 -12px 8px; }
+  .cc-slot__model { max-height: 78px; }
+  .cc-slot__plus { width: 40px; height: 40px; }
+  .cc-slot__name { font-size: 18px; line-height: 22px; }
+  .cc-slot__status { margin-top: 4px; }
+  .cc-slot__ticks { margin-top: 6px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cc-slot.is-joining .cc-slot__model { animation: none; }
+  .cc-slot__model { transition: none; }
+}
