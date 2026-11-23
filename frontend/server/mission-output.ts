@@ -85,6 +85,13 @@ export interface ReadContext {
 
 const PLAN_ROLE: Readonly<Record<string, RobotKey>> = { R1: 'r1', R2: 'r2', R3: 'r3', ALOHA: 'aloha' }
 
+/** The script's prompts. They end without a newline and the answer is not echoed (stty -echo), so whatever is printed
+ * next joins their line: the formation drive's [FLEET] lines while the plan waits, or the script's own reply */
+const PROMPTS: ReadonlyArray<readonly [string, 'approval' | 'verdict']> = [
+  ['Operator approval (approve/deny):', 'approval'],
+  ['Operator verdict (anomaly/clear):', 'verdict'],
+]
+
 function emptyRead(): MissionRead {
   return {
     phases: PHASE_ORDER.map((id) => ({ id, status: id === 'ready' ? 'active' : 'pending', startedAt: null, endedAt: null, detail: '' })),
@@ -133,13 +140,25 @@ export function readMission(lines: readonly OutputLine[], pending: string, ctx: 
     const plan = read.plans.at(-1)
     if (plan?.status === 'approved' && index > PHASE_ORDER.indexOf('approval')) plan.status = 'executing'
   }
+  /** The script asks: it waits until its reply ([DEMO] Plan … approved, [DEMO] Operator verdict: …) */
+  const asked = (kind: 'approval' | 'verdict') => {
+    read.awaiting = kind
+    const plan = read.plans.at(-1)
+    if (kind === 'approval' && plan?.status === 'generating') plan.status = 'awaiting'
+  }
   let capturing: PlanFacts | null = null
   let routePhase: PhaseId = 'patrol'
 
   // Starting: the script's first banner ends Ready
   phase('ready').startedAt = startedAt
   for (const { at, text: raw } of lines) {
-    const text = raw.trim()
+    let text = raw.trim()
+    const prompt = PROMPTS.find(([p]) => text.startsWith(p))
+    if (prompt) {
+      asked(prompt[1])
+      // What joined the prompt's line is a line of its own
+      text = text.slice(prompt[0].length).trim()
+    }
     if (!text) {
       capturing = null
       continue
@@ -242,11 +261,8 @@ export function readMission(lines: readonly OutputLine[], pending: string, ctx: 
 
   // The prompts end without a newline: the question waiting now
   const ask = pending.trim()
-  if (/Operator approval \(approve\/deny\):$/.test(ask)) {
-    read.awaiting = 'approval'
-    const plan = read.plans.at(-1)
-    if (plan && plan.status === 'generating') plan.status = 'awaiting'
-  } else if (/Operator verdict \(anomaly\/clear\):$/.test(ask)) read.awaiting = 'verdict'
+  const prompt = PROMPTS.find(([p]) => ask.startsWith(p) || ask.endsWith(p))
+  if (prompt) asked(prompt[1])
   return read
 
   function route(id: string, at: number): RouteFacts {

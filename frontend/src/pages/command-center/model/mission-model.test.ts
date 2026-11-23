@@ -183,6 +183,19 @@ describe('the Operator panel', () => {
     expect(r3).toEqual(['active', 'done', 'pending', 'pending', 'pending'])
     expect(operatorTurnOf(snap)).toMatchObject({ eyebrow: 'Next decision · Verdict', question: 'Sweep running: R3 has found the box.' })
   })
+  it('4: the plan can be approved with a dog short of its slot, and says which', () => {
+    const snap = at(4)
+    expect(operatorTurnOf(snap)).toMatchObject({ kind: 'approval', shortOfSlot: [] })
+    const short = (outcome: 'aborted' | 'timeout' | 'succeeded') => ({ kind: 'formation' as const, total: 1, reached: 1, target: null, lap: null, state: 'finished' as const, goal: null, distanceRemaining: null, legLength: null, last: { wp: 1, outcome, at: 0 } })
+    const robots = { ...snap.robots, r1: { ...snap.robots.r1, route: short('aborted') }, r2: { ...snap.robots.r2, route: short('succeeded') }, r3: { ...snap.robots.r3, route: short('timeout') } }
+    expect(operatorTurnOf({ ...snap, robots })).toMatchObject({
+      kind: 'approval',
+      shortOfSlot: [
+        { robot: 'r1', slot: 1, outcome: 'aborted' },
+        { robot: 'r3', slot: 3, outcome: 'timeout' },
+      ],
+    })
+  })
   it('13: the outcome, with the total and where the box was', () => {
     const turn = operatorTurnOf(at(13))
     expect(turn).toMatchObject({ kind: 'outcome', outcome: 'complete', verdict: 'clear', total: '7:42' })

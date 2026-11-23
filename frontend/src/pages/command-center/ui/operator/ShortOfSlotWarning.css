@@ -1,0 +1,9 @@
+/* ShortOfSlotWarning: the formation's shortfalls, above the plan waiting for approval */
+.cc-shortslot {
+  display: flex; gap: 8px; align-items: flex-start; margin-bottom: 10px; padding: 8px 10px;
+  border-radius: var(--radius-sm); background: var(--warn-fill); border: 1px solid var(--warn-line);
+}
+.cc-shortslot__icon { flex: none; margin-top: 2px; color: var(--warn-text); }
+.cc-shortslot__body { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.cc-shortslot__line { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0; color: var(--warn-text); font-size: 13px; line-height: 18px; font-weight: 600; }
+.cc-shortslot__detail { margin: 0; color: var(--text-2); font-size: 12.5px; line-height: 18px; }

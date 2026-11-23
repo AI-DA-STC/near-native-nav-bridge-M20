@@ -18,12 +18,20 @@ export interface PlanView {
 
 export type Outcome = 'complete' | 'anomaly' | 'failed' | 'stopped' | 'estopped'
 
+/** A dog that did not reach its formation slot: its one waypoint ended STOPPED SHORT or TIMEOUT */
+export interface ShortOfSlot {
+  robot: 'r1' | 'r2' | 'r3'
+  /** 1, 2 or 3 */
+  slot: number
+  outcome: 'aborted' | 'timeout'
+}
+
 /** What the Operator panel shows: it follows the mission, and is the one hot panel when it is the operator's turn */
 export type OperatorTurn =
   | { kind: 'start'; hot: boolean; detail: string; steps: Array<{ label: string; status: 'done' | 'failed' }> }
   | { kind: 'instruction'; placeholder: string }
   | { kind: 'generating'; planNumber: number }
-  | { kind: 'approval'; plan: PlanView }
+  | { kind: 'approval'; plan: PlanView; shortOfSlot: ShortOfSlot[] }
   | { kind: 'running'; eyebrow: string; question: string; detail: string }
   | { kind: 'verdict'; decided: { value: 'anomaly' | 'clear'; at: string } | null }
   | { kind: 'outcome'; outcome: Outcome; verdict: 'anomaly' | 'clear' | null; total: string | null; reason: string | null; facts: Array<{ label: string; value: string; mono?: boolean }> }
@@ -87,6 +95,15 @@ export function planViewOf(plan: PlanFacts, snap: MissionSnapshot): PlanView {
       items: step.items.map((text, i) => ({ text, status: running ? (STEPS[step.robot][i]?.(snap) ?? 'pending') : 'pending' })),
     })),
   }
+}
+
+/** The dogs the formation left short of their slot; they start the sweep from where they stopped */
+export function shortOfSlotOf(snap: MissionSnapshot): ShortOfSlot[] {
+  return (['r1', 'r2', 'r3'] as const).flatMap((robot, i) => {
+    const route = snap.robots[robot].route
+    const outcome = route?.kind === 'formation' ? route.last?.outcome : undefined
+    return outcome === 'aborted' || outcome === 'timeout' ? [{ robot, slot: i + 1, outcome }] : []
+  })
 }
 
 const sayList = (labels: string[]) => (labels.length < 2 ? labels.join('') : `${labels.slice(0, -1).join(', ')} and ${labels[labels.length - 1]}`)
@@ -201,7 +218,7 @@ export function operatorTurnOf(snap: MissionSnapshot): OperatorTurn {
   const plan = plans[plans.length - 1]
   const active = snap.phases.find((p) => p.status === 'active')?.id
   if (run.awaiting === 'instruction') return { kind: 'instruction', placeholder: snap.mission.defaultInstruction }
-  if (run.awaiting === 'approval' && plan) return { kind: 'approval', plan: planViewOf(plan, snap) }
+  if (run.awaiting === 'approval' && plan) return { kind: 'approval', plan: planViewOf(plan, snap), shortOfSlot: shortOfSlotOf(snap) }
   if (run.awaiting === 'verdict') return { kind: 'verdict', decided: null }
   if (verdict && run.status === 'running') return { kind: 'verdict', decided: { value: verdict.value, at: formatTimeOfDay(verdict.at) } }
   if (plan?.status === 'generating') return { kind: 'generating', planNumber: plan.n }

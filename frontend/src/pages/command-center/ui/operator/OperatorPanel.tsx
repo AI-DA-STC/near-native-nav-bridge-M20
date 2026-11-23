@@ -16,6 +16,7 @@ import { OperatorPrompt } from './OperatorPrompt'
 import { OutcomeSummary } from './OutcomeSummary'
 import { PlanCard } from './PlanCard'
 import { PlanStatus } from './PlanStatus'
+import { ShortOfSlotWarning } from './ShortOfSlotWarning'
 import { Stepper } from './Stepper'
 import { VerdictPanel } from './VerdictPanel'
 
@@ -85,21 +86,24 @@ export function OperatorPanel({ snap, turn, startControl, onExpand, compact = fa
       break
     case 'approval':
       body = (
-        <PlanCard
-          plan={turn.plan}
-          showInstruction={!compact}
-          hot
-          actions={
-            <>
-              <Button variant="primary" kbd="Enter" autoFocus onClick={() => setConfirm('approve')}>
-                Approve plan
-              </Button>
-              <Button onClick={() => void answered(decidePlan(turn.plan.n, 'deny'), `Plan ${turn.plan.id} denied`, 'Back to patrol: send a new instruction.')}>
-                Deny
-              </Button>
-            </>
-          }
-        />
+        <>
+          <ShortOfSlotWarning robots={turn.shortOfSlot} />
+          <PlanCard
+            plan={turn.plan}
+            showInstruction={!compact}
+            hot
+            actions={
+              <>
+                <Button variant="primary" kbd="Enter" autoFocus onClick={() => setConfirm('approve')}>
+                  Approve plan
+                </Button>
+                <Button onClick={() => void answered(decidePlan(turn.plan.n, 'deny'), `Plan ${turn.plan.id} denied`, 'Back to patrol: send a new instruction.')}>
+                  Deny
+                </Button>
+              </>
+            }
+          />
+        </>
       )
       break
     case 'running':
