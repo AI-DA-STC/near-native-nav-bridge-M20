@@ -30,8 +30,9 @@ import time
 import rclpy
 from rclpy.node import Node
 from rclpy.utilities import remove_ros_args
-from geometry_msgs.msg import Point, Pose, PoseStamped, Quaternion
+from geometry_msgs.msg import Point, Pose, PoseStamped, PoseWithCovarianceStamped, Quaternion
 from nav_msgs.msg import Odometry
+from rclpy.qos import DurabilityPolicy, QoSProfile
 from std_msgs.msg import String
 from visualization_msgs.msg import Marker, MarkerArray
 
@@ -183,15 +184,31 @@ class MultiWaypointFleet(Node):
     def __init__(self, robot_ids, patrol=False, single=False, record=None, append=False):
         super().__init__("fleet_management")
         self.show_box = self.declare_parameter("show_box", False).value
+        # --record from a PoseWithCovarianceStamped topic instead of /ODOM_relayed_<id>: the Aloha's /amcl_pose through
+        # aloha/bridge.sh, latched there and only published when AMCL updates
+        self.pose_topic = self.declare_parameter("pose_topic", "").value
         self.robot_ids = robot_ids
         self.patrol = patrol
         self.min_wps = 3 if patrol else 1  # a patrol loops a closed shape, so it needs a polygon
         self.max_wps = 1 if single else math.inf
         self.record_path = record
         self.append = append  # recorded waypoints go after those already in the file
+        # Colours go by this order. With --record the robots already in FILE come first, in its order as --load takes
+        # them, so a robot keeps its colour whichever robots are recorded; their routes are drawn dimmed, and so is a
+        # robot's own route that --append adds to
+        self.color_ids = list(robot_ids)
+        self.kept = {}  # robot id -> its route in FILE, drawn dimmed
         if record:
-            self.prompt = ("Drive the current robot to a waypoint, then ENTER records its pose. n + ENTER: next "
-                           "robot, u + ENTER: undo its last waypoint, c + ENTER: clear all, w + ENTER: save and exit")
+            try:
+                saved = _read_routes(record)
+            except (OSError, ValueError, KeyError, TypeError, AttributeError):
+                saved = {}
+            self.color_ids = list(saved) + [rid for rid in robot_ids if rid not in saved]
+            self.kept = {rid: route for rid, route in saved.items() if append or rid not in robot_ids}
+        if record:
+            self.prompt = ("Drive the current robot to a waypoint, then ENTER records its pose (or draw a 2D Goal Pose "
+                           "arrow in RViz2). n + ENTER: next robot, u + ENTER: undo its last waypoint, c + ENTER: "
+                           "clear all, w + ENTER: save and exit")
         else:
             self.prompt = ("Draw the current robot's waypoints in RViz2 in order. n + ENTER: next robot, "
                            "u + ENTER: undo its last arrow, c + ENTER: clear all, ENTER: start every robot")
@@ -207,9 +224,14 @@ class MultiWaypointFleet(Node):
         self.stopping = False  # patrol only: robots stop at the waypoint they are driving to
         self.odom = {}     # robot id -> latest pose on /ODOM_relayed_<id>
         self.goal_pubs = {rid: self.create_publisher(PoseStamped, f"/goal_pose_{rid}", 10) for rid in robot_ids}
+        latched = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL)
         for rid in robot_ids:
-            self.create_subscription(Odometry, f"/ODOM_relayed_{rid}",
-                                     lambda msg, rid=rid: self._odom_cb(rid, msg), 10)
+            if self.pose_topic:
+                self.create_subscription(PoseWithCovarianceStamped, self.pose_topic,
+                                         lambda msg, rid=rid: self._odom_cb(rid, msg), latched)
+            else:
+                self.create_subscription(Odometry, f"/ODOM_relayed_{rid}",
+                                         lambda msg, rid=rid: self._odom_cb(rid, msg), 10)
             self.create_subscription(String, f"/goal_result_{rid}",
                                      lambda msg, rid=rid: self._result_cb(rid, msg), 10)
         self.marker_pub = self.create_publisher(MarkerArray, MARKER_TOPIC, 10)
@@ -253,7 +275,8 @@ class MultiWaypointFleet(Node):
             rid = self.robot_ids[self.current]
             pose = self.odom.get(rid)
         if pose is None:
-            print(f"[FLEET] Not recorded: no odometry yet on /ODOM_relayed_{rid}")
+            print(f"[FLEET] Not recorded: no pose yet on {self.pose_topic}" if self.pose_topic
+                  else f"[FLEET] Not recorded: no odometry yet on /ODOM_relayed_{rid}")
             return
         self._arrow_cb(_goal(pose.position.x, pose.position.y, _quat_to_yaw(pose.orientation)))
 
@@ -424,17 +447,21 @@ class MultiWaypointFleet(Node):
 
     # Per robot, coloured: routes being drawn as numbered arrows joined by a line (closed back to
     # WP1 for a patrol), and what is left of a route being driven, dimmed (all of it for a patrol).
+    # With --record, the routes already in FILE are dimmed too: the other robots', and the waypoints --append adds to.
     def _publish_markers(self):
         arr = MarkerArray(markers=[Marker(action=Marker.DELETEALL)])
         with self.lock:
-            drawn = [(rid, list(self.pending[rid]), 0, 1.0) for rid in self.robot_ids]
-            drawn += [(rid, list(self.routes[rid]), 0 if self.patrol else self.next_wp[rid], 0.4)
+            # (robot, route, first waypoint drawn, how many waypoints from WP1 are dimmed)
+            drawn = [(rid, self.kept.get(rid, []) + self.pending[rid], 0, len(self.kept.get(rid, [])))
+                     for rid in self.robot_ids]
+            drawn += [(rid, list(route), 0, len(route)) for rid, route in self.kept.items() if rid not in self.robot_ids]
+            drawn += [(rid, list(self.routes[rid]), 0 if self.patrol else self.next_wp[rid], len(self.routes[rid]))
                       for rid in self.robot_ids if rid in self.routes]
         marker_id = 0
-        for rid, route, start, alpha in drawn:
-            color = COLORS[self.robot_ids.index(rid) % len(COLORS)]
+        for rid, route, start, dimmed in drawn:
+            color = COLORS[self.color_ids.index(rid) % len(COLORS)]
             for n in range(start, len(route)):
-                arr.markers += _goal_markers(route[n], marker_id, color, f"{rid}·{n + 1}", alpha)
+                arr.markers += _goal_markers(route[n], marker_id, color, f"{rid}·{n + 1}", 0.4 if n < dimmed else 1.0)
                 marker_id += 1
             corners = route[start:] + (route[:1] if self.patrol and len(route) >= 3 else [])
             if len(corners) >= 2:
@@ -443,7 +470,7 @@ class MultiWaypointFleet(Node):
                 line.pose.orientation.w = 1.0
                 line.scale.x = 0.03
                 line.color.r, line.color.g, line.color.b = color
-                line.color.a = alpha
+                line.color.a = 0.4 if dimmed >= len(route) else 1.0
                 arr.markers.append(line)
                 marker_id += 1
         if self.show_box:
@@ -460,7 +487,10 @@ def main():
     source = parser.add_mutually_exclusive_group()
     source.add_argument("--record", metavar="FILE",
                         help="Drive each robot to its waypoints instead of drawing them: ENTER records the "
-                             "current robot's pose, w + ENTER saves them to FILE (other robots in FILE are kept)")
+                             "current robot's pose (an RViz2 arrow on /fleet_goal still adds one too), w + ENTER "
+                             "saves them to FILE (other robots in FILE are kept, and drawn dimmed meanwhile). "
+                             "-p pose_topic:=/amcl_pose takes the pose from that PoseWithCovarianceStamped topic "
+                             "instead of /ODOM_relayed_<id> (the Aloha's, on aloha/bridge.sh's ROS_DOMAIN_ID)")
     parser.add_argument("--append", action="store_true",
                         help="With --record: add the waypoints after each robot's waypoints already in FILE")
     source.add_argument("--load", metavar="FILE",
@@ -497,7 +527,7 @@ def main():
               f"routes are drawn on {MARKER_TOPIC}")
     elif args.record:
         print(f"[FLEET] {args.mode}: recording robots {ids} in that order into {args.record}; "
-              f"waypoints are drawn on {MARKER_TOPIC}")
+              f"waypoints are drawn on {MARKER_TOPIC}, with the file's other routes dimmed")
     else:
         print(f"[FLEET] {args.mode}: arrows on {ARROW_TOPIC} go to robots {ids} in that "
               f"order; pending goals are drawn on {MARKER_TOPIC}")

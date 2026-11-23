@@ -2,7 +2,6 @@ export { connectMission, missionSource, useConnectionStatus, useMissionSnapshot 
 export type {
   AlohaFacts,
   Box2,
-  CameraFacts,
   CommandResult,
   ConnectionStatus,
   ContentsFacts,
@@ -28,6 +27,7 @@ export type {
 } from './mission-stream'
 export { fetchSiteMap, sendCommand } from './client'
 export { createReplaySource, isReplaySource } from './mission-scenarios/replay-source'
+export { createMissionSocket } from './mission-socket'
 export type { ReplaySource, ReplayState } from './mission-scenarios/replay-source'
 export {
   connectSetup,
@@ -59,6 +59,8 @@ export type {
   RobotSuggestion,
   RoutePhase,
   RouteSessionFacts,
+  RvizState,
+  RvizWhich,
   SetupCommand,
   SetupPrompt,
   SetupRunState,

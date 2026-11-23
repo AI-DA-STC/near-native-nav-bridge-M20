@@ -1,8 +1,8 @@
 import type { RobotKind, RobotSetupFacts, SetupSnapshot, TerminalRole, TerminalSessionFacts } from '@/shared/api'
 
 /* The terminals the setup server holds, by robot: the robot's (ssh, then its relay in the container, or the ALOHA's
- * tmux) before the laptop's (exports, checks, rviz2, the ALOHA's bridge), in the lobby's order; then the Routes
- * recorder's. */
+ * tmux) before the laptop's (exports, checks, rviz2, the ALOHA's bridge), in the lobby's order; then Routes': the
+ * recorder and the RViz windows it draws in. */
 
 export interface SessionGroup {
   robot: string
@@ -11,14 +11,15 @@ export interface SessionGroup {
   sessions: TerminalSessionFacts[]
 }
 
-const ROLE_ORDER = { robot: 0, laptop: 1, routes: 2 } as const
+const ROLE_ORDER: Readonly<Record<TerminalRole, number>> = { robot: 0, laptop: 1, nav: 2, routes: 3, 'rviz-dogs': 4, 'rviz-aloha': 5, mission: 6 }
 
 export function sessionGroups(snapshot: SetupSnapshot): SessionGroup[] {
   const order = snapshot.robots.map((r) => r.id)
   const byRobot = new Map<string, TerminalSessionFacts[]>()
   for (const session of snapshot.sessions) byRobot.set(session.robot, [...(byRobot.get(session.robot) ?? []), session])
   // The recorder after every robot
-  const rank = (id: string) => (order.includes(id) ? order.indexOf(id) : id === 'routes' ? order.length + 1 : order.length)
+  // Routes' terminals, then the mission's, after every robot
+  const rank = (id: string) => (order.includes(id) ? order.indexOf(id) : id === 'routes' ? order.length + 1 : id === 'mission' ? order.length + 2 : order.length)
   return [...byRobot]
     .sort(([a], [b]) => rank(a) - rank(b) || a.localeCompare(b))
     .map(([robot, sessions]) => ({
@@ -40,7 +41,15 @@ export function pickSession(snapshot: SetupSnapshot, wanted: string | null): Ter
   )
 }
 
-export const ROLE_TITLE = { robot: 'Robot · relay', laptop: 'Laptop', routes: 'Recorder' } as const
+export const ROLE_TITLE: Readonly<Record<TerminalRole, string>> = {
+  robot: 'Robot · relay',
+  laptop: 'Laptop',
+  nav: 'Laptop · nav bridge',
+  routes: 'Recorder',
+  'rviz-dogs': 'RViz · dogs',
+  'rviz-aloha': 'RViz · ALOHA',
+  mission: 'Mission · run_demo.sh',
+}
 
 /** A terminal's name in the list: the ALOHA's robot terminal holds start_aloha.sh's tmux, its laptop one the bridge */
 export function sessionTitle(role: TerminalRole, kind: RobotKind | null): string {
@@ -59,6 +68,7 @@ export function sessionAbout(role: TerminalRole, kind: RobotKind | null): string
 /** The group's name: the robot's ID, ALOHA, or Routes */
 export function groupName(robot: string, snapshot: SetupSnapshot): string {
   if (robot === 'routes') return 'Routes'
+  if (robot === 'mission') return 'Mission'
   return snapshot.robots.find((r) => r.id === robot)?.kind === 'aloha' ? 'ALOHA' : robot
 }
 
@@ -66,5 +76,9 @@ export function groupName(robot: string, snapshot: SetupSnapshot): string {
 export const ROLE_ABOUT: Record<TerminalRole, string> = {
   robot: 'ssh into the robot, su, then the nav_cmd_bridge container running relays.launch.py',
   laptop: 'This workstation in the package root: README exports, topic checks, rviz2, the ALOHA’s bridge',
+  nav: 'This workstation: the robot’s nav bridge (README Multi-robot Step 1), which the mission’s goals go through',
   routes: 'This workstation in the package root: demo/record_waypoints.sh, one robot and phase at a time',
+  'rviz-dogs': 'This workstation: the RViz the dogs’ routes are recorded in (ROS_DOMAIN_ID=0), on their map with /fleet_goal_markers',
+  'rviz-aloha': 'This workstation: the RViz the ALOHA’s route is recorded in (ROS_DOMAIN_ID=1), on its own map with /fleet_goal_markers',
+  mission: 'This workstation in the package root: demo/run_demo.sh on the confirmed plan, started by Start mission',
 }

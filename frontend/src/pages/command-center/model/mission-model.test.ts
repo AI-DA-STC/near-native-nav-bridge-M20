@@ -98,7 +98,7 @@ describe('robot state words', () => {
   })
   it('follows the mission: patrol laps, docking, the lid', () => {
     expect(robotStateOf('r1', at(2)).word).toBe('PATROLLING · LAP 3')
-    expect(robotStateOf('r2', at(1))).toMatchObject({ word: 'NOT CONNECTED', task: 'Is its bridge running?' })
+    expect(robotStateOf('r2', at(1))).toMatchObject({ word: 'NOT CONNECTED', task: 'Is its nav bridge running?' })
     expect(robotStateOf('aloha', at(10)).word).toBe('DOCKING 2/3')
     expect(robotStateOf('aloha', at(11))).toMatchObject({ word: 'ARMS 3/5 · LID OPEN', task: 'Holding 5 s for the photo' })
     expect(robotStateOf('r3', at(9)).word).toBe('WATCHING ITEM')
@@ -174,7 +174,7 @@ describe('the Operator panel', () => {
   it('1: Start waits on the missing bring-up steps', () => {
     const turn = operatorTurnOf(at(1))
     expect(turn).toMatchObject({ kind: 'start', hot: false })
-    if (turn.kind === 'start') expect(turn.steps.map((s) => s.status)).toEqual(['failed', 'failed', 'done', 'done'])
+    if (turn.kind === 'start') expect(turn.steps.map((s) => s.status)).toEqual(['failed', 'failed', 'done'])
   })
   it('7: the running plan marks each robot’s steps', () => {
     const snap = at(7)

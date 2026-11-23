@@ -13,13 +13,17 @@ export interface PlanListProps {
   onSelect: (id: string) => void
 }
 
-/** Every plan in demo/waypoints, newest first: when it was recorded, whether each phase is complete, what it changed */
+/** Every plan in demo/waypoints, newest first: when it was recorded, whether each phase is complete for the robots
+ * added, what it changed */
 export function PlanList({ plans, selected, confirmed, onSelect }: PlanListProps) {
   if (!plans.length) return <p className="cc-plans__empty">No plans in demo/waypoints yet.</p>
   return (
     <ol className="cc-plans" aria-label="Plans">
       {plans.map((plan, i) => {
-        const changed = recordedLine(plan)
+        const changed = [
+          recordedLine(plan) && `Re-recorded ${recordedLine(plan)}`,
+          plan.leftOut.length > 0 && `without ${plan.leftOut.join(', ')}`,
+        ].filter(Boolean)
         return (
           <li key={plan.id}>
             <button type="button" className={cx('cc-plan', plan.id === selected && 'is-selected')} aria-current={plan.id === selected} onClick={() => onSelect(plan.id)}>
@@ -45,12 +49,12 @@ export function PlanList({ plans, selected, confirmed, onSelect }: PlanListProps
                 {PHASES.map((phase) => (
                   <span key={phase} className="cc-plan__phase" title={plan.phases[phase].problem ?? `${PHASE_INFO[phase].title}: complete`}>
                     <StatusMark status={plan.phases[phase].problem ? 'failed' : 'done'} size={13} />
-                    {PHASE_INFO[phase].title}
+                    {PHASE_INFO[phase].short}
                   </span>
                 ))}
               </span>
-              <span className={cx('cc-plan__note', plan.problems.length > 0 && 'cc-tone--warn')}>
-                {plan.problems[0] ?? (changed ? `Re-recorded ${changed}` : plan.basedOn ? `Copy of ${planWhen(plan.basedOn, false)}` : 'Complete')}
+              <span className={cx('cc-plan__note', plan.problems.length > 0 && 'cc-tone--warn')} title={plan.problems.join('\n') || undefined}>
+                {plan.problems[0] ?? (changed.length ? changed.join(', ') : plan.basedOn ? `Copy of ${planWhen(plan.basedOn, false)}` : 'Complete')}
               </span>
             </button>
           </li>

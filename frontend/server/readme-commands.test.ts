@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { M20_STEPS, scriptOf } from './m20-setup.ts'
+import { RVIZ_MARKER_COLORS } from '../src/shared/config/fleet.ts'
 import { ALOHA, README, RELAY_NODE_COUNT, recordWaypoints, relayedTopics } from './readme-commands.ts'
 
 /* The setup types the README's commands as written: if README.md or relays.launch.py change, these say what to update */
@@ -80,5 +81,21 @@ describe('the recorder’s command', () => {
   it('is the README’s, with the session’s plan folder as WAYPOINTS', () => {
     const typed = [recordWaypoints('patrol', '665', 'demo/waypoints/x', false), recordWaypoints('sweep', '738', 'demo/waypoints/x', true)]
     for (const line of typed) expect(readmeLines).toContain(line.replace(' WAYPOINTS=demo/waypoints/x', ''))
+  })
+
+  it('records the ALOHA with the script’s aloha phase, on its bridge’s domain and AMCL pose', () => {
+    const script = readFileSync(new URL('../../demo/record_waypoints.sh', import.meta.url), 'utf8')
+    expect(readmeLines).toContain('demo/record_waypoints.sh aloha')
+    expect(recordWaypoints('aloha', 'aloha', 'demo/waypoints/x', false)).toBe('ONLY="aloha" WAYPOINTS=demo/waypoints/x demo/record_waypoints.sh aloha')
+    expect(script).toMatch(/aloha\)\s+ROS_DOMAIN_ID=1 SHOW_BOX=false POSE_TOPIC=\/amcl_pose record aloha multi-waypoint/)
+  })
+})
+
+describe('the robots’ colours in RViz', () => {
+  it('are fleet_management.py’s, in its order', () => {
+    const script = readFileSync(new URL('../../scripts/fleet_management.py', import.meta.url), 'utf8')
+    const colors = /^COLORS = \[(.+)\]$/m.exec(script)?.[1] ?? ''
+    const rgb = [...colors.matchAll(/\(([\d.]+), ([\d.]+), ([\d.]+)\)/g)].map((m) => [Number(m[1]), Number(m[2]), Number(m[3])])
+    expect(rgb).toEqual(RVIZ_MARKER_COLORS.map((c) => [...c.rgb]))
   })
 })

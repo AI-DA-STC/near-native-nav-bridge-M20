@@ -2,14 +2,16 @@
 # Suspicious-item search demo from a plan's waypoints (WAYPOINTS, default demo/waypoints/current: the plan picked
 # under Routes in the Command Center, or recorded with demo/record_waypoints.sh). Start every
 # robot's bridge first, and for the Aloha what aloha/run_aloha.sh needs. From the sweep on, demo/detect_box.py watches
-# R3's camera (only R3's) for the box (R3 default 738); without video after 3 tries, the sweep ends and the cordon starts. Ctrl+C ends the demo: no more waypoints are sent, each robot
-# still drives to the one it has, and the Aloha's arms stop where they are.
+# R3's camera (only R3's) for the box (R3 default 738); without video after 3 tries, the sweep ends and the cordon starts.
+# DETECT=0 runs without the camera: no detection, every robot sweeps its whole route. Ctrl+C ends the demo: no more
+# waypoints are sent, each robot still drives to the one it has, and the Aloha's arms stop where they are.
 set -euo pipefail
 
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 WAYPOINTS=${WAYPOINTS:-$HERE/waypoints/current}
 INSTRUCTION="Execute a systematic sweep of Zone A to scan for unattended or anomalous items"
 R3=${R3:-738}
+DETECT=${DETECT:-1}
 
 fleet() {
     python3 "$HERE/../scripts/fleet_management.py" "$1" --load "$WAYPOINTS/$2.json" --ros-args -p show_box:=${3:-false} &
@@ -74,17 +76,22 @@ echo "[DEMO] Plan SR2-01 approved, waiting for every robot to reach its slot"
 wait "$pid"
 
 echo -e "\n=== Sweep: every robot sweeps its zone ===\n"
-python3 "$HERE/detect_box.py" --robot "$R3" --give-up 3 &  # until the demo ends, or 3 tries without video
-detect=$!
-fleet multi-waypoint sweep
-while kill -0 "$pid" 2>/dev/null && kill -0 "$detect" 2>/dev/null; do
-    sleep 1
-done
-if kill -0 "$pid" 2>/dev/null; then  # the detection gave up: the cordon now, each robot drives to the waypoint it has
-    echo "[DEMO] No video from R3's camera: on to the cordon"
-    stop
-else
+if [[ $DETECT == 0 ]]; then  # no camera to watch: every robot sweeps its whole route
+    fleet multi-waypoint sweep
     wait "$pid"
+else
+    python3 "$HERE/detect_box.py" --robot "$R3" --give-up 3 &  # until the demo ends, or 3 tries without video
+    detect=$!
+    fleet multi-waypoint sweep
+    while kill -0 "$pid" 2>/dev/null && kill -0 "$detect" 2>/dev/null; do
+        sleep 1
+    done
+    if kill -0 "$pid" 2>/dev/null; then  # the detection gave up: the cordon now, each robot drives to the waypoint it has
+        echo "[DEMO] No video from R3's camera: on to the cordon"
+        stop
+    else
+        wait "$pid"
+    fi
 fi
 echo "[DEMO] R3: suspicious item reported next to the box, watching it"
 

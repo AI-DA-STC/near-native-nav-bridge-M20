@@ -1,4 +1,4 @@
-/* SessionPanel: new this round. The routes of a recording session, phase by robot, and the recorder under them. */
+/* SessionPanel: the routes of a recording session, phase by robot added in Setup, and the recorder under them. */
 .cc-session { min-height: 0; }
 .cc-session > .cc-panel__body { display: grid; gap: 14px; align-content: start; }
 .cc-session__actions { display: inline-flex; gap: 6px; }
@@ -18,6 +18,7 @@
 .cc-session__fresh { color: var(--accent); font-family: var(--font-sans); font-weight: 600; }
 .cc-session__cell > .cc-btn { margin-left: 4px; }
 .cc-session__none { color: var(--text-muted); font-size: 11.5px; }
+.cc-session__id { font: 600 12px/20px var(--font-mono); color: var(--text); }
 .cc-session__error { margin: 0; padding: 8px 10px; border-radius: var(--radius-sm); background: var(--fault-fill); color: var(--fault-text); font-size: 12.5px; }
 
 .cc-recorder { display: grid; gap: 8px; padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface-raised); }
@@ -27,9 +28,11 @@
 .cc-recorder__lead { margin: 0; color: var(--text-2); font-size: 12.5px; line-height: 18px; }
 .cc-recorder__cmd { display: block; padding: 6px 8px; border-radius: var(--radius-xs); background: var(--surface-well); color: var(--live); font: 400 11.5px/17px var(--font-mono); overflow-wrap: anywhere; font-variant-ligatures: none; }
 .cc-recorder__append { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--text-2); }
-.cc-recorder__wps { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; font: 400 12px/18px var(--font-mono); color: var(--text); font-variant-numeric: tabular-nums; }
-.cc-recorder__wp { display: inline-block; width: 44px; color: var(--text-muted); }
-.cc-recorder__none { color: var(--text-muted); font-family: var(--font-sans); }
+.cc-recorder__rviz { display: flex; align-items: center; gap: 8px; min-height: 28px; margin: 0; font-size: 12.5px; color: var(--text-2); }
+.cc-recorder__rvizstate::before { content: ''; display: inline-block; width: 7px; height: 7px; margin-right: 7px; border-radius: 50%; background: var(--text-muted); vertical-align: 1px; }
+.cc-recorder__rvizstate.is-open::before { background: var(--ok); }
+.cc-recorder__rvizstate.is-opening::before { background: var(--live); }
+.cc-recorder__count { margin: 0; font-size: 12.5px; color: var(--text); font-variant-numeric: tabular-nums; }
 .cc-recorder__msg { margin: 0; font-size: 12.5px; }
 .cc-recorder__keys { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .cc-recorder__spacer { flex: 1; }

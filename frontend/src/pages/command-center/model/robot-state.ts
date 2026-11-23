@@ -84,7 +84,8 @@ function alohaState(snap: MissionSnapshot): RobotState {
  * doing in the phase */
 export function robotStateOf(key: RobotKey, snap: MissionSnapshot): RobotState {
   const facts = snap.robots[key]
-  if (facts.bridge === 'disconnected') return { word: 'NOT CONNECTED', tone: 'fault', task: 'Is its bridge running?' }
+  if (!facts.inMission) return { word: 'NOT IN MISSION', tone: 'neutral', task: 'Not added in Setup, or not in the confirmed plan' }
+  if (facts.bridge === 'disconnected') return { word: 'NOT CONNECTED', tone: 'fault', task: key === 'aloha' ? 'Is its bridge running, and move_base?' : 'Is its nav bridge running?' }
   // after E-STOP each robot shows its own answer: a robot that has not confirmed is never shown as stopped
   const estop = snap.estop?.results.find((r) => r.robot === key)
   if (estop?.state === 'unconfirmed') return { word: 'E-STOP NOT CONFIRMED', tone: 'fault', task: `No confirmation: ${estop.reason ?? 'no answer'}` }

@@ -34,8 +34,9 @@ function robot(over: Partial<RobotSetupFacts> & { state?: RobotSetupFacts['setup
     lastSeen: NOW,
     setup: { state, steps: steps(statuses), startedAt: null, endedAt: null },
     relay: { state: 'none', since: null, rateHz: null },
+    nav: { state: 'running', since: null },
     lastReadyAt: null,
-    sessions: { robot: null, laptop: null },
+    sessions: { robot: null, laptop: null, nav: null },
     ...rest,
   }
 }
@@ -51,6 +52,7 @@ const snapshot = (robots: RobotSetupFacts[]): SetupSnapshot => ({
   flow: { setupConfirmedAt: null, plan: null, unlocked: false },
   plans: [],
   session: null,
+  participants: { patrol: [], formation: [], sweep: [], cordon: [], aloha: [] },
 })
 
 describe('a robot’s seat in the lobby', () => {
@@ -159,7 +161,7 @@ describe('adding a robot', () => {
 })
 
 describe('Open in Terminals', () => {
-  const sessions = { robot: '741-robot-1', laptop: '741-laptop-2' }
+  const sessions = { robot: '741-robot-1', laptop: '741-laptop-2', nav: null }
 
   it('opens the terminal the current step types into', () => {
     expect(terminalToOpen(robot({ state: 'running', statuses: ['done', 'active'], sessions }))).toEqual({ session: '741-robot-1', role: 'robot' })
@@ -170,7 +172,7 @@ describe('Open in Terminals', () => {
   })
 
   it('falls back to the terminal that is open, and is not there before the setup opens one', () => {
-    const laptopStep = robot({ state: 'running', statuses: ['done', 'done', 'done', 'active'], sessions: { robot: '741-robot-1', laptop: null } })
+    const laptopStep = robot({ state: 'running', statuses: ['done', 'done', 'done', 'active'], sessions: { robot: '741-robot-1', laptop: null, nav: null } })
     expect(terminalToOpen(laptopStep)).toEqual({ session: '741-robot-1', role: 'robot' })
     expect(terminalToOpen(robot())).toBeNull()
   })

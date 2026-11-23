@@ -86,6 +86,7 @@ export function slotStatus(robot: RobotSetupFacts, now: number): SlotStatus {
       return { ...online, word: 'STOPPED', tone: 'unknown', detail: `At ${title}`, pulse: false }
     case 'done':
       if (relay.state === 'exited') return { ...online, word: `${RELAY_WORD[robot.kind].toUpperCase()} STOPPED`, tone: 'warn', detail: 'Run setup again to restart it', pulse: false }
+      if (robot.kind === 'm20' && robot.nav.state === 'exited') return { ...online, word: 'NAV BRIDGE STOPPED', tone: 'warn', detail: 'Run setup again to restart it', pulse: false }
       return { ...online, word: 'READY', tone: 'ok', detail: relayLine(robot), pulse: false }
     case 'idle':
       return {
@@ -119,9 +120,10 @@ export function relayLine(robot: RobotSetupFacts): string {
   return rate ? `Relay at ${rate.toFixed(1)} Hz` : 'Relay running'
 }
 
-/** Ready for the mission: set up, its relay (or bridge) running, still answering */
+/** Ready for the mission: set up, its relay (or bridge) and an M20's nav bridge running, still answering */
 export function isReady(robot: RobotSetupFacts): boolean {
-  return robot.presence === 'online' && robot.setup.state === 'done' && robot.relay.state !== 'exited'
+  const navUp = robot.kind === 'aloha' || (robot.nav.state !== 'exited' && robot.nav.state !== 'none')
+  return robot.presence === 'online' && robot.setup.state === 'done' && robot.relay.state !== 'exited' && navUp
 }
 
 /** Why the lobby cannot go on to Routes yet, or null: every robot in it has to be ready */

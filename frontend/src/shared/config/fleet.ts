@@ -33,3 +33,12 @@ export function robotOf(key: RobotKey): RobotIdentity {
 export function isRobotKey(value: string | null | undefined): value is RobotKey {
   return value === 'r1' || value === 'r2' || value === 'r3' || value === 'aloha'
 }
+
+/** fleet_management.py's marker colours (COLORS), in its order: in RViz a robot takes the one at its place in the phase's
+ * file. A guard test keeps these as the script has them. */
+export const RVIZ_MARKER_COLORS: ReadonlyArray<{ name: string; rgb: readonly [number, number, number] }> = [
+  { name: 'blue', rgb: [0.3, 0.6, 1.0] },
+  { name: 'orange', rgb: [1.0, 0.6, 0.2] },
+  { name: 'magenta', rgb: [0.9, 0.3, 0.9] },
+  { name: 'green', rgb: [0.3, 0.9, 0.4] },
+]

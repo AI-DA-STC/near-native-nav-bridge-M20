@@ -29,3 +29,5 @@
 
 /* The bring-up checklist wraps in the side column's width */
 .cc-ccpage__operator .cc-stepper { flex-wrap: wrap; }
+.cc-ccpage__itemwait { display: grid; gap: 8px; align-content: start; }
+.cc-ccpage__itemwait p { margin: 0; color: var(--text-2); font-size: 12.5px; line-height: 18px; max-width: 52ch; }

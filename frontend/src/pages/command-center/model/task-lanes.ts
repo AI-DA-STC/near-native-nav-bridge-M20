@@ -38,7 +38,10 @@ export function taskLanesOf(snap: MissionSnapshot): Lane[] {
       PHASES.map(({ id }) => {
         let state: LaneCellState
         const phase = status(id)
-        if (robot === 'aloha' && ALOHA_IDLE.has(id) && phase !== 'skipped') {
+        if (!facts.inMission) {
+          // a role without a robot in this mission: nothing to do in any phase
+          state = 'idle'
+        } else if (robot === 'aloha' && ALOHA_IDLE.has(id) && phase !== 'skipped') {
           state = reached(id) ? 'idle' : 'pending'
         } else if (robot === 'aloha' && id === 'cordon' && phase !== 'done') {
           // it waits on the dogs from the sweep on: the cordon must be in place before it drives in
@@ -58,7 +61,7 @@ export function taskLanesOf(snap: MissionSnapshot): Lane[] {
                 ? (routeProgress(facts.route) + snap.robots.aloha.arms.pose / snap.robots.aloha.arms.of) / 2
                 : null
               : routeProgress(facts.route)
-        return [id, { text: TASKS[robot][id], state, progress }]
+        return [id, { text: facts.inMission ? TASKS[robot][id] : '—', state, progress }]
       }),
     ) as Record<PhaseId, LaneCell>
     return { robot, cells }

@@ -1,18 +1,23 @@
-import type { PlanSummary, RobotSetupFacts, RoutePhase, SetupSnapshot } from '@/shared/api'
-import { FLEET, type RobotKey } from '@/shared/config'
+import type { PlanSummary, RoutePhase, RvizWhich, SetupSnapshot } from '@/shared/api'
+import { FLEET, RVIZ_MARKER_COLORS, isRobotKey, type RobotKey } from '@/shared/config'
 
-/* The mission plan's phases as demo/record_waypoints.sh records them, and what the Routes screen says about a plan */
+/* The mission plan's phases as demo/record_waypoints.sh records them, for the robots added in Setup, and what the Routes
+ * screen says about a plan */
 
-export const PHASES: readonly RoutePhase[] = ['patrol', 'formation', 'sweep', 'cordon']
+export const PHASES: readonly RoutePhase[] = ['patrol', 'formation', 'sweep', 'cordon', 'aloha']
+
+/** The phases on the dogs' shared map; the ALOHA's route is on its own */
+export const DOG_PHASES: readonly RoutePhase[] = ['patrol', 'formation', 'sweep', 'cordon']
 
 export interface PhaseInfo {
   title: string
+  /** In the plans' list */
+  short: string
   letter: string
   /** fleet_management.py's mode, as record_waypoints.sh runs it */
   mode: string
   /** What to record, as the script and the README's table say it */
   needs: string
-  roles: readonly RobotKey[]
   /** Waypoints each robot needs */
   min: number
   /** single-waypoint: exactly one per robot, so nothing to add to */
@@ -22,45 +27,90 @@ export interface PhaseInfo {
 export const PHASE_INFO: Readonly<Record<RoutePhase, PhaseInfo>> = {
   patrol: {
     title: 'Patrol',
+    short: 'Patrol',
     letter: 'P',
     mode: 'multi-waypoint-patrol',
     needs: 'Its perimeter: each corner in order, 3 or more, not the first one again',
-    roles: ['r1', 'r2', 'r3'],
     min: 3,
     single: false,
   },
   formation: {
     title: 'Formation',
+    short: 'Formation',
     letter: 'F',
     mode: 'single-waypoint',
     needs: 'Its slot in the horizontal line: R1 slot 1, R2 slot 2, R3 slot 3',
-    roles: ['r1', 'r2', 'r3'],
     min: 1,
     single: true,
   },
   sweep: {
     title: 'Sweep',
+    short: 'Sweep',
     letter: 'S',
     mode: 'multi-waypoint',
     needs: 'Its zone’s sweep (R1 zone 1, R2 zone 2, R3 zone 3), waypoints in order; R3 ends next to the box',
-    roles: ['r1', 'r2', 'r3'],
     min: 1,
     single: false,
   },
   cordon: {
     title: 'Cordon',
+    short: 'Cordon',
     letter: 'C',
     mode: 'single-waypoint',
     needs: 'Its cordon point around zone 3',
-    roles: ['r1', 'r2'],
     min: 1,
     single: true,
   },
+  aloha: {
+    title: 'ALOHA to the box',
+    short: 'ALOHA',
+    letter: 'A',
+    mode: 'multi-waypoint',
+    needs: 'Its route to the box, waypoints in order; it docks onto the last one, next to the box',
+    min: 1,
+    single: false,
+  },
 }
 
-/** The robot playing a role: R1 is 741 */
-export function roleId(role: RobotKey): string {
-  return FLEET[role].id
+/** A robot and phase to record */
+export interface Choice {
+  phase: RoutePhase
+  robot: string
+}
+
+/** The RViz a phase is recorded in: the dogs' on their shared map, the ALOHA's on its own */
+export function rvizOf(phase: RoutePhase): RvizWhich {
+  return phase === 'aloha' ? 'aloha' : 'dogs'
+}
+
+/** A robot in a sentence: the ALOHA by name (aloha.json and RViz's labels call it aloha), a dog by its ID */
+export function robotName(id: string): string {
+  return id === 'aloha' ? 'the ALOHA' : id
+}
+
+/** The robots added, in the lobby's order: the dogs, then the ALOHA. Each is a column of the session's grid. */
+export function lobbyColumns(snapshot: SetupSnapshot): Array<{ id: string; key: RobotKey | null }> {
+  const robots = [...snapshot.robots.filter((r) => r.kind === 'm20'), ...snapshot.robots.filter((r) => r.kind === 'aloha')]
+  return robots.map((r) => {
+    if (r.kind === 'aloha') return { id: r.id, key: 'aloha' }
+    const key = (['r1', 'r2', 'r3'] as const).find((k) => FLEET[k].id === r.id)
+    return { id: r.id, key: key && isRobotKey(key) ? key : null }
+  })
+}
+
+/** Why a robot has no cell in a phase */
+export function sitsOut(phase: RoutePhase, kind: 'm20' | 'aloha'): string {
+  if (phase === 'cordon' && kind === 'm20') return 'watches the box'
+  return '—'
+}
+
+/** The colour fleet_management.py draws a robot in while `recorded` is recorded into a phase whose file has `order`: its
+ * place among the file's robots, then the recorded one if it is not in it yet (the same order run_demo.sh's --load takes) */
+export function rvizColor(robot: string, order: readonly string[], recorded: string | null): { name: string; css: string } {
+  const ids = recorded && !order.includes(recorded) ? [...order, recorded] : [...order]
+  const i = Math.max(0, ids.indexOf(robot))
+  const { name, rgb } = RVIZ_MARKER_COLORS[i % RVIZ_MARKER_COLORS.length]
+  return { name, css: `rgb(${rgb.map((c) => Math.round(c * 255)).join(' ')})` }
 }
 
 /** "2026-11-20_15-02-10" → "20 Nov 2026 · 15:02:10": the name is the operator's local time */
@@ -79,15 +129,18 @@ export function selectedPlan(plans: readonly PlanSummary[], picked: string | nul
 /** What a plan re-recorded over its base, in a line: "sweep · 738 (+2)" */
 export function recordedLine(plan: PlanSummary): string | null {
   if (!plan.recorded.length) return null
-  return plan.recorded.map((r) => `${PHASE_INFO[r.phase].title.toLowerCase()} · ${r.robot}${r.append ? ` (+${r.waypoints})` : ''}`).join(', ')
+  return plan.recorded
+    .map((r) => `${r.phase === 'aloha' ? 'the ALOHA’s route' : `${PHASE_INFO[r.phase].short.toLowerCase()} · ${r.robot}`}${r.append ? ` (+${r.waypoints})` : ''}`)
+    .join(', ')
 }
 
-/** Why a robot cannot be recorded now, or null: it has to be in the lobby with its relay running */
+/** Why a robot cannot be recorded now, or null: it has to be added, with its relay (the ALOHA: its bridge) running */
 export function recordBlocked(snapshot: SetupSnapshot, robotId: string): string | null {
-  const robot: RobotSetupFacts | undefined = snapshot.robots.find((r) => r.id === robotId)
-  if (!robot) return `${robotId} is not in the lobby: add it on Setup`
+  const robot = snapshot.robots.find((r) => r.id === robotId)
+  if (!robot) return `${robotId} is not added: add it on Setup`
   if (robot.presence !== 'online') return `${robotId} does not answer`
-  if (robot.relay.state !== 'running' && robot.relay.state !== 'kept') return `${robotId}’s relay is not running: set it up first`
+  const what = robot.kind === 'aloha' ? 'bridge' : 'relay'
+  if (robot.relay.state !== 'running' && robot.relay.state !== 'kept') return `${robotId}’s ${what} is not running: set it up first`
   return null
 }
 

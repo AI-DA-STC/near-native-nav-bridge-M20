@@ -1,4 +1,4 @@
-import type { AlohaFacts, CameraFacts, ConnectionStatus, MissionSnapshot, Notice } from '@/shared/api'
+import type { AlohaFacts, ConnectionStatus, MissionSnapshot, Notice } from '@/shared/api'
 import { formatClock, type Tone } from '@/shared/lib'
 import type { MissionState } from './StateChip'
 
@@ -65,24 +65,13 @@ function alohaPill(aloha: AlohaFacts, idle: boolean): Pick<HeaderPill, 'value' |
   return { value: idle ? 'ready' : 'standby', tone: 'ok' }
 }
 
-function cameraPill(camera: CameraFacts): Pick<HeaderPill, 'value' | 'tone' | 'pulse'> {
-  switch (camera.state) {
-    case 'live':
-      return { value: 'live', tone: 'live', pulse: true }
-    case 'connecting':
-      return { value: 'connecting', tone: 'unknown' }
-    case 'retrying':
-      return { value: `retrying ${camera.attempt}/${camera.of}`, tone: 'warn' }
-    case 'gave-up':
-      return { value: 'no video', tone: 'warn' }
-  }
-}
-
 export function headerStateOf(snap: MissionSnapshot, connection: ConnectionStatus): HeaderState {
   const { run, robots, serverTime, limits } = snap
   const { state, detail } = missionState(snap)
-  const connected = DOGS.filter((k) => robots[k].bridge === 'connected').length
-  const placed = DOGS.filter((k) => {
+  // The dogs in this mission: added in Setup and named in the confirmed plan
+  const dogs = DOGS.filter((k) => robots[k].inMission)
+  const connected = dogs.filter((k) => robots[k].bridge === 'connected').length
+  const placed = dogs.filter((k) => {
     const pose = robots[k].pose
     return pose !== null && serverTime - pose.at <= limits.poseStaleMs
   }).length
@@ -99,10 +88,9 @@ export function headerStateOf(snap: MissionSnapshot, connection: ConnectionStatu
     clockLabel: run.status === 'ended' ? 'TOTAL' : 'ELAPSED',
     clockRunning: run.status === 'running' || run.status === 'stopping',
     pills: [
-      { id: 'fleet', label: 'Fleet', value: `${connected}/${DOGS.length}`, tone: connected === DOGS.length ? 'ok' : 'fault', title: 'Robot dogs whose bridge is connected' },
-      { id: 'positions', label: 'Positions', value: `${placed}/${DOGS.length}`, tone: placed === DOGS.length ? 'ok' : 'warn', title: 'Robot dogs with a fresh position on the map' },
-      { id: 'aloha', label: 'ALOHA', ...alohaPill(robots.aloha, run.status === 'idle') },
-      { id: 'camera', label: 'R3 camera', ...cameraPill(snap.camera), title: "R3's front camera, which the box detector watches" },
+      { id: 'fleet', label: 'Fleet', value: `${connected}/${dogs.length}`, tone: connected === dogs.length ? 'ok' : 'fault', title: 'Robot dogs in this mission whose nav bridge listens' },
+      { id: 'positions', label: 'Positions', value: `${placed}/${dogs.length}`, tone: placed === dogs.length ? 'ok' : 'warn', title: 'Robot dogs in this mission with a fresh position on the map' },
+      ...(robots.aloha.inMission ? [{ id: 'aloha', label: 'ALOHA', ...alohaPill(robots.aloha, run.status === 'idle') }] : []),
       { id: 'domains', label: 'Domains', value: `${robots.r1.domain} / ${robots.aloha.domain}`, tone: null, mono: true, title: 'ROS domains: the dogs, then the ALOHA' },
     ],
     attention,

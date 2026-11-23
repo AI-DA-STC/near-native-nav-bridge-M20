@@ -3,8 +3,8 @@
 The operator console runs on this workstation and opens in a browser at http://localhost:5173. It opens on a landing page; **Launch** takes you through three steps:
 
 1. **Setup.** You add the robots one at a time, and each one is brought up with its own commands: the README's for an M20, `start_aloha.sh` for the Mobile ALOHA.
-2. **Routes.** You pick the mission plan's routes, or record new ones robot by robot, the way `demo/record_waypoints.sh` does.
-3. **Command center.** The mission screen. It opens once Setup and Routes are both confirmed, and still runs on demo data.
+2. **Routes.** You pick the mission plan's routes, or record new ones robot by robot for the robots you added, the way `demo/record_waypoints.sh` does, watching them in RViz on the map.
+3. **Command center.** The mission screen, live: the robots you set up, the plan in use, and `demo/run_demo.sh` when you start it. It opens once Setup and Routes are both confirmed.
 
 **Terminals** shows every terminal the GUI opened, live, at any time.
 
@@ -53,6 +53,7 @@ To stop it, press Ctrl+C in that terminal. The GUI then stops the relays it star
    | c | Laptop | `export ROS_DOMAIN_ID=0`, `export FASTRTPS_DEFAULT_PROFILES_FILE=fastdds_profile.xml`, `source install/setup.bash` |
    | d | Check topics | `ros2 topic list` (the robot's `_<id>` topics and the shared TF), then `ros2 topic hz /ODOM_relayed_<id>` |
    | e | Localize | `rviz2 -d frontend/server/rviz/robot_<id>.rviz --ros-args …`: README.md's laptop side Step 5, plus `-d`, so RViz opens on the robot's own map, odometry and waypoints |
+   | f | Nav bridge | The exports, `export ROBOT_ID=<id>`, then `ros2 run nav_cmd_bridge nav_cmd_bridge bridge --ip <ip>` (README Multi-robot Step 1) in its own terminal: the bridge the mission's goals reach the robot through. It moves nothing by itself, only a heartbeat until a goal arrives. A bridge already listening on `/goal_pose_<id>` is kept |
 
    The Mobile ALOHA:
 
@@ -76,31 +77,53 @@ The robots you add are remembered in `frontend/server/robots.json`. Next time th
 
 ## 2. Routes
 
-Each mission plan is a folder of `demo/waypoints` named after when its recording session started, like `2026-11-20_15-02-10`. It holds the six files `demo/run_demo.sh` needs: `patrol`, `formation`, `sweep`, `cordon`, `aloha` and `manipulator.json`. `demo/waypoints/current` points at the plan in use; `run_demo.sh`, `record_waypoints.sh` and the ALOHA scripts read it by default.
+Routes are recorded for the robots added in Setup, the ALOHA included. Each mission plan is a folder of `demo/waypoints` named after when its recording session started, like `2026-11-20_15-02-10`. It holds the six files `demo/run_demo.sh` needs: `patrol`, `formation`, `sweep`, `cordon`, `aloha` and `manipulator.json`. `demo/waypoints/current` points at the plan in use; `run_demo.sh`, `record_waypoints.sh` and the ALOHA scripts read it by default.
 
-- **Pick a plan.** The plans are listed newest first, and the latest is selected. The preview on the right shows its four phases on the map frame, each robot's route in its colour. Each plan shows whether each phase is complete, by the README's table, and what it re-recorded.
+| Phase | Who takes part |
+|---|---|
+| Patrol, Formation, Sweep | every dog added |
+| Cordon | every dog added but 738, which watches the box (R3 in `run_demo.sh`) |
+| ALOHA to the box (`aloha.json`) | the ALOHA: its route, in order; it docks onto the last waypoint, at the box |
+
+- **Pick a plan.** The plans are listed newest first, and the latest is selected. The sketches on the right show its routes in map-frame metres, without the map; RViz shows them on the map while you record. Each plan shows whether each phase is complete for the robots added, and what it re-recorded. A plan that names a robot you did not add is flagged: `run_demo.sh` would wait for that robot.
 - **Use this plan** points `current` at it and confirms Routes. You then go on to the Command center, or back to Setup if Setup isn't confirmed yet.
-- **Record new routes from it** starts a session: a new dated folder, a copy of the selected plan. For each phase and robot, **Record** types the README's command into the Routes terminal:
+- **Record new routes from it** starts a session: a new dated folder, a copy of the selected plan with only the robots added (the plan's other robots are left out, and the plan says "without 665"). The grid has a column per robot added. For a robot and a phase, **Record** opens its RViz, then types the README's command into the Routes terminal:
   ```bash
   ONLY="741" WAYPOINTS=demo/waypoints/<session> demo/record_waypoints.sh sweep
+  ONLY="aloha" WAYPOINTS=demo/waypoints/<session> demo/record_waypoints.sh aloha
   ```
   with `APPEND=1` when you tick **Add after its waypoints**. Then drive the robot with its controller:
 
   | Button | Key it sends | |
   |---|---|---|
-  | **Record waypoint** | ENTER | Records the robot's pose from `/ODOM_relayed_<id>` |
+  | **Record waypoint** | ENTER | Records the robot's pose: `/ODOM_relayed_<id>` for a dog, `/amcl_pose` for the ALOHA |
   | **Undo** | `u` | Drops its last waypoint |
   | **Clear** | `c` | Drops them all |
   | **Save** | `w` | Writes the phase file; the other robots' routes in it are kept |
   | **Cancel** | Ctrl+C | Quits without saving |
 
-  The preview follows the robot while you record. **Finish session** keeps the new plan, which becomes the latest. **Discard** deletes its folder.
+  **Finish session** keeps the new plan, which becomes the latest. **Discard** deletes its folder.
+- **RViz while recording.** The dogs' RViz (ROS_DOMAIN_ID=0) shows their map, each dog's odometry and `/fleet_goal_markers`. It is the README's Multi-robot Step 2 command with `-d frontend/server/rviz/routes.rviz`. The ALOHA's RViz (ROS_DOMAIN_ID=1) shows its own map, its AMCL pose and its route.
+  - The robot being recorded is drawn bright and the phase's other routes dimmed, each robot in its own colour: its place in the phase's file, as `run_demo.sh` draws it too.
+  - A **2D Goal Pose** arrow drawn in RViz goes to `/fleet_goal`. It is recorded as the robot's next waypoint, like Record waypoint, and never moves a robot.
+  - The list on the right shows every waypoint as RViz labels it (`741·3`), in the same colour, with where the robot is now.
+  - RViz stays open for the session; **Open RViz again** reopens it after you close it.
 
-The ALOHA's pose at the box (`aloha.json`) and its arm poses (`manipulator.json`) are carried over from plan to plan; they are not recorded here.
+The ALOHA's arm poses (`manipulator.json`) are carried over from plan to plan; they are not recorded here. The ALOHA's route is on its own map, not yet aligned with the dogs'.
 
 ## 3. The Command center
 
-Its tab, and Fleet health and Log, stay locked until Setup and Routes are both confirmed. After a restart of the GUI you confirm them again. E-STOP is on the Command center only: setting up moves no robot.
+Its tab, and Fleet health, stay locked until Setup and Routes are both confirmed. After a restart of the GUI you confirm them again.
+
+- **Robots.** R1, R2 and R3 are the dogs you added, by their IDs (741, 665, 738); a dog with another ID takes a free role. A robot is in the mission when it is added and in the plan in use; the others show *not in this mission*. **Fleet** counts the dogs whose nav bridge listens, **Positions** those whose `/ODOM_relayed_<id>` is fresh (3 s). The ALOHA's pose comes from its `/amcl_pose`, shown on its card only: its map is not the dogs' yet.
+- **Map.** The dogs' SLAM map, read once from `/GRID_MAP_relayed_<id>` of a dog that is set up (`frontend/server/map_grid.py`), under the plan's routes for the phase under way, the box (`BOX_POSE`), and the dogs' positions and trails.
+- **Start mission** is enabled once nothing blocks it (each blocker says what to fix). It runs, in the **Mission** terminal under Terminals:
+  ```bash
+  WAYPOINTS=demo/waypoints/<plan> R3=<R3's id> DETECT=0 demo/run_demo.sh
+  ```
+  `DETECT=0` because R3's camera is disabled for now: no box detection, every robot sweeps its whole route. The page follows its output: phases, the plan to approve or deny, each robot's waypoints, docking, the arms, the contents photo, your verdict. Your answers are typed into it as you would type them.
+- **Stop** is Ctrl+C: no new waypoints, each robot finishes the one it drives to, the ALOHA's arms freeze. **Force stop** closes the Mission terminal.
+- **E-STOP** sends each dog in the mission `nav_cmd_bridge estop --ip <ip>` (confirmed when the robot replies within 3 s), cancels the ALOHA's `move_base` (`/move_base/cancel`), and ends the run. The ALOHA's docking and arms have no remote stop: ending the run freezes the arms.
 
 ## Terminals
 
@@ -109,7 +132,9 @@ Setup shows only each step's status. **Open in Terminals**, at the top of a robo
 - **Robot · relay** is `ssh` to an M20, then `su`, then the container running `relays.launch.py`.
 - **Robot · tmux** is `ssh` to the ALOHA, attached to `start_aloha.sh`'s tmux session when the setup started it (after **Keep it**, type `tmux attach -t aloha`): Ctrl+b then n or p switches windows, Ctrl+b then d detaches.
 - **Laptop** has the exports, the topic checks and `rviz2`; for the ALOHA, its bridge.
-- **Routes · Recorder** is where `demo/record_waypoints.sh` runs.
+- **Laptop · nav bridge** is an M20's nav bridge (step f).
+- **Routes · Recorder** is where `demo/record_waypoints.sh` runs; **Routes · RViz dogs** and **Routes · RViz ALOHA** hold the RViz windows recording draws in.
+- **Mission** is where Start mission runs `demo/run_demo.sh`.
 
 They are live: what you type goes to the terminal in front, and **Ctrl+C** interrupts it.
 
@@ -118,8 +143,8 @@ They are live: what you type goes to the terminal in front, and **Ctrl+C** inter
 - **What a robot's RViz shows** comes from `frontend/server/robot.rviz`, with `ROBOT_ID` replaced by the robot's ID, freshly for each setup. Edit that file to change the displays or the starting view for every robot. Your own `~/.rviz2/default.rviz` is not touched.
 - **Only this workstation can open the GUI.** It hands out shells on the robots. `HOST=0.0.0.0 npm run dev` opens it to the network, and then anyone who can reach the port gets those shells.
 - **Another port:** `PORT=5174 npm run dev`.
-- **Reviewing the Command center without robots:** `MISSION_UNLOCKED=1 npm run dev` opens it without Setup and Routes, on demo data.
+- **Opening the Command center without confirming Setup and Routes:** `MISSION_UNLOCKED=1 npm run dev`. It shows the robots as they are, on `demo/waypoints/current`.
+- **Another mission script, to rehearse the page without robots:** `MISSION_SCRIPT=path/to/fake.sh npm run dev`, relative to the package root.
 - **The plans somewhere else:** `PLANS_DIR=/some/folder npm run dev`.
 - **Removing the ALOHA** stops its bridge and runs `bash start_aloha.sh stop` on it, which stops its arms, base and navigation.
-- **E-STOP and the Command center still run on demo data. E-STOP does not reach the robots.**
 - **If the GUI was killed rather than stopped with Ctrl+C,** a relay can keep running on a robot. The next setup of that robot finds it and offers to restart the container.

@@ -90,6 +90,13 @@ export function publisherCount(output: string): number | null {
   return /Unknown topic/.test(output) ? 0 : null
 }
 
+/** `ros2 topic info`'s "Subscription count: 1": who listens on the topic */
+export function subscriptionCount(output: string): number | null {
+  const m = /Subscription count: (\d+)/.exec(output)
+  if (m) return Number(m[1])
+  return /Unknown topic/.test(output) ? 0 : null
+}
+
 /** One message of `ros2 topic echo` on a geometry_msgs/PoseWithCovarianceStamped topic: metres, and the heading in
  * degrees (counter-clockwise from +x) */
 export function echoedPose(message: string): { x: number; y: number; yaw: number } | null {

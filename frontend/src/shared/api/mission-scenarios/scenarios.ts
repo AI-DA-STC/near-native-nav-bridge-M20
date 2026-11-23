@@ -18,7 +18,6 @@ import {
   DETECT_FOUND_TEXT,
   DETECT_REFINED_TEXT,
   FOUND,
-  FRAMES,
   PLAN_SR2,
   REFINED,
   T,
@@ -344,10 +343,11 @@ export function snapshotOf(scene: Scene, serverTime: Ms, seq: number): MissionSn
     route && { ...route, last: route.last && { ...route.last, at: ms(toScene(route.last.at)) } }
   const fresh = serverTime - 150
   const dog = (key: DogKey): RobotFacts => {
-    if (key === 'r2' && scene.r2Missing) return { id: DOG_ID.r2, domain: 0, bridge: 'disconnected', pose: null, speed: null, trail: [], route: null }
+    if (key === 'r2' && scene.r2Missing) return { id: DOG_ID.r2, inMission: true, domain: 0, bridge: 'disconnected', pose: null, speed: null, trail: [], route: null }
     const m = dogAt(key, nominal, ending)
     return {
       id: DOG_ID[key],
+      inMission: true,
       domain: 0,
       bridge: 'connected',
       pose: { x: m.p[0], y: m.p[1], yawDeg: m.yaw, at: fresh },
@@ -359,6 +359,8 @@ export function snapshotOf(scene: Scene, serverTime: Ms, seq: number): MissionSn
   const a = alohaAt(nominal, scene.dockingFails)
   const aloha: AlohaFacts = {
     id: '',
+    inMission: true,
+    sameMap: true,
     domain: 1,
     bridge: 'connected',
     pose: { x: a.p[0], y: a.p[1], yawDeg: a.yaw, at: fresh },
@@ -377,18 +379,6 @@ export function snapshotOf(scene: Scene, serverTime: Ms, seq: number): MissionSn
 
   const found = !scene.noVideo && started && nominal >= T.found
   const refined = found && nominal >= T.refined
-  const sweeping = active === 'sweep'
-  const camera: MissionSnapshot['camera'] = scene.noVideo
-    ? { robot: 'r3', state: 'retrying', attempt: scene.noVideo, of: 3, frame: null, box: null, searching: true }
-    : {
-        robot: 'r3',
-        state: 'live',
-        attempt: 0,
-        of: 3,
-        frame: { url: refined ? FRAMES.near : FRAMES.far, at: serverTime - 100 },
-        box: refined ? { ...REFINED.box, confidence: REFINED.confidence } : found ? { ...FOUND.box, confidence: FOUND.confidence } : null,
-        searching: sweeping,
-      }
   const sighting = refined ? REFINED : FOUND
   const detection: MissionSnapshot['detection'] = found
     ? {
@@ -486,7 +476,6 @@ export function snapshotOf(scene: Scene, serverTime: Ms, seq: number): MissionSn
     instruction,
     plans,
     robots: { r1: dog('r1'), r2: dog('r2'), r3: dog('r3'), aloha },
-    camera,
     detection,
     contents,
     verdict: ended || s >= c.verdict ? (failedAt === null ? { value: scene.verdict, at: ms(c.verdict) } : null) : null,
@@ -525,7 +514,6 @@ function haltRun(snap: MissionSnapshot, at: Ms, outcome: 'stopped' | 'estopped',
       r3: halt(snap.robots.r3),
       aloha: { ...halt(snap.robots.aloha), arms: snap.robots.aloha.arms.state === 'moving' || snap.robots.aloha.arms.state === 'holding' ? { ...snap.robots.aloha.arms, state: 'stopped' } : snap.robots.aloha.arms },
     },
-    camera: { ...snap.camera, searching: false },
   }
 }
 

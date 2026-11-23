@@ -31,6 +31,13 @@ export const README = {
   // Laptop side, Step 5
   rviz: (id: string) =>
     `rviz2 --ros-args -r /tf:=/tf_relayed -r /tf_static:=/tf_static_relayed -r /goal_pose:=/goal_pose_${id} -r /initialpose:=/initialpose_relayed_${id}`,
+  // Multi-robot, Step 1 (with ROBOT_ID exported): the plain bridge fleet_management.py's goals go through. It only sends
+  // the robot a heartbeat until a goal arrives on /goal_pose_<id>
+  navBridge: (ip: string) => `ros2 run nav_cmd_bridge nav_cmd_bridge bridge --ip ${ip}`,
+  // Multi-robot, Step 2: the 2D Goal Pose tool on /fleet_goal, where no bridge listens (recording takes it as a waypoint)
+  rvizFleet: 'rviz2 --ros-args -r /tf:=/tf_relayed -r /tf_static:=/tf_static_relayed -r /goal_pose:=/fleet_goal',
+  // Recording demo waypoints, the table's aloha row: the ALOHA's RViz, on aloha/bridge.sh's domain
+  rvizAloha: 'ROS_DOMAIN_ID=1 rviz2 --ros-args -r /goal_pose:=/fleet_goal',
   // "On robot, trust the laptop's plain-HTTP registry": shown to the operator, never typed
   daemonJson: '{ "insecure-registries": ["192.168.123.160:5000"] }',
   restartDocker: 'sudo systemctl restart docker',
@@ -40,6 +47,12 @@ export const README = {
  * of the displays saved last in ~/.rviz2/default.rviz. Everything after -d <config> is the README's line. */
 export function rvizWithConfig(id: string, config: string): string {
   return README.rviz(id).replace(/^rviz2 /, `rviz2 -d ${config} `)
+}
+
+/** The RViz a recording draws in, with -d: the dogs' (README Multi-robot Step 2) or the ALOHA's (the recording table's
+ * aloha row), on the config routes-rviz.ts writes. Everything but -d <config> is the README's line. */
+export function routesRvizCommand(which: 'dogs' | 'aloha', config: string): string {
+  return (which === 'dogs' ? README.rvizFleet : README.rvizAloha).replace(/rviz2 /, `rviz2 -d ${config} `)
 }
 
 /** The Mobile ALOHA: aloha/robot/start_aloha.sh in the robot's home (its usage lines), and aloha/bridge.sh here */

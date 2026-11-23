@@ -27,3 +27,4 @@ dist-ssr
 server/robots.json
 server/robots.json.*
 server/rviz/
+server/maps/

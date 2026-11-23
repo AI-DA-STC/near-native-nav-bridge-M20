@@ -52,7 +52,8 @@ export function routesHeaderOf(snapshot: SetupSnapshot | null, connection: Setup
   if (away || !snapshot) return away!
   const recording = snapshot.session?.recording
   if (recording && (recording.state === 'starting' || recording.state === 'recording')) {
-    return { state: 'running', label: 'RECORDING', detail: `${recording.robot} ${recording.phase}, WP ${recording.waypoints.length}`, running: true }
+    const what = recording.phase === 'aloha' ? 'ALOHA to the box' : `${recording.robot} ${recording.phase}`
+    return { state: 'running', label: 'RECORDING', detail: `${what}, WP ${recording.waypoints.length}`, running: true }
   }
   if (snapshot.session) return { state: 'waiting', label: 'NEW ROUTES', detail: `Based on ${snapshot.session.basedOn ? planWhen(snapshot.session.basedOn) : 'nothing'}`, running: false }
   const plan = snapshot.flow?.plan

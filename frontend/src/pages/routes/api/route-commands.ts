@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { fetchPlanRoutes, sendSetupCommand, type PlanRoutes, type RecorderKey, type RoutePhase, type SetupResult } from '@/shared/api'
+import { fetchPlanRoutes, sendSetupCommand, type PlanRoutes, type RecorderKey, type RoutePhase, type RvizWhich, type SetupResult } from '@/shared/api'
 
 /* What the Routes screen asks the setup server: use a plan, record new routes into a session, and each plan's
  * waypoints for its preview */
@@ -20,6 +20,11 @@ export function recordStart(phase: RoutePhase, robot: string, append: boolean): 
 
 export function recordKey(key: RecorderKey): Promise<SetupResult> {
   return sendSetupCommand({ type: 'record-key', key })
+}
+
+/** That RViz again, after its window was closed */
+export function openRviz(which: RvizWhich): Promise<SetupResult> {
+  return sendSetupCommand({ type: 'open-rviz', which })
 }
 
 export function finishSession(): Promise<SetupResult> {

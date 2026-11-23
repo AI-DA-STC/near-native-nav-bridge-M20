@@ -44,8 +44,9 @@ function robot(over: Partial<RobotSetupFacts> = {}): RobotSetupFacts {
     lastSeen: Date.now(),
     setup: { state: 'idle', steps: steps([]), startedAt: null, endedAt: null },
     relay: { state: 'none', since: null, rateHz: null },
+    nav: { state: 'running', since: null },
     lastReadyAt: null,
-    sessions: { robot: null, laptop: null },
+    sessions: { robot: null, laptop: null, nav: null },
     ...over,
   }
 }
@@ -63,6 +64,7 @@ function setUp(robots: RobotSetupFacts[]) {
     flow: { setupConfirmedAt: null, plan: null, unlocked: false },
     plans: [],
     session: null,
+    participants: { patrol: [], formation: [], sweep: [], cordon: [], aloha: [] },
   }
   const listeners = new Set<() => void>()
   const sent: SetupCommand[] = []
@@ -212,7 +214,7 @@ describe('the setup lobby', () => {
   it('shows no terminal: Open in Terminals goes to the one the current step types into', async () => {
     const running = robot({
       setup: { state: 'running', steps: steps(['done', 'done', 'done', 'active']), startedAt: Date.now(), endedAt: null },
-      sessions: { robot: '741-robot-1', laptop: '741-laptop-2' },
+      sessions: { robot: '741-robot-1', laptop: '741-laptop-2', nav: null },
     })
     const { user } = setUp([running])
     expect(screen.queryByRole('group', { name: /terminal/ })).toBeNull()
@@ -228,7 +230,7 @@ describe('the setup lobby', () => {
   it('sends the operator to the robot terminal to trust the registry', async () => {
     const waiting = robot({
       setup: { state: 'waiting', steps: steps(['done', 'decision']), startedAt: Date.now(), endedAt: null },
-      sessions: { robot: '741-robot-1', laptop: null },
+      sessions: { robot: '741-robot-1', laptop: null, nav: null },
     })
     waiting.setup.steps[1].prompt = { kind: 'registry', registry: '192.168.123.160:5000', error: 'http: server gave HTTP response to HTTPS client' }
     const { sent, user } = setUp([waiting])

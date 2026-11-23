@@ -43,6 +43,7 @@ const snapshot: SetupSnapshot = {
   flow: { setupConfirmedAt: null, plan: null, unlocked: false },
   plans: [],
   session: null,
+  participants: { patrol: [], formation: [], sweep: [], cordon: [], aloha: [] },
 }
 
 describe('the Terminals screen', () => {

@@ -53,7 +53,8 @@ export interface MapBox {
   yaw?: number
   halo: number
   label: string
-  state: 'found' | 'refined'
+  /** known: where the plan has it, not seen yet */
+  state: 'found' | 'refined' | 'known'
 }
 
 export interface MapDock {

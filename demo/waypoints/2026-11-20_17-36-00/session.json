@@ -1,0 +1,15 @@
+{
+  "basedOn": "2026-11-20_16-51-33",
+  "startedAt": 1795167360136,
+  "finishedAt": 1795167503468,
+  "recorded": [
+    {
+      "phase": "aloha",
+      "robot": "aloha",
+      "append": false,
+      "waypoints": 1,
+      "at": 1795167485371
+    }
+  ],
+  "leftOut": []
+}

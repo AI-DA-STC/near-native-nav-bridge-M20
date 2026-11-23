@@ -62,18 +62,20 @@ function setUp() {
   const terminal = new ScriptedLaptop()
   const saved: Array<{ plan: string; recording: PlanRecording }> = []
   let posed: ((pose: PoseFact) => void) | null = null
+  const watched: string[] = []
   let stops = 0
   const recorder = new RouteRecorder({
     terminal: () => terminal,
     folderForShell: (plan) => `demo/waypoints/${plan}`,
-    watchOdom: (_robot, onPose) => {
+    watchPose: (robot, phase, onPose) => {
+      watched.push(`${robot} ${phase}`)
       posed = onPose
       return () => stops++
     },
     onChange: () => undefined,
     onSaved: (plan, recording) => saved.push({ plan, recording }),
   })
-  return { terminal, recorder, saved, pose: (p: PoseFact) => posed?.(p), stops: () => stops }
+  return { terminal, recorder, saved, watched, pose: (p: PoseFact) => posed?.(p), stops: () => stops }
 }
 
 const settle = () => vi.advanceTimersByTimeAsync(200)
@@ -99,6 +101,17 @@ describe('recording a robot’s waypoints', () => {
       'ONLY="741" WAYPOINTS=demo/waypoints/2026-11-20_15-02-10 demo/record_waypoints.sh formation',
     ])
     expect(t.recorder.facts).toMatchObject({ state: 'recording', robot: '741', phase: 'formation', waypoints: [] })
+  })
+
+  it('records the ALOHA’s route to the box with the script’s aloha phase, following its AMCL pose', async () => {
+    const t = setUp()
+    const started = t.recorder.start('2026-11-20_15-02-10', 'aloha', 'aloha', false)
+    await vi.advanceTimersByTimeAsync(500)
+    await started
+    await settle()
+    expect(t.terminal.typed.at(-1)).toBe('ONLY="aloha" WAYPOINTS=demo/waypoints/2026-11-20_15-02-10 demo/record_waypoints.sh aloha')
+    expect(t.watched).toEqual(['aloha aloha'])
+    expect(t.recorder.facts).toMatchObject({ state: 'recording', robot: 'aloha', phase: 'aloha' })
   })
 
   it('records, undoes and saves with fleet_management.py’s keys, and notes what was saved', async () => {

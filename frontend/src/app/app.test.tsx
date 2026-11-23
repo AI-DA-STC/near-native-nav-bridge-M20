@@ -19,6 +19,7 @@ function setupFacts(flow: Partial<SetupSnapshot['flow']> = {}): SetupSnapshot {
     flow: { setupConfirmedAt: 1, plan: { id: '2026-10-07_15-59-41', confirmedAt: 2 }, unlocked: false, ...flow },
     plans: [],
     session: null,
+    participants: { patrol: [], formation: [], sweep: [], cordon: [], aloha: [] },
   }
 }
 
@@ -68,9 +69,9 @@ describe('each of the brief’s states', () => {
     [3, () => expect(screen.getAllByText('Generating plan…').length).toBeGreaterThan(0)],
     [4, () => expect(screen.getByRole('button', { name: /^Approve plan/ })).toBeEnabled()],
     [5, () => expect(screen.getAllByText('Generating plan #2…').length).toBeGreaterThan(0)],
-    [6, () => expect(screen.getByText('searching for the box…')).toBeInTheDocument()],
+    [6, () => expect(screen.getAllByText('Sweep running: every robot sweeps its zone.').length).toBeGreaterThan(0)],
     [7, () => expect(screen.getByText('refined ×1')).toBeInTheDocument()],
-    [8, () => expect(document.querySelector('.cc-cam__msg')).toHaveTextContent('No video from R3, retrying 2/3')],
+    [8, () => expect(screen.getAllByText(/No video from R3's camera, retrying 2\/3/).length).toBeGreaterThan(0)],
     [9, () => expect(screen.getByText('Cordon: R1 and R2 are closing off zone 3.')).toBeInTheDocument()],
     [10, () => expect(screen.getAllByText('DOCKING 2/3').length).toBeGreaterThan(0)],
     [11, () => expect(screen.getAllByText('ARMS 3/5 · LID OPEN').length).toBeGreaterThan(0)],
@@ -187,14 +188,15 @@ describe('the way through the console', () => {
     expect(screen.getByRole('tab', { name: 'Setup' })).toHaveAttribute('aria-selected', 'true')
   })
 
-  it('locks the Command center, Fleet health and Log until Setup and Routes are confirmed', () => {
+  it('locks the Command center and Fleet health until Setup and Routes are confirmed, and has no Log', () => {
     renderApp(1, '/mission', setupFacts({ plan: null }))
     // Sent on to the step that is missing
     expect(screen.getByRole('tab', { name: 'Routes' })).toHaveAttribute('aria-selected', 'true')
-    for (const name of ['Command center', 'Fleet health', 'Log']) {
+    for (const name of ['Command center', 'Fleet health']) {
       expect(screen.getByRole('tab', { name })).toBeDisabled()
       expect(screen.getByRole('tab', { name })).toHaveAttribute('title', 'Confirm Setup and Routes first')
     }
+    expect(screen.queryByRole('tab', { name: 'Log' })).toBeNull()
   })
 
   it('opens the Command center once both are confirmed', () => {

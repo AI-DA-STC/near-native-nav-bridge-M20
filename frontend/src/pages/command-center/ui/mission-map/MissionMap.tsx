@@ -1,4 +1,5 @@
 import type { MissionSnapshot, SiteMap } from '@/shared/api'
+import { ROBOT_KEYS } from '@/shared/config'
 import { mapSceneOf } from '../../model/map-layers'
 import type { MapView } from '../../model/map-view'
 import { LiveMap } from './LiveMap'
@@ -21,9 +22,8 @@ export function MissionMap({ snap, site, view }: { snap: MissionSnapshot; site: 
       resetKey={view.resetKey}
     >
       <MapToolbar
-        view={view.view}
-        onView={view.setView}
         follow={view.follow}
+        robots={ROBOT_KEYS.filter((k) => snap.robots[k].inMission && (k !== 'aloha' || snap.robots.aloha.sameMap))}
         onFollow={view.setFollow}
         trails={view.trails}
         onTrails={view.setTrails}

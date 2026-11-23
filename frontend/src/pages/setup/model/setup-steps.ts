@@ -1,15 +1,19 @@
-import type { CommandPlace, CommandStatus, RobotKind, RobotSetupFacts, SetupPrompt, SetupStepFacts, SetupStepKey, TerminalRole } from '@/shared/api'
+import type { CommandPlace, CommandStatus, RobotKind, RobotSetupFacts, SetupPrompt, SetupStepFacts, SetupStepKey } from '@/shared/api'
 import type { StepStatus } from '@/shared/ui/StatusMark'
 
-/** The steps as the operator's checklist names them: log in, then a–e on an M20, a–c on the ALOHA. `terminal` is where
+/** A robot's terminals: ssh to the robot, this workstation's checks and RViz, and an M20's nav bridge */
+type SetupTerminal = 'robot' | 'laptop' | 'nav'
+
+/** The steps as the operator's checklist names them: log in, then a–f on an M20, a–c on the ALOHA. `terminal` is where
  * the step types. */
-export const STEP_INFO: Readonly<Record<SetupStepKey, { title: string; letter: string; terminal: Exclude<TerminalRole, 'routes'>; purpose: string }>> = {
+export const STEP_INFO: Readonly<Record<SetupStepKey, { title: string; letter: string; terminal: SetupTerminal; purpose: string }>> = {
   login: { title: 'Log in', letter: '·', terminal: 'robot', purpose: 'ssh into the robot (on an M20, then su to root)' },
   image: { title: 'Pull image', letter: 'a', terminal: 'robot', purpose: 'Pull and tag the latest m20-bridge:foxy on the motion host' },
   relay: { title: 'Start relay', letter: 'b', terminal: 'robot', purpose: 'Start the container and relay the topics under the robot ID' },
   laptop: { title: 'Laptop', letter: 'c', terminal: 'laptop', purpose: 'ROS domain, Fast DDS profile and workspace on this workstation' },
   topics: { title: 'Check topics', letter: 'd', terminal: 'laptop', purpose: 'Every topic suffixed with the robot ID is listed, and odometry streams' },
   localize: { title: 'Localize', letter: 'e', terminal: 'laptop', purpose: 'Set the robot’s pose in RViz with 2D Pose Estimate' },
+  nav: { title: 'Nav bridge', letter: 'f', terminal: 'nav', purpose: 'The bridge the mission’s goals reach the robot through; it moves nothing by itself' },
   start: { title: 'Start ALOHA', letter: 'a', terminal: 'robot', purpose: 'start_aloha.sh: each part in a tmux window on the robot' },
   stack: { title: 'Check its stack', letter: 'b', terminal: 'robot', purpose: 'roscore, cameras, arms, lidar, base, navigation, stream, dock: each up' },
   bridge: { title: 'Bridge', letter: 'c', terminal: 'laptop', purpose: 'aloha/bridge.sh: its topics on ROS_DOMAIN_ID=1 on this workstation' },
@@ -17,7 +21,7 @@ export const STEP_INFO: Readonly<Record<SetupStepKey, { title: string; letter: s
 
 /** Each kind's steps, in order */
 export const STEPS_OF: Readonly<Record<RobotKind, readonly SetupStepKey[]>> = {
-  m20: ['login', 'image', 'relay', 'laptop', 'topics', 'localize'],
+  m20: ['login', 'image', 'relay', 'laptop', 'topics', 'localize', 'nav'],
   aloha: ['login', 'start', 'stack', 'bridge'],
 }
 
@@ -39,11 +43,11 @@ export function currentStep(steps: readonly SetupStepFacts[]): SetupStepFacts | 
 }
 
 /** Where Open in Terminals goes: the terminal the current step types into, else whichever one is open */
-export function terminalToOpen(robot: RobotSetupFacts): { session: string; role: TerminalRole } | null {
+export function terminalToOpen(robot: RobotSetupFacts): { session: string; role: SetupTerminal } | null {
   const step = currentStep(robot.setup.steps)
   const first = step ? STEP_INFO[step.key].terminal : 'robot'
-  const other = first === 'robot' ? 'laptop' : 'robot'
-  for (const role of [first, other] as const) {
+  const order: SetupTerminal[] = [first, ...(['robot', 'laptop', 'nav'] as const).filter((r) => r !== first)]
+  for (const role of order) {
     const session = robot.sessions[role]
     if (session) return { session, role }
   }

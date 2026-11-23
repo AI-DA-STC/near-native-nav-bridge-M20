@@ -3,7 +3,6 @@ import { Outlet, useLocation } from 'react-router'
 import { useMissionSnapshot, type EStopFacts } from '@/shared/api'
 import { formatTimeOfDay } from '@/shared/lib'
 import { Toast, ToastRegion, dismissToast, useToasts } from '@/shared/ui/Toast'
-import { ScenarioSwitcher } from '../prototype/ScenarioSwitcher'
 import { EstopBanner } from './EstopBanner'
 import { Header } from './Header'
 import { SetupHeader } from './SetupHeader'
@@ -24,7 +23,6 @@ export function AppShell() {
       </main>
       {snap?.estop ? <MissionEstopBanner estop={snap.estop} /> : null}
       <ToastHost />
-      {mission ? <ScenarioSwitcher /> : null}
     </div>
   )
 }

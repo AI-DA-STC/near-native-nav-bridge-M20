@@ -20,7 +20,7 @@ const packageRoot = resolve(frontendRoot, '..')
 
 const storeFile = process.env.SETUP_ROBOTS_FILE ?? join(frontendRoot, 'server', 'robots.json')
 const plansDir = process.env.PLANS_DIR ? resolve(process.env.PLANS_DIR) : join(packageRoot, 'demo', 'waypoints')
-const hub = new SetupHub({ packageRoot, storeFile, plansDir, unlocked: process.env.MISSION_UNLOCKED === '1' })
+const hub = new SetupHub({ packageRoot, storeFile, plansDir, unlocked: process.env.MISSION_UNLOCKED === '1', missionScript: process.env.MISSION_SCRIPT })
 
 const server = createServer()
 const sockets = new WebSocketServer({ noServer: true, maxPayload: 1 << 20 })
@@ -37,12 +37,13 @@ function sameOrigin(req: IncomingMessage): boolean {
 }
 
 server.on('upgrade', (req, socket, head) => {
-  if (new URL(req.url ?? '/', 'http://localhost').pathname !== '/api/setup') return // Vite's hot reload has its own
+  const path = new URL(req.url ?? '/', 'http://localhost').pathname
+  if (path !== '/api/setup' && path !== '/api/mission') return // Vite's hot reload has its own
   if (!sameOrigin(req)) {
     socket.end('HTTP/1.1 403 Forbidden\r\n\r\n')
     return
   }
-  sockets.handleUpgrade(req, socket, head, (ws) => hub.connect(ws))
+  sockets.handleUpgrade(req, socket, head, (ws) => (path === '/api/mission' ? hub.mission.connect(ws) : hub.connect(ws)))
 })
 
 const TYPES: Record<string, string> = {
@@ -60,8 +61,34 @@ const TYPES: Record<string, string> = {
   '.ico': 'image/x-icon',
 }
 
+function serveFile(res: ServerResponse, file: string | null): void {
+  if (!file || !existsSync(file) || statSync(file).isDirectory()) {
+    res.writeHead(404, { 'Content-Type': 'text/plain' })
+    res.end('Not found')
+    return
+  }
+  res.writeHead(200, { 'Content-Type': TYPES[extname(file).toLowerCase()] ?? 'application/octet-stream', 'Cache-Control': 'no-store' })
+  createReadStream(file).pipe(res)
+}
+
+/** The Command center's files: GET /api/mission/site (the map, from the plan in use), /api/mission/map.png (the dogs'
+ * SLAM map), /api/mission/image?path= (a detection or contents photo, from demo/detections only). True when it
+ * answered. */
+function serveMission(req: IncomingMessage, res: ServerResponse): boolean {
+  const url = new URL(req.url ?? '/', 'http://localhost')
+  if (req.method !== 'GET' || !url.pathname.startsWith('/api/mission/')) return false
+  if (url.pathname === '/api/mission/site') {
+    res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' })
+    res.end(JSON.stringify(hub.mission.site()))
+  } else if (url.pathname === '/api/mission/map.png') serveFile(res, hub.mission.gridFile())
+  else if (url.pathname === '/api/mission/image') serveFile(res, hub.mission.imageFile(url.searchParams.get('path') ?? ''))
+  else serveFile(res, null)
+  return true
+}
+
 /** GET /api/plans/<id>: a plan's waypoints, for its preview. True when it answered. */
 function servePlans(req: IncomingMessage, res: ServerResponse): boolean {
+  if (serveMission(req, res)) return true
   const path = new URL(req.url ?? '/', 'http://localhost').pathname
   const m = /^\/api\/plans\/([^/]+)$/.exec(path)
   if (!m || req.method !== 'GET') return false

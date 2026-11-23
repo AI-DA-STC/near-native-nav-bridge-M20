@@ -3,7 +3,6 @@ import { ROBOT_KEYS, robotOf, type RobotKey } from '@/shared/config'
 import { cx } from '@/shared/lib'
 import { Button } from '@/shared/ui/Button'
 import { RobotTag } from '@/shared/ui/RobotTag'
-import { SegmentedControl } from '@/shared/ui/SegmentedControl'
 import { Toggle } from '@/shared/ui/Toggle'
 import type { MapLayerKey, MapLayers } from './map-data'
 import './MapToolbar.css'
@@ -17,8 +16,6 @@ const MAP_LAYERS: ReadonlyArray<{ key: MapLayerKey; label: string }> = [
 ]
 
 export interface MapToolbarProps {
-  view: '2d' | '3d'
-  onView: (view: '2d' | '3d') => void
   follow: RobotKey | null
   /** null for a free view */
   onFollow: (robot: RobotKey | null) => void
@@ -32,12 +29,11 @@ export interface MapToolbarProps {
 }
 
 /** The floating bar over the map: it changes the view only, never the robots */
-export function MapToolbar({ view, onView, follow, onFollow, robots = ROBOT_KEYS, onReset, trails, onTrails, layers, onLayers, className }: MapToolbarProps) {
+export function MapToolbar({ follow, onFollow, robots = ROBOT_KEYS, onReset, trails, onTrails, layers, onLayers, className }: MapToolbarProps) {
   const [open, setOpen] = useState<'follow' | 'layers' | null>(null)
   const flip = (menu: 'follow' | 'layers') => setOpen(open === menu ? null : menu)
   return (
     <div className={cx('cc-maptool', className)} role="toolbar" aria-label="Map tools">
-      <SegmentedControl options={[{ value: '2d', label: '2D' }, { value: '3d', label: '3D' }]} value={view} onChange={onView} label="Map view" />
       <span className="cc-maptool__sep" />
       <div className="cc-maptool__menu">
         <Button size="sm" icon="follow" iconRight="chevronDown" pressed={follow !== null} aria-expanded={open === 'follow'} onClick={() => flip('follow')}>

@@ -1,2 +1,2 @@
-export { FLEET, ROBOT_KEYS, isRobotKey, robotOf } from './fleet'
+export { FLEET, ROBOT_KEYS, RVIZ_MARKER_COLORS, isRobotKey, robotOf } from './fleet'
 export type { RobotKey, RobotIdentity } from './fleet'

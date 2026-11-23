@@ -1,0 +1,85 @@
+{
+  "basedOn": "2026-10-07_15-59-45",
+  "startedAt": 1795164693124,
+  "finishedAt": null,
+  "recorded": [
+    {
+      "phase": "patrol",
+      "robot": "738",
+      "append": false,
+      "waypoints": 8,
+      "at": 1795164854607
+    },
+    {
+      "phase": "patrol",
+      "robot": "741",
+      "append": false,
+      "waypoints": 8,
+      "at": 1795165021531
+    },
+    {
+      "phase": "patrol",
+      "robot": "665",
+      "append": false,
+      "waypoints": 8,
+      "at": 1795165425601
+    },
+    {
+      "phase": "formation",
+      "robot": "665",
+      "append": false,
+      "waypoints": 1,
+      "at": 1795165494343
+    },
+    {
+      "phase": "formation",
+      "robot": "741",
+      "append": false,
+      "waypoints": 1,
+      "at": 1795165542702
+    },
+    {
+      "phase": "formation",
+      "robot": "738",
+      "append": false,
+      "waypoints": 1,
+      "at": 1795165614995
+    },
+    {
+      "phase": "sweep",
+      "robot": "665",
+      "append": false,
+      "waypoints": 3,
+      "at": 1795165784808
+    },
+    {
+      "phase": "sweep",
+      "robot": "741",
+      "append": false,
+      "waypoints": 3,
+      "at": 1795165861688
+    },
+    {
+      "phase": "sweep",
+      "robot": "738",
+      "append": false,
+      "waypoints": 3,
+      "at": 1795165934718
+    },
+    {
+      "phase": "cordon",
+      "robot": "665",
+      "append": false,
+      "waypoints": 1,
+      "at": 1795166000029
+    },
+    {
+      "phase": "cordon",
+      "robot": "741",
+      "append": false,
+      "waypoints": 1,
+      "at": 1795166033855
+    }
+  ],
+  "leftOut": []
+}

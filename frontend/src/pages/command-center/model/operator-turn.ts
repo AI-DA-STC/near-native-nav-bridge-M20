@@ -93,19 +93,20 @@ const sayList = (labels: string[]) => (labels.length < 2 ? labels.join('') : `${
 
 function startTurn(snap: MissionSnapshot): OperatorTurn {
   const b = bringUpOf(snap)
-  const ready = (['r1', 'r2', 'r3'] as const).filter((k) => snap.robots[k].bridge === 'connected' && snap.robots[k].pose).map((k) => FLEET[k].label)
+  const ready = (['r1', 'r2', 'r3'] as const)
+    .filter((k) => snap.robots[k].inMission && snap.robots[k].bridge === 'connected' && snap.robots[k].pose)
+    .map((k) => FLEET[k].label)
   const hot = snap.run.blockers.length === 0
   return {
     kind: 'start',
     hot,
     detail: hot
-      ? 'Bring-up is done: every bridge is connected, positions are arriving and the ALOHA is ready.'
-      : `Bring-up is nearly done: ${sayList(ready)} ${ready.length === 1 ? 'is' : 'are'} connected and placed${b.aloha ? ', the ALOHA is ready' : ''}. Missing:`,
+      ? `Bring-up is done: every nav bridge listens, positions are arriving${b.alohaIn ? ' and the ALOHA is ready' : ''}.`
+      : `${ready.length ? `${sayList(ready)} ${ready.length === 1 ? 'is' : 'are'} connected and placed${b.alohaIn && b.aloha ? ', the ALOHA is ready' : ''}. ` : ''}Missing:`,
     steps: [
       { label: `Bridges ${b.connected}/${b.of}`, status: b.connected === b.of ? 'done' : 'failed' },
       { label: `Positions ${b.placed}/${b.of}`, status: b.placed === b.of ? 'done' : 'failed' },
-      { label: 'ALOHA', status: b.aloha ? 'done' : 'failed' },
-      { label: 'R3 camera', status: b.camera ? 'done' : 'failed' },
+      ...(b.alohaIn ? [{ label: 'ALOHA', status: b.aloha ? ('done' as const) : ('failed' as const) }] : []),
     ],
   }
 }
@@ -113,22 +114,18 @@ function startTurn(snap: MissionSnapshot): OperatorTurn {
 const NEXT_VERDICT = 'Next decision · Verdict'
 
 function runningTurn(snap: MissionSnapshot, active: PhaseId | undefined): OperatorTurn {
-  const { camera, detection, robots } = snap
+  const { detection, robots } = snap
   if (snap.run.status === 'stopping') {
     return { kind: 'running', eyebrow: 'Stopping', question: 'Stopping: no new waypoints are sent.', detail: 'Each robot finishes the waypoint it is driving to; the ALOHA’s arms freeze where they are.' }
   }
   switch (active) {
-    case 'sweep': {
-      const noVideo = camera.state === 'retrying' || camera.state === 'gave-up'
+    case 'sweep':
       return {
         kind: 'running',
         eyebrow: NEXT_VERDICT,
-        question: noVideo ? 'Sweep running: no video from R3’s camera.' : detection ? 'Sweep running: R3 has found the box.' : 'Sweep running: R3’s camera is searching.',
-        detail: noVideo
-          ? 'The detector tries 3 times; without video the sweep ends early and the cordon starts. A warning, not a failure.'
-          : 'Cordon follows when all three routes are done; then the ALOHA drives in and photographs the contents. You give the verdict.',
+        question: detection ? 'Sweep running: R3 has found the box.' : 'Sweep running: every robot sweeps its zone.',
+        detail: 'Cordon follows when every route is done; then the ALOHA drives to the box and photographs the contents. You give the verdict.',
       }
-    }
     case 'cordon':
       return {
         kind: 'running',

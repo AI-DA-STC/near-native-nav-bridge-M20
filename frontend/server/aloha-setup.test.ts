@@ -1,6 +1,18 @@
+import { readFileSync } from 'node:fs'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { PromptChoice, RelayState, SetupPrompt } from '../src/shared/api/setup-protocol.ts'
-import { ALOHA_STACK, ALOHA_STEPS, pendingAlohaStep, runAlohaSetup, shortNode, stackChecks, tmuxAttached, type AlohaSetupContext } from './aloha-setup.ts'
+import {
+  ALOHA_STACK,
+  ALOHA_STEPS,
+  bridgeProgress,
+  bridgeYamlTopics,
+  pendingAlohaStep,
+  runAlohaSetup,
+  shortNode,
+  stackChecks,
+  tmuxAttached,
+  type AlohaSetupContext,
+} from './aloha-setup.ts'
 import type { SystemState } from './ros1-master.ts'
 import { Aborted, ShellTranscript, type Shell } from './shell-transcript.ts'
 
@@ -11,10 +23,16 @@ const ROBOT = { id: 'aloha', ip: IP, user: 'agilex' }
 const TMUX_DRAW =
   '\x1b[?1049h\x1b[H\x1b[2J\x1b[?25l\x1b[1;1Hroscore\r\n\x1b[40;1H\x1b[30m\x1b[42m[aloha] 0:roscore* 1:cameras- 2:arms  3:lidar  4:base  5:navigation  6:stream  7:dock\x1b[0m'
 
+const YAML_TOPICS = bridgeYamlTopics(readFileSync(new URL('../../aloha/bridge.yaml', import.meta.url), 'utf8'))
+
 interface AlohaScript {
   password: string
   /** start_aloha.sh's tmux session is already there */
   running: boolean
+  /** How long parameter_bridge takes per topic: a call or more to the ALOHA's master each */
+  bridgeEveryMs?: number
+  /** It stops making progress after this many topics */
+  bridgeStallsAfter?: number
 }
 
 class ScriptedAloha extends ShellTranscript implements Shell {
@@ -84,13 +102,21 @@ class ScriptedAloha extends ShellTranscript implements Shell {
     }
     if (line === 'aloha/bridge.sh' && this.place === 'laptop') {
       this.foreground = 'bridge'
-      return this.later(
-        () =>
-          this.append(
-            "Trying to create bidirectional bridge for topic '/scan' with ROS 2 type 'sensor_msgs/msg/LaserScan'\r\n[INFO] [1795160540.1] [ros_bridge]: create bidirectional bridge for topic /scan\r\n",
-          ),
-        200,
+      // bridge.yaml's topics one by one, as parameter_bridge prints them, then its services and the first messages
+      const every = this.script.bridgeEveryMs ?? 50
+      const topics = YAML_TOPICS.slice(0, this.script.bridgeStallsAfter ?? YAML_TOPICS.length)
+      topics.forEach((topic, i) =>
+        this.later(() => {
+          if (this.foreground !== 'bridge') return
+          this.append(`Trying to create bidirectional bridge for topic '${topic}' with ROS 2 type 'some/msg/Type'\r\n[INFO] [1795160540.${i}] [ros_bridge]: create bidirectional bridge for topic ${topic}\r\n`)
+        }, 200 + i * every),
       )
+      if (topics.length === YAML_TOPICS.length) {
+        this.later(() => {
+          if (this.foreground === 'bridge') this.append("The parameter 'services_1_to_2' either doesn't exist or isn't an array\r\n")
+        }, 300 + topics.length * every)
+      }
+      return
     }
     if (line === 'exit' && this.place === 'aloha') {
       this.place = 'laptop'
@@ -108,7 +134,7 @@ function master(without: string[] = []): SystemState {
   return { publishers, subscribers: new Map() }
 }
 
-function setUp(script: Partial<AlohaScript> = {}, answers: PromptChoice[] = [], options: { down?: string[]; bridged?: boolean } = {}) {
+function setUp(script: Partial<AlohaScript> = {}, answers: PromptChoice[] = [], options: { down?: string[]; bridged?: boolean; masterMs?: number } = {}) {
   const aloha: AlohaScript = { password: 'agx', running: false, ...script }
   const robot = new ScriptedAloha(aloha)
   const laptop = new ScriptedAloha(aloha)
@@ -143,6 +169,7 @@ function setUp(script: Partial<AlohaScript> = {}, answers: PromptChoice[] = [], 
       bridging = true
     },
     masterState: async () => {
+      if (options.masterMs) await new Promise((resolve) => setTimeout(resolve, options.masterMs))
       if (!aloha.running) throw new Error('connect ECONNREFUSED')
       return master(options.down)
     },
@@ -212,6 +239,32 @@ describe('the ALOHA’s setup', () => {
     expect(t.step('bridge').status).toBe('pending')
   })
 
+  it('waits for a bridge that is slow to start, as long as it bridges topic after topic, and says the link is slow', async () => {
+    // 4 s a topic, as over the ALOHA's slow WiFi: two minutes for bridge.yaml
+    const t = setUp({ bridgeEveryMs: 4000 }, [], { masterMs: 700 })
+    const run = runAlohaSetup(t.ctx)
+    await vi.advanceTimersByTimeAsync(60_000)
+    expect(t.step('bridge')).toMatchObject({ status: 'active', detail: expect.stringMatching(/^Bridging \d+ of 28 topics: the ALOHA answers slowly \(0\.7 s a call to its ROS master\)$/) })
+    await finish(run)
+    expect(t.step('bridge').status).toBe('done')
+    expect(t.step('bridge').detail).toBe('ROS_DOMAIN_ID=1 · /scan at 10.0 Hz · the ALOHA answers slowly (0.7 s a call to its ROS master)')
+    expect(YAML_TOPICS).toHaveLength(28)
+  })
+
+  it('gives up on a bridge that stops bridging, saying where it stopped', async () => {
+    const t = setUp({ bridgeStallsAfter: 10 })
+    await expect(finish(runAlohaSetup(t.ctx))).rejects.toThrow(
+      `aloha/bridge.sh bridged nothing more for 30 s, after 10 of 28 topics (the last: ${YAML_TOPICS[9]})`,
+    )
+    expect(t.step('bridge').checks.map((c) => [c.label, c.ok])).toEqual([
+      ['/scan', true],
+      ['/map', true],
+      ['/move_base/status', true],
+      ['/puppet/joint_left', null],
+      ['/aloha/dock/result', null],
+    ])
+  })
+
   it('keeps a bridge already running on ROS_DOMAIN_ID=1', async () => {
     const t = setUp({}, [], { bridged: true })
     await finish(runAlohaSetup(t.ctx))
@@ -233,6 +286,18 @@ describe('the ALOHA’s setup', () => {
 })
 
 describe('reading the ALOHA', () => {
+  it('reads what parameter_bridge got through, from its own lines', () => {
+    const out = [
+      "Trying to create bidirectional bridge for topic '/tf' with ROS 2 type 'tf2_msgs/msg/TFMessage'",
+      '[INFO] [1795166125.86] [ros_bridge]: create bidirectional bridge for topic /tf',
+      "failed to create bidirectional bridge for topic '/puppet/arm_status_left' with ROS 2 type 'piper_msgs/msg/PiperStatusMsg': No template specialization for the pair",
+    ].join('\n')
+    expect(bridgeProgress(out)).toEqual({ created: ['/tf'], failed: ['/puppet/arm_status_left'], settled: false })
+    expect(bridgeProgress(`${out}\nThe parameter 'services_1_to_2' either doesn't exist or isn't an array`).settled).toBe(true)
+    expect(YAML_TOPICS.slice(0, 3)).toEqual(['/tf', '/tf_static', '/map'])
+    expect(YAML_TOPICS.at(-1)).toBe('/aloha/dock/result')
+  })
+
   it('knows when the terminal shows start_aloha.sh’s tmux', () => {
     expect(tmuxAttached(`agilex@agilex:~$ bash start_aloha.sh\n[aloha] 0:roscore* 1:cameras-`)).toBe(true)
     expect(tmuxAttached(`[aloha] 0:roscore* 1:cameras-\n[detached (from session aloha)]\nagilex@agilex:~$ `)).toBe(false)

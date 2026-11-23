@@ -1,11 +1,12 @@
-/* PlanPreview: new this round. The selected plan's four phases side by side on one extent, or the phase being recorded
-   alone, large. */
+/* PlanPreview: sketches of the selected plan's phases, without the map. The dogs' four on one extent, the ALOHA's route
+   on its own, and a note in the sixth cell. */
 .cc-preview { min-height: 0; }
-.cc-preview > .cc-panel__body { display: grid; grid-template-rows: minmax(0, 1fr) auto; gap: 8px; min-height: 0; }
-.cc-preview__grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: repeat(2, minmax(0, 1fr)); gap: 12px; min-height: 0; }
-.cc-preview__one { display: grid; grid-template-rows: minmax(0, 1fr); min-height: 0; }
+.cc-preview > .cc-panel__body { display: grid; min-height: 0; }
+.cc-preview__grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); grid-template-rows: repeat(2, minmax(0, 1fr)); gap: 12px; min-height: 0; }
 .cc-preview__legend { display: inline-flex; align-items: center; gap: 10px; }
+.cc-preview__robot { display: inline-flex; align-items: center; gap: 5px; font: 600 12px/1 var(--font-mono); color: var(--text-2); }
+.cc-preview__robot::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: var(--rc); }
 .cc-preview__box { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--text-2); }
 .cc-preview__box::before { content: ''; width: 11px; height: 7px; border: 1.5px solid var(--text-2); border-radius: 1px; }
 .cc-preview__empty { display: grid; place-items: center; margin: 0; color: var(--text-muted); }
-.cc-preview__foot { margin: 0; color: var(--text-muted); font-size: 12px; }
+.cc-preview__foot { align-self: end; margin: 0; color: var(--text-muted); font-size: 12px; line-height: 17px; }

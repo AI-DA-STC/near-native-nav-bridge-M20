@@ -22,13 +22,15 @@ interface RobotScript {
   pulls: string[]
   /** Publishers on /ODOM_relayed_741 before the launch */
   publishers: number
+  /** Listeners on /goal_pose_741 before the nav bridge: one started by hand */
+  goalListeners: number
 }
 
 class ScriptedTerminal extends ShellTranscript implements Shell {
   readonly typed: string[] = []
   place: Place = 'laptop'
   private awaiting: 'ssh' | 'su' | null = null
-  private foreground: 'launch' | 'hz' | 'rviz' | null = null
+  private foreground: 'launch' | 'hz' | 'rviz' | 'nav' | null = null
   private timers: Array<ReturnType<typeof setTimeout>> = []
   private readonly script: RobotScript
 
@@ -115,6 +117,16 @@ class ScriptedTerminal extends ShellTranscript implements Shell {
       for (let i = 1; i <= 5; i++) this.later(() => this.print(`average rate: 10.0${i}\r\n\tmin: 0.098s max: 0.102s std dev: 0.001s window: ${10 * i}\r\n`), 1000 * i)
       return
     }
+    if (line === README.navBridge(IP) && at === 'laptop') {
+      this.foreground = 'nav'
+      return this.later(
+        () =>
+          this.print(
+            '[INFO] [1763611200.100000000] [goal_bridge_741]: Goals on /goal_pose_741, results on /goal_result_741, waypoint arrows on /waypoint_markers_741\r\n',
+          ),
+        300,
+      )
+    }
     if (line.startsWith('rviz2 -d ') && line.endsWith(README.rviz('741').slice('rviz2 '.length)) && at === 'laptop') {
       this.foreground = 'rviz'
       return this.print('[INFO] [1763611200.000000000] [rviz2]: Stereo is NOT SUPPORTED\r\n')
@@ -148,11 +160,13 @@ class ScriptedTerminal extends ShellTranscript implements Shell {
 }
 
 function setUp(script: Partial<RobotScript> = {}, answers: PromptChoice[] = [], typedPassword = "'") {
-  const robotScript: RobotScript = { password: "'", pulls: [], publishers: 0, ...script }
+  const robotScript: RobotScript = { password: "'", pulls: [], publishers: 0, goalListeners: 0, ...script }
   // The robot's password as saved: an answer to the password prompt replaces it
   let saved = typedPassword
   const robot = new ScriptedTerminal(robotScript)
   const laptop = new ScriptedTerminal(robotScript)
+  const navTerminal = new ScriptedTerminal(robotScript)
+  const nav: { state: RelayState } = { state: 'none' }
   const steps = M20_STEPS.map((key) => pendingStep(key, ROBOT))
   const asked: SetupPrompt[] = []
   const relay: { state: RelayState; rate: number | null } = { state: 'none', rate: null }
@@ -199,9 +213,15 @@ function setUp(script: Partial<RobotScript> = {}, answers: PromptChoice[] = [], 
       const timer = setTimeout(() => onPose({ x: 1.25, y: -0.5, yaw: 90, at: Date.now() }), 100)
       return () => clearTimeout(timer)
     },
+    navShell: () => navTerminal,
+    setNav: (state) => {
+      nav.state = state
+    },
+    navLaunched: () => undefined,
+    goalListeners: async () => robotScript.goalListeners,
     sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
   }
-  return { ctx, robot, laptop, steps, asked, relay, abort, step: ctx.step }
+  return { ctx, robot, laptop, navTerminal, nav, steps, asked, relay, abort, step: ctx.step }
 }
 
 /** Runs fake time forward until the promise settles */
@@ -245,10 +265,28 @@ describe('an M20’s setup', () => {
       'ros2 topic hz /ODOM_relayed_741',
       'rviz2 -d frontend/server/rviz/robot_741.rviz --ros-args -r /tf:=/tf_relayed -r /tf_static:=/tf_static_relayed -r /goal_pose:=/goal_pose_741 -r /initialpose:=/initialpose_relayed_741',
     ])
-    expect(t.steps.map((s) => s.status)).toEqual(['done', 'done', 'done', 'done', 'done', 'done'])
+    // f. the nav bridge, README Multi-robot Step 1, in its own terminal
+    expect(t.navTerminal.typed).toEqual([
+      'export ROS_DOMAIN_ID=0',
+      'export FASTRTPS_DEFAULT_PROFILES_FILE=fastdds_profile.xml',
+      'source install/setup.bash',
+      'export ROBOT_ID=741',
+      'ros2 run nav_cmd_bridge nav_cmd_bridge bridge --ip 192.168.123.100',
+    ])
+    expect(t.steps.map((s) => s.status)).toEqual(['done', 'done', 'done', 'done', 'done', 'done', 'done'])
     expect(t.steps.flatMap((s) => s.commands.map((c) => c.status))).not.toContain('pending')
     expect(t.robot.place).toBe('container')
     expect(t.relay).toEqual({ state: 'running', rate: 10.02 })
+    expect(t.nav.state).toBe('running')
+    expect(t.step('nav').detail).toBe('Listening on /goal_pose_741: the mission’s goals reach 741 through it')
+  })
+
+  it('keeps a nav bridge already listening on /goal_pose_<id>, without starting a second one', async () => {
+    const t = setUp({ goalListeners: 1 }, ['localized'])
+    await finish(runM20Setup(t.ctx))
+    expect(t.navTerminal.typed).toEqual([])
+    expect(t.nav.state).toBe('kept')
+    expect(t.step('nav').commands.map((c) => c.status)).toEqual(['skipped', 'skipped', 'skipped', 'skipped', 'skipped'])
   })
 
   it('reports what each step found', async () => {

@@ -9,7 +9,7 @@ import { command, settle, typeChecked } from './step-shell.ts'
 /* Recording one robot's waypoints for one phase, as the README's "Recording demo waypoints" does it by hand: in a
  * laptop terminal with the Step 3 exports, `ONLY="<id>" demo/record_waypoints.sh <phase>` into the session's plan
  * folder, then fleet_management.py's own keys: ENTER records the robot's pose, u undoes, c clears, w saves, Ctrl+C quits
- * without saving. */
+ * without saving. A 2D Goal Pose arrow drawn in its RViz (on /fleet_goal) is recorded too: both print the waypoint. */
 
 const KEYS: Readonly<Record<RecorderKey, string>> = { record: '\r', undo: 'u\r', clear: 'c\r', save: 'w\r', cancel: '\x03' }
 
@@ -21,7 +21,8 @@ export interface RecorderDeps {
   terminal(): Shell & { readonly id: string; setActivity(activity: string): void }
   /** The plan folder as the terminal types it: relative to the package root */
   folderForShell(plan: string): string
-  watchOdom(robot: string, onPose: (pose: PoseFact) => void): () => void
+  /** The robot's pose as the recording reads it: /ODOM_relayed_<id>, or the ALOHA's /amcl_pose */
+  watchPose(robot: string, phase: RoutePhase, onPose: (pose: PoseFact) => void): () => void
   onChange(): void
   onSaved(plan: string, recording: PlanRecording): void
 }
@@ -67,7 +68,7 @@ export class RouteRecorder {
     const from = shell.mark()
     shell.write(`${text}\r`)
     let lastPose = 0
-    this.stopPose = this.deps.watchOdom(robot, (pose) => {
+    this.stopPose = this.deps.watchPose(robot, phase, (pose) => {
       if (!this.facts || pose.at - lastPose < POSE_EVERY_MS) return
       lastPose = pose.at
       this.facts.pose = pose

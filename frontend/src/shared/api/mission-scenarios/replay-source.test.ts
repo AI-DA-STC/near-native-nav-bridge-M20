@@ -77,7 +77,6 @@ describe('the brief’s 16 states', () => {
 
   it('8: no video from R3, retrying 2/3, and no finding', () => {
     const snap = open(8)
-    expect(snap.camera).toMatchObject({ state: 'retrying', attempt: 2, of: 3 })
     expect(snap.detection).toBeNull()
     expect(snap.warnings.map((w) => w.text)).toEqual(["No video from R3's camera, retrying 2/3"])
   })

@@ -25,7 +25,7 @@ export interface CommandCenterPageProps {
  * what comes next, whether it is the operator's turn, where each robot is, what has been found, what is wrong, history. */
 export function CommandCenterPage({ startControl }: CommandCenterPageProps) {
   const snap = useMissionSnapshot()
-  const site = useSiteMap()
+  const site = useSiteMap(snap?.siteVersion)
   const compact = useCompactLayout()
   const mapView = useMapView()
   const [lightbox, setLightbox] = useState<ImageView | null>(null)

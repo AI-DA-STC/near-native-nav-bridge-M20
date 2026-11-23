@@ -78,7 +78,7 @@ function slotOf(dog: DogKey): { p: Pt; yaw: number } {
 }
 
 function cordonOf(dog: DogKey): Pt {
-  if (dog === 'r3') return [SITE.routes.watch.x, SITE.routes.watch.y]
+  if (dog === 'r3') return [SITE.routes.watch!.x, SITE.routes.watch!.y]
   const point = SITE.routes.cordon.find((c) => c.robot === dog)!
   return [point.x, point.y]
 }
@@ -246,7 +246,7 @@ const NOT_DOCKED = { p: [4.31, -0.12] as Pt, yaw: -70 }
 
 /** Where the ALOHA is at second s, with its docking and arms; `dockingFails` is the brief's state 15 */
 export function alohaAt(s: number, dockingFails = false): AlohaMotion {
-  const { start, path, dock } = SITE.routes.aloha
+  const { start, path, dock } = SITE.routes.aloha!
   const idle = { docking: { attempt: 0, state: 'idle' as const }, arms: { pose: 0, state: 'idle' as const }, holdEndsAt: null }
   const dockPoint: Pt = [dock.x, dock.y]
   const toDock = (p: Pt, legLength: number): RouteAt => ({

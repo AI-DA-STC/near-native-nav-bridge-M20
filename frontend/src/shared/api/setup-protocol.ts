@@ -12,7 +12,7 @@ export type Presence = 'online' | 'offline' | 'unknown'
 
 /** An M20: log in, then the README's steps a–e (image … localize). The ALOHA: log in, start_aloha.sh, the stack it
  * starts, then aloha/bridge.sh on this workstation. */
-export type SetupStepKey = 'login' | 'image' | 'relay' | 'laptop' | 'topics' | 'localize' | 'start' | 'stack' | 'bridge'
+export type SetupStepKey = 'login' | 'image' | 'relay' | 'laptop' | 'topics' | 'localize' | 'nav' | 'start' | 'stack' | 'bridge'
 
 /** pending ○ · active ▶ · done ✓ · failed ✕ · stopped ■ · skipped – · decision ◆ (the operator's turn) */
 export type SetupStepStatus = 'pending' | 'active' | 'done' | 'failed' | 'stopped' | 'skipped' | 'decision'
@@ -110,17 +110,20 @@ export interface RobotSetupFacts {
   lastSeen: Ms | null
   setup: {
     state: SetupRunState
-    /** Six steps for an M20, four for the ALOHA */
+    /** Seven steps for an M20, four for the ALOHA */
     steps: SetupStepFacts[]
     startedAt: Ms | null
     endedAt: Ms | null
   }
   /** An M20's relays.launch.py on the robot; the ALOHA's aloha/bridge.sh on this workstation */
   relay: { state: RelayState; since: Ms | null; rateHz: number | null }
+  /** An M20's nav bridge on this workstation (README Multi-robot Step 1), which run_demo.sh's goals go through; the
+   * ALOHA has none */
+  nav: { state: RelayState; since: Ms | null }
   /** When its setup last finished, kept across server restarts */
   lastReadyAt: Ms | null
   /** Its terminal sessions, when open */
-  sessions: { robot: string | null; laptop: string | null }
+  sessions: { robot: string | null; laptop: string | null; nav: string | null }
 }
 
 /** A robot from the README's table that is not added yet, with whether it answers */
@@ -134,8 +137,9 @@ export interface RobotSuggestion {
 }
 
 /** robot: ssh to the robot (its relay, or start_aloha.sh's tmux) · laptop: this workstation's checks, rviz2, the
- * ALOHA's bridge · routes: demo/record_waypoints.sh */
-export type TerminalRole = 'robot' | 'laptop' | 'routes'
+ * ALOHA's bridge · nav: an M20's nav bridge · routes: demo/record_waypoints.sh · rviz-dogs, rviz-aloha: the RViz that
+ * recording draws in · mission: demo/run_demo.sh */
+export type TerminalRole = 'robot' | 'laptop' | 'nav' | 'routes' | 'rviz-dogs' | 'rviz-aloha' | 'mission'
 
 export interface TerminalSessionFacts {
   id: string
@@ -152,8 +156,8 @@ export interface TerminalSessionFacts {
 // ---------------------------------------------------------------------------------------------------------------------
 // Routes: the mission plan's waypoints, recorded with demo/record_waypoints.sh into dated folders of demo/waypoints
 
-/** The demo's phases, in run_demo.sh's order */
-export type RoutePhase = 'patrol' | 'formation' | 'sweep' | 'cordon'
+/** The demo's phases, in run_demo.sh's order; aloha is the ALOHA's route to the box (aloha.json) */
+export type RoutePhase = 'patrol' | 'formation' | 'sweep' | 'cordon' | 'aloha'
 
 /** As the plan's JSON keeps it: metres in the map frame, yaw in radians */
 export interface WaypointFact {
@@ -165,6 +169,8 @@ export interface WaypointFact {
 export interface PlanPhaseFacts {
   /** Robot ID → waypoints, for every robot in the phase's file */
   robots: Record<string, number>
+  /** The file's robots in its own order (an object's integer-like keys lose it): fleet_management.py colours by it */
+  order: string[]
   /** null: the phase is fine for the mission */
   problem: string | null
 }
@@ -185,8 +191,8 @@ export interface PlanSummary {
   basedOn: string | null
   recorded: PlanRecording[]
   phases: Record<RoutePhase, PlanPhaseFacts>
-  /** aloha.json has the ALOHA's pose at the box */
-  aloha: boolean
+  /** Robots its session left out of the plan it started from: they were not added in Setup */
+  leftOut: string[]
   /** manipulator.json's arm poses, or null when it is missing */
   armPoses: number | null
   /** What keeps it from being used, in words; empty: run_demo.sh can run it */
@@ -217,7 +223,7 @@ export interface RecordingFacts {
   waypoints: WaypointFact[]
   /** What fleet_management.py said last that matters: "Not recorded: no odometry yet on /ODOM_relayed_741" */
   message: { text: string; tone: 'info' | 'warn' | 'fault' } | null
-  /** Where the robot is now, from /ODOM_relayed_<id> (yaw in degrees) */
+  /** Where the robot is now, from /ODOM_relayed_<id> or the ALOHA's /amcl_pose (yaw in degrees) */
   pose: PoseFact | null
   startedAt: Ms
   endedAt: Ms | null
@@ -231,7 +237,12 @@ export interface RouteSessionFacts {
   recording: RecordingFacts | null
   /** The Routes terminal, once opened */
   terminal: string | null
+  /** The RViz windows recording draws in: the dogs' (ROS_DOMAIN_ID=0) and the ALOHA's (1) */
+  rviz: Record<RvizWhich, RvizState>
 }
+
+export type RvizWhich = 'dogs' | 'aloha'
+export type RvizState = 'closed' | 'opening' | 'open'
 
 /** The operator's way through the console: Setup, then Routes, then the Command center */
 export interface FlowFacts {
@@ -250,6 +261,8 @@ export interface SetupSnapshot {
   /** Newest first */
   plans: PlanSummary[]
   session: RouteSessionFacts | null
+  /** Who takes part in each phase: the robots added in Setup, in the lobby's order */
+  participants: Record<RoutePhase, string[]>
 }
 
 export type SetupCommand =
@@ -271,6 +284,8 @@ export type SetupCommand =
   | { type: 'new-session'; basedOn: string | null; utcOffsetMinutes: number }
   | { type: 'record-start'; phase: RoutePhase; robot: string; append: boolean }
   | { type: 'record-key'; key: RecorderKey }
+  /** Opens that RViz again, after it was closed */
+  | { type: 'open-rviz'; which: RvizWhich }
   /** Keeps the session's plan (deleted when nothing was recorded) */
   | { type: 'finish-session' }
   /** Deletes the session's plan folder */

@@ -11,7 +11,7 @@ import { StepFailed, command, fail, runSteps, settle, type, typeChecked } from '
  * order. Each command is typed once the shell's prompt is back; what it printed says whether it worked. A step that
  * needs the operator (the registry, a relay already running, the localization) shows a prompt and waits. */
 
-export const M20_STEPS: readonly SetupStepKey[] = ['login', 'image', 'relay', 'laptop', 'topics', 'localize']
+export const M20_STEPS: readonly SetupStepKey[] = ['login', 'image', 'relay', 'laptop', 'topics', 'localize', 'nav']
 
 export { StepFailed }
 
@@ -30,6 +30,13 @@ export interface M20SetupContext extends LoginContext {
   watchInitialPose(onPose: (pose: PoseFact) => void): () => void
   /** Writes the robot's RViz config (rviz-config.ts) before rviz2 is typed */
   writeRvizConfig(): void
+  /** The nav terminal: this robot's nav bridge */
+  navShell(): Shell
+  setNav(state: RelayState): void
+  /** The nav bridge was launched in the nav terminal at this position: watch it from there */
+  navLaunched(from: number): void
+  /** How many listen on /goal_pose_<id> already: a nav bridge started by hand. null: could not tell. */
+  goalListeners(): Promise<number | null>
   sleep(ms: number): Promise<void>
 }
 
@@ -54,6 +61,14 @@ export function scriptOf(key: SetupStepKey, robot: RobotLogin): SetupStepFacts['
       return [command(README.topicList, 'laptop'), command(README.topicHz(robot.id), 'laptop')]
     case 'localize':
       return [command(rvizWithConfig(robot.id, rvizConfigPath(robot.id)), 'laptop')]
+    case 'nav':
+      return [
+        command(README.exportDomain, 'laptop'),
+        command(README.exportProfile, 'laptop'),
+        command(README.sourceInstall, 'laptop'),
+        command(README.exportRobotId(robot.id), 'laptop'),
+        command(README.navBridge(robot.ip), 'laptop'),
+      ]
     default:
       return []
   }
@@ -76,7 +91,7 @@ export function pendingStep(key: SetupStepKey, robot: RobotLogin): SetupStepFact
 
 /** Runs the steps from `from` to the end. A failure marks its step and throws; Aborted means the operator stopped. */
 export async function runM20Setup(ctx: M20SetupContext, from: SetupStepKey = 'login'): Promise<void> {
-  await runSteps(ctx, M20_STEPS, { login, image, relay, laptop, topics, localize }, (key) => pendingStep(key, ctx.robot), from)
+  await runSteps(ctx, M20_STEPS, { login, image, relay, laptop, topics, localize, nav }, (key) => pendingStep(key, ctx.robot), from)
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -381,4 +396,58 @@ async function localize(ctx: M20SetupContext) {
   step.detail = p
     ? `Localized at x ${p.x.toFixed(2)}, y ${p.y.toFixed(2)}, heading ${Math.round(p.yaw)}°`
     : 'Localized (confirmed without a new pose estimate)'
+}
+
+/** How long the nav bridge has to say it listens */
+const NAV_PATIENCE_MS = 30_000
+
+/** f. README Multi-robot Step 1: this robot's nav bridge here, which run_demo.sh's goals go through. It moves nothing by
+ * itself: it sends the robot a heartbeat every second until a goal arrives on /goal_pose_<id>. */
+async function nav(ctx: M20SetupContext) {
+  const shell = ctx.navShell()
+  const step = ctx.step('nav')
+  const exports = step.commands.slice(0, -1)
+  const bridgeCmd = step.commands[step.commands.length - 1]
+  const goals = `/goal_pose_${ctx.robot.id}`
+  await settle(shell, ctx.signal)
+
+  // One started by hand already listens: a second would drive every goal twice
+  const listening = await ctx.goalListeners()
+  if (listening) {
+    for (const c of step.commands) c.status = 'skipped'
+    bridgeCmd.note = `a bridge already listens on ${goals}`
+    ctx.setNav('kept')
+    step.detail = `Kept the nav bridge already listening on ${goals} (its output is not in this console)`
+    ctx.changed()
+    return
+  }
+
+  for (const c of exports) await typeChecked(ctx, shell, c, 30_000)
+  bridgeCmd.status = 'running'
+  step.detail = 'Starting the nav bridge'
+  ctx.setNav('starting')
+  ctx.setActivity('nav', bridgeCmd.text)
+  ctx.changed()
+  const from = shell.mark()
+  shell.write(`${bridgeCmd.text}\r`)
+  // "[goal_bridge_741]: Goals on /goal_pose_741, results on /goal_result_741, …" once it listens
+  const listens = new RegExp(`Goals on ${goals.replaceAll('/', '\\/')}\\b`)
+  const ended = (t: string) => promptAtEnd(afterEcho(t)) !== null
+  try {
+    await shell.waitFor((t) => (listens.test(t) || ended(t) ? true : null), { from, timeoutMs: NAV_PATIENCE_MS, signal: ctx.signal, what: `the nav bridge to listen on ${goals}` })
+  } catch (error) {
+    if (!(error instanceof WaitTimeout)) throw error
+    throw fail(bridgeCmd, `The nav bridge did not say it listens on ${goals} within ${NAV_PATIENCE_MS / 1000} s`)
+  }
+  const said = afterEcho(shell.textSince(from))
+  if (!listens.test(said)) {
+    ctx.setNav('exited')
+    throw fail(bridgeCmd, errorLine(said) ?? lastLine(said.split('\n').slice(0, -1).join('\n')) ?? 'The nav bridge ended')
+  }
+  ctx.navLaunched(from)
+  bridgeCmd.status = 'done'
+  bridgeCmd.note = `listening on ${goals}`
+  ctx.setNav('running')
+  step.detail = `Listening on ${goals}: the mission’s goals reach ${ctx.robot.id} through it`
+  ctx.changed()
 }

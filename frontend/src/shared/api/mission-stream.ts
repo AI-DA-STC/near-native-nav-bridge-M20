@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from 'react'
-import type { RobotKey } from '@/shared/config'
+import type { RobotKey } from '../config/fleet.ts'
 
 /* The contract between the mission backend and the browser. The backend turns the mission script's output and the
  * robots' topics into snapshots; the browser only displays them and sends the operator's commands. These are transport
@@ -69,6 +69,8 @@ export interface RouteFacts {
 export interface RobotFacts {
   /** The ID the scripts use ("741"), overridable on the robots' side */
   id: string
+  /** Added in Setup and named in the confirmed plan; a role without a robot is not in this mission */
+  inMission: boolean
   /** ROS domain: the dogs are on 0, the ALOHA on 1 */
   domain: number
   bridge: 'connected' | 'disconnected'
@@ -82,6 +84,8 @@ export interface RobotFacts {
 }
 
 export interface AlohaFacts extends RobotFacts {
+  /** Its pose is on the dogs' map: false until its own map is aligned with theirs (aloha/align_map.py) */
+  sameMap: boolean
   /** move_base: not answering yet, or ready */
   nav: 'waiting' | 'ready'
   /** Docking at the box: correction n of 3, then docked, or failed with the reason */
@@ -114,20 +118,6 @@ export interface PlanFacts {
   steps: Array<{ robot: RobotKey; items: string[] }>
   createdAt: Ms
   decidedAt: Ms | null
-}
-
-export interface CameraFacts {
-  /** The robot whose front camera the detector watches */
-  robot: RobotKey
-  state: 'connecting' | 'live' | 'retrying' | 'gave-up'
-  /** retrying 2/3: the detector gives up after 3 tries */
-  attempt: number
-  of: number
-  frame: { url: string; at: Ms } | null
-  /** The detector's box on the current frame */
-  box: (FrameBox & { confidence: number }) | null
-  /** Whether the detector is looking for the box (from the sweep on) */
-  searching: boolean
 }
 
 export interface DetectionFacts {
@@ -202,7 +192,6 @@ export interface MissionSnapshot {
   /** Every plan of this run, oldest first, the denied ones included */
   plans: PlanFacts[]
   robots: { r1: RobotFacts; r2: RobotFacts; r3: RobotFacts; aloha: AlohaFacts }
-  camera: CameraFacts
   detection: DetectionFacts | null
   contents: ContentsFacts
   verdict: { value: 'anomaly' | 'clear'; at: Ms } | null
@@ -212,6 +201,8 @@ export interface MissionSnapshot {
   timeline: MissionEvent[]
   /** The mission script's raw output, line by line, as printed */
   output: string[]
+  /** Changes when the site map does (the plan in use, the SLAM map, the robots' roles): fetch it again */
+  siteVersion?: string
 }
 
 /** What the operator can ask of the mission */
@@ -243,13 +234,18 @@ export interface SiteMap {
   free: Pt[][]
   walls: Array<{ points: Pt[]; closed?: boolean } | { rect: [x: number, y: number, w: number, h: number] }>
   zones: Array<{ id: string; label: string; points: Pt[] }>
+  /** The box the mission is about, where it is known to be (fleet_management.py's BOX_POSE): yaw in degrees */
+  box: { x: number; y: number; yaw: number; w: number; h: number } | null
   routes: {
     patrol: Partial<Record<RobotKey, Pt[]>>
+    /** A slot for each dog in the formation */
     slots: Array<{ n: number; robot: RobotKey; x: number; y: number; yaw: number }>
     sweep: Partial<Record<RobotKey, Pt[]>>
     cordon: Array<{ robot: RobotKey; x: number; y: number }>
-    watch: { robot: RobotKey; x: number; y: number }
-    aloha: { start: Pt; path: Pt[]; dock: { x: number; y: number; yaw: number } }
+    /** Where R3 watches the box from: the end of its sweep */
+    watch: { robot: RobotKey; x: number; y: number } | null
+    /** null while the ALOHA's map is not the dogs' */
+    aloha: { start: Pt; path: Pt[]; dock: { x: number; y: number; yaw: number } } | null
   }
 }
 

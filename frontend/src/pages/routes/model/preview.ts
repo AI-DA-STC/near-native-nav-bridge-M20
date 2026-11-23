@@ -1,7 +1,8 @@
-import type { PlanRoutes, PoseFact, WaypointFact } from '@/shared/api'
+import type { PlanRoutes, RoutePhase, WaypointFact } from '@/shared/api'
 import { FLEET, ROBOT_KEYS } from '@/shared/config'
 
-/* The preview's ground: one extent for every phase of a plan, so the four maps line up, in map-frame metres */
+/* The sketches' ground: one extent for the dogs' phases of a plan, so the four line up, and another for the ALOHA's
+ * route (its own map), in map-frame metres */
 
 export interface Extent {
   xMin: number
@@ -27,13 +28,23 @@ export function boxCorners(): Array<[number, number]> {
   ].map(([x, y]) => [BOX.x + c * x - s * y, BOX.y + s * x + c * y])
 }
 
-/** Every waypoint, the box, and the extras (a robot's pose, waypoints being recorded), with a metre around them */
-export function extentOf(routes: PlanRoutes | null, extra: ReadonlyArray<{ x: number; y: number }> = []): Extent {
-  const points: Array<{ x: number; y: number }> = [...extra, ...boxCorners().map(([x, y]) => ({ x, y }))]
-  for (const phase of Object.values(routes?.phases ?? {})) for (const route of Object.values(phase ?? {})) points.push(...route)
-  const xs = points.map((p) => p.x)
-  const ys = points.map((p) => p.y)
-  return { xMin: Math.min(...xs) - 1, xMax: Math.max(...xs) + 1, yMin: Math.min(...ys) - 1, yMax: Math.max(...ys) + 1 }
+const MIN_SPAN_M = 10
+
+/** Every waypoint of these phases (one map's), with the box when `box`, and a metre around them */
+export function extentOf(routes: PlanRoutes | null, phases: readonly RoutePhase[], box: boolean): Extent {
+  const points: Array<{ x: number; y: number }> = box ? boxCorners().map(([x, y]) => ({ x, y })) : []
+  for (const phase of phases) for (const route of Object.values(routes?.phases[phase] ?? {})) points.push(...route)
+  if (!points.length) points.push({ x: 0, y: 0 })
+  const span = (values: number[]): [number, number] => {
+    const lo = Math.min(...values)
+    const hi = Math.max(...values)
+    // A metre around them, and 10 m across at least: a route of one waypoint is not drawn metres wide
+    const half = Math.max((hi - lo) / 2 + 1, MIN_SPAN_M / 2)
+    return [(lo + hi) / 2 - half, (lo + hi) / 2 + half]
+  }
+  const [xMin, xMax] = span(points.map((p) => p.x))
+  const [yMin, yMax] = span(points.map((p) => p.y))
+  return { xMin, xMax, yMin, yMax }
 }
 
 /** The tip of a heading tick, `length` metres from the waypoint along its yaw (radians) */
@@ -41,13 +52,9 @@ export function headingTip(w: WaypointFact, length = 0.55): [number, number] {
   return [w.x + Math.cos(w.yaw) * length, w.y + Math.sin(w.yaw) * length]
 }
 
-/** A pose's yaw comes in degrees */
-export function poseWaypoint(pose: PoseFact): WaypointFact {
-  return { x: pose.x, y: pose.y, yaw: (pose.yaw * Math.PI) / 180 }
-}
-
-/** A robot's colour: the demo's identity for 741, 665, 738 */
+/** A robot's colour in the sketches: the demo's identity for 741, 665, 738 and the ALOHA (aloha.json's "aloha") */
 export function robotColor(id: string): string {
+  if (id === 'aloha') return FLEET.aloha.color
   const key = ROBOT_KEYS.find((k) => FLEET[k].kind === 'dog' && FLEET[k].id === id)
   return key ? FLEET[key].color : 'var(--text-muted)'
 }

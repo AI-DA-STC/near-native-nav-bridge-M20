@@ -8,6 +8,7 @@ const ARENA: Pt[] = [[-4.9, 0.8], [12, 0.8], [12, -11.9], [-4.9, -11.9]]
 export const SITE: SiteMap = {
   extent: { xMin: -5, xMax: 12, yMin: -12, yMax: 1 },
   occupancy: null,
+  box: { x: 4.0286, y: -1.7152, yaw: -2.2, w: 0.6, h: 0.38 },
   free: [ARENA],
   walls: [
     { points: ARENA, closed: true },

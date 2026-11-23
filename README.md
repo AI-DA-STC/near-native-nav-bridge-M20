@@ -181,7 +181,9 @@ WP1 → WP2 → WP3 → WP4).
 
 - Step 1 : Robot side (localization and relays, each robot with its own `ROBOT_ID`) and laptop Steps 1–4 and 6 for
 every robot.
-- Step 2 (optional) : rviz as in Multi-robot Step 2, to see the recorded waypoints on /fleet_goal_markers.
+- Step 2 (optional) : rviz as in Multi-robot Step 2, to see the recorded waypoints on /fleet_goal_markers. Each robot
+keeps one colour (its place in the phase's file), and the file's other routes show dimmed. A "2D Goal Pose" arrow drawn
+there (on /fleet_goal) is recorded as the current robot's next waypoint, like ENTER.
 - Step 3 : From the package root, in a terminal with the laptop Step 3 exports
 ```bash
 demo/record_waypoints.sh                  # all phases in order: patrol formation sweep cordon
@@ -189,6 +191,7 @@ demo/record_waypoints.sh sweep cordon     # only these phases
 ONLY="665" demo/record_waypoints.sh patrol   # only these robots; the other robots' waypoints in the file are kept
 ONLY="738" APPEND=1 demo/record_waypoints.sh sweep   # add waypoints after the ones 738 already has
 R1=741 R2=665 R3=738 PATROL_ROBOTS="741 665" demo/record_waypoints.sh   # ids (default 741 665 738, patrol: all three)
+demo/record_waypoints.sh aloha            # the Aloha's route to the box, with aloha/bridge.sh running
 ```
 - Step 4 : In each phase, for each robot in the table's order: drive it with its controller to each waypoint and press
 ENTER there; `n` + ENTER moves on to the next robot. After the last robot, `w` + ENTER saves
@@ -201,6 +204,7 @@ ENTER there; `n` + ENTER moves on to the next robot. After the last robot, `w` +
 | formation | R1 R2 R3 | 1 per robot: line slots 1, 2, 3 |
 | sweep | R1 R2 R3 | zone 1, 2, 3 waypoints in order; R3's last next to the box |
 | cordon | R1 R2 | 1 per robot: cordon point at zone 3 |
+| aloha | the Aloha (`aloha`, pose from /amcl_pose on ROS_DOMAIN_ID=1) | its route to the box in order; it docks onto the last one. For rviz, `ROS_DOMAIN_ID=1 rviz2 --ros-args -r /goal_pose:=/fleet_goal` with /map and /fleet_goal_markers |
 
 # Running the demo (demo/run_demo.sh)
 
@@ -214,6 +218,7 @@ every robot.
 - Step 5 : From the package root, in a terminal with the laptop Step 3 exports
 ```bash
 demo/run_demo.sh
+DETECT=0 demo/run_demo.sh   # without R3's camera: no box detection, every robot sweeps its whole route
 ```
 - Step 6 : In the same terminal
 

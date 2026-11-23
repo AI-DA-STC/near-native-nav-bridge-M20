@@ -57,17 +57,18 @@ function timeOf(phase: PhaseFacts, snap: MissionSnapshot): string | null {
   return phase.endedAt === null ? null : formatDuration(phase.endedAt - phase.startedAt)
 }
 
-/** The bring-up before Start: bridges, positions, the ALOHA and R3's camera */
+/** The bring-up before Start, for the robots in this mission: nav bridges, positions, the ALOHA */
 export function bringUpOf(snap: MissionSnapshot) {
   const { robots, serverTime, limits } = snap
-  const connected = DOGS.filter((k) => robots[k].bridge === 'connected').length
-  const placed = DOGS.filter((k) => {
+  const dogs = DOGS.filter((k) => robots[k].inMission)
+  const connected = dogs.filter((k) => robots[k].bridge === 'connected').length
+  const placed = dogs.filter((k) => {
     const pose = robots[k].pose
     return pose !== null && serverTime - pose.at <= limits.poseStaleMs
   }).length
-  const aloha = robots.aloha.bridge === 'connected' && robots.aloha.nav === 'ready'
-  const camera = snap.camera.state === 'live'
-  return { connected, placed, of: DOGS.length, aloha, camera }
+  const alohaIn = robots.aloha.inMission
+  const aloha = !alohaIn || (robots.aloha.bridge === 'connected' && robots.aloha.nav === 'ready')
+  return { connected, placed, of: dogs.length, aloha, alohaIn }
 }
 
 function progressOf(id: PhaseId, snap: MissionSnapshot): number | null {
@@ -76,7 +77,7 @@ function progressOf(id: PhaseId, snap: MissionSnapshot): number | null {
   switch (id) {
     case 'ready': {
       const b = bringUpOf(snap)
-      return (b.connected + b.placed + Number(b.aloha) + Number(b.camera)) / (2 * b.of + 2)
+      return (b.connected + b.placed + Number(b.aloha)) / (2 * b.of + 1)
     }
     case 'sweep': {
       const routes = dogs.filter((r) => r?.kind === 'sweep')
@@ -108,7 +109,7 @@ function subOf(id: PhaseId, snap: MissionSnapshot): TrackPhase['sub'] {
   switch (id) {
     case 'ready': {
       const b = bringUpOf(snap)
-      return `Fleet ${b.connected}/${b.of} · Positions ${b.placed}/${b.of} · ALOHA ${b.aloha ? 'ready' : 'not ready'}`
+      return `Fleet ${b.connected}/${b.of} · Positions ${b.placed}/${b.of}${b.alohaIn ? ` · ALOHA ${b.aloha ? 'ready' : 'not ready'}` : ''}`
     }
     case 'patrol':
       return perDog((k) => (robots[k].route?.lap ? `lap ${robots[k].route?.lap}` : null))

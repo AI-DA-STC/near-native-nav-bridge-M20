@@ -298,7 +298,7 @@ export function LiveMap({
                 return (
                   <g className={cx('cc-map__box', `is-${box.state}`)}>
                     {on.sight && sp && sightFrom ? <line className="cc-map__sight" x1={sp[0]} y1={sp[1]} x2={qx} y2={qy} style={{ stroke: rc(sightFrom.robot) }} /> : null}
-                    <circle className="cc-map__halo" cx={qx} cy={qy} r={halo} />
+                    {box.state === 'known' ? null : <circle className="cc-map__halo" cx={qx} cy={qy} r={halo} />}
                     <g transform={`translate(${qx.toFixed(1)} ${qy.toFixed(1)}) rotate(${-(box.yaw ?? 0)})`}>
                       <rect className="cc-map__boxrect" x={-bw / 2} y={-bh / 2} width={bw} height={bh} rx="1.5" />
                       {[
@@ -397,7 +397,6 @@ export function LiveMap({
             : null}
         </svg>
       </div>
-      {view === '3d' ? <div className="cc-map__note">3D view · placeholder</div> : null}
       {showScale ? (
         <div className="cc-map__scale" aria-label={`Scale bar ${scaleM} m`}>
           <span className="cc-map__scalebar" style={{ width: scaleM * s }} />

@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import type { RelayState, SetupStepFacts, SetupStepKey, StepCheck, StepCommand } from '../src/shared/api/setup-protocol.ts'
 import { afterEcho, lastLine } from './command-output.ts'
 import { ALOHA, README } from './readme-commands.ts'
@@ -28,8 +29,38 @@ export const ALOHA_STACK: ReadonlyArray<{ window: string; label: string; topics:
 /** Bridged to ROS_DOMAIN_ID=1 by aloha/bridge.sh (bridge.yaml), and what has to stream through it */
 const BRIDGED = ['/scan', '/map', '/move_base/status', '/puppet/joint_left', '/aloha/dock/result']
 const BRIDGE_DOMAIN = 1
-const BRIDGING = /create bidirectional bridge for topic|created \dto\d bridge for topic|Passing message from ROS 1/
 const STACK_PATIENCE_MS = 90_000
+/* parameter_bridge bridges bridge.yaml's topics one by one, each with a few calls to the ALOHA's ROS master: a second
+ * or more each over a slow WiFi link, so a minute or three for all of them. It is given up on only when it stalls. */
+const FIRST_BRIDGED_MS = 45_000
+const BRIDGE_STALL_MS = 30_000
+/** Once bridged, the topics show on ROS_DOMAIN_ID=1 within this long */
+const LISTED_MS = 20_000
+/** A call to the ALOHA's ROS master slower than this makes the bridge slow to start: worth saying */
+const SLOW_LINK_MS = 300
+const BRIDGE_YAML = new URL('../../aloha/bridge.yaml', import.meta.url)
+
+/** bridge.yaml's topics, in its order */
+export function bridgeYamlTopics(yaml: string): string[] {
+  return [...yaml.matchAll(/^\s*-\s*\{\s*topic:\s*([^,\s}]+)/gm)].map((m) => m[1])
+}
+
+/** What parameter_bridge has got through so far, in order: "[ros_bridge]: create bidirectional bridge for topic /scan",
+ * or "failed to create bidirectional bridge for topic '/x' …" (a type it was not built with) */
+export function bridgeProgress(output: string): { created: string[]; failed: string[]; settled: boolean } {
+  const created = [...output.matchAll(/\]: create bidirectional bridge for topic (\S+)/g)].map((m) => m[1])
+  const failed = [...output.matchAll(/failed to create bidirectional bridge for topic '([^']+)'/g)].map((m) => m[1])
+  // After the last topic it reads its services parameters, then passes the first messages
+  return { created, failed, settled: /'services_1_to_2'|Passing message from ROS 1/.test(output) }
+}
+
+function bridgeTopics(): string[] {
+  try {
+    return bridgeYamlTopics(readFileSync(BRIDGE_YAML, 'utf8'))
+  } catch {
+    return []
+  }
+}
 
 export interface AlohaSetupContext extends LoginContext {
   /** The robot terminal: ssh, then start_aloha.sh's tmux */
@@ -273,6 +304,15 @@ async function bridge(ctx: AlohaSetupContext) {
     return
   }
 
+  // How fast the ALOHA answers: every topic the bridge makes costs a few of these calls
+  const asked = Date.now()
+  const reached = await ctx.masterState().then(
+    () => true,
+    () => false,
+  )
+  const callMs = Date.now() - asked
+  const slow = reached && callMs >= SLOW_LINK_MS ? `the ALOHA answers slowly (${(callMs / 1000).toFixed(1)} s a call to its ROS master)` : null
+
   await typeChecked(ctx, shell, profileCmd, 15_000)
   bridgeCmd.status = 'running'
   step.detail = 'Starting the bridge'
@@ -282,27 +322,50 @@ async function bridge(ctx: AlohaSetupContext) {
   const from = shell.mark()
   shell.write(`${bridgeCmd.text}\r`)
   const ended = (t: string) => promptAtEnd(afterEcho(t)) !== null
-  try {
-    // parameter_bridge says "create bidirectional bridge for topic /scan" per topic, then "Passing message from ROS 1 …"
-    await shell.waitFor((t) => (BRIDGING.test(t) || ended(t) ? true : null), {
-      from,
-      timeoutMs: 45_000,
-      signal: ctx.signal,
-      what: 'aloha/bridge.sh to bridge its first topic',
-    })
-  } catch (error) {
-    if (!(error instanceof WaitTimeout)) throw error
-  }
-  if (ended(shell.textSince(from))) {
-    ctx.setRelay('exited')
-    throw fail(bridgeCmd, lastLine(afterEcho(shell.textSince(from)).split('\n').slice(0, -1).join('\n')) ?? 'aloha/bridge.sh ended')
-  }
-  ctx.bridgeLaunched(from)
-
+  const expected = bridgeTopics()
+  const of = expected.length ? ` of ${expected.length}` : ''
   step.checks = BRIDGED.map((label) => ({ label, ok: null, value: null }))
+  // Followed by what it prints: done once every topic of bridge.yaml is through, failed only when it stalls
+  let seen = 0
+  for (;;) {
+    let read: ReturnType<typeof bridgeProgress> & { ended: boolean }
+    try {
+      read = (
+        await shell.waitFor(
+          (t) => {
+            const now = { ...bridgeProgress(afterEcho(t)), ended: ended(t) }
+            const through = now.created.length + now.failed.length
+            const done = BRIDGED.every((x) => now.created.includes(x)) && (through >= expected.length || now.settled)
+            return now.ended || done || through > seen ? now : null
+          },
+          { from, timeoutMs: seen ? BRIDGE_STALL_MS : FIRST_BRIDGED_MS, signal: ctx.signal, what: 'aloha/bridge.sh to bridge its topics' },
+        )
+      ).value
+    } catch (error) {
+      if (!(error instanceof WaitTimeout)) throw error
+      const last = bridgeProgress(afterEcho(shell.textSince(from))).created.at(-1)
+      const why = seen
+        ? `aloha/bridge.sh bridged nothing more for ${BRIDGE_STALL_MS / 1000} s, after ${seen}${of} topics${last ? ` (the last: ${last})` : ''}`
+        : `aloha/bridge.sh bridged no topic in ${FIRST_BRIDGED_MS / 1000} s`
+      throw fail(bridgeCmd, slow ? `${why}: ${slow}` : why)
+    }
+    if (read.ended) {
+      ctx.setRelay('exited')
+      throw fail(bridgeCmd, lastLine(afterEcho(shell.textSince(from)).split('\n').slice(0, -1).join('\n')) ?? 'aloha/bridge.sh ended')
+    }
+    if (!seen) ctx.bridgeLaunched(from)
+    seen = read.created.length + read.failed.length
+    step.checks = BRIDGED.map((label) => ({ label, ok: read.created.includes(label) ? true : read.failed.includes(label) ? false : null, value: null }))
+    step.detail = `Bridging ${seen}${of} topics${slow ? `: ${slow}` : ''}`
+    ctx.changed()
+    const missing = BRIDGED.filter((x) => read.failed.includes(x))
+    if (missing.length) throw fail(bridgeCmd, `aloha/bridge.sh could not bridge ${missing.join(', ')}`)
+    if (BRIDGED.every((x) => read.created.includes(x)) && (seen >= expected.length || read.settled)) break
+  }
+
   step.detail = `Waiting for the ALOHA’s topics on ROS_DOMAIN_ID=${BRIDGE_DOMAIN}`
   ctx.changed()
-  const deadline = Date.now() + 40_000
+  const deadline = Date.now() + LISTED_MS
   for (;;) {
     const listed = new Set(await ctx.domainTopics())
     step.checks = BRIDGED.map((label) => ({ label, ok: listed.has(label), value: null }))
@@ -311,7 +374,7 @@ async function bridge(ctx: AlohaSetupContext) {
     if (ended(shell.textSince(from))) throw fail(bridgeCmd, 'aloha/bridge.sh ended')
     if (Date.now() > deadline) {
       const missing = BRIDGED.filter((t) => !listed.has(t))
-      throw fail(bridgeCmd, `Not on ROS_DOMAIN_ID=${BRIDGE_DOMAIN} after 40 s: ${missing.join(', ')}`)
+      throw fail(bridgeCmd, `Bridged, but not on ROS_DOMAIN_ID=${BRIDGE_DOMAIN} after ${LISTED_MS / 1000} s: ${missing.join(', ')}`)
     }
     await ctx.sleep(2000)
   }
@@ -329,5 +392,5 @@ async function bridge(ctx: AlohaSetupContext) {
   ctx.setRelay('running', rate)
   step.detail = firewalled
     ? `Bridged, but the ALOHA cannot connect back: goals and arm commands will not reach it (sudo ufw allow from ${ctx.robot.ip}, on the host)`
-    : `ROS_DOMAIN_ID=${BRIDGE_DOMAIN} · /scan at ${rate.toFixed(1)} Hz`
+    : `ROS_DOMAIN_ID=${BRIDGE_DOMAIN} · /scan at ${rate.toFixed(1)} Hz${slow ? ` · ${slow}` : ''}`
 }

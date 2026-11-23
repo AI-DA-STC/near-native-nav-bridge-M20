@@ -5,19 +5,22 @@ import { Button } from '@/shared/ui/Button'
 import { Panel } from '@/shared/ui/Panel'
 import { pushToast } from '@/shared/ui/Toast'
 import { confirmPlan, newSession, usePlanRoutes } from '../api/route-commands'
-import { planWhen, selectedPlan } from '../model/plans'
+import { planWhen, selectedPlan, type Choice } from '../model/plans'
+import { PhaseWaypoints } from './PhaseWaypoints'
 import { PlanList } from './PlanList'
 import { PlanPreview } from './PlanPreview'
 import { SessionPanel } from './SessionPanel'
 import './RoutesPage.css'
 
-/** The second step: the mission plan's routes. Pick a plan (the latest by default) with its preview beside it, or record
- * new routes robot by robot; Use this plan goes on to the Command center. */
+/** The second step: the mission plan's routes for the robots added in Setup. Pick a plan (the latest by default) with
+ * its sketches beside it, or record new routes robot by robot, watched in RViz on the map and listed beside; Use this
+ * plan goes on to the Command center. */
 export function RoutesPage() {
   const snapshot = useSetupSnapshot()
   const connection = useSetupConnection()
   const navigate = useNavigate()
   const [picked, setPicked] = useState<string | null>(null)
+  const [chosen, setChosen] = useState<Choice | null>(null)
   const plans = snapshot?.plans ?? []
   const session = snapshot?.session ?? null
   const plan = session ? (plans.find((p) => p.id === session.plan) ?? null) : selectedPlan(plans, picked)
@@ -44,7 +47,7 @@ export function RoutesPage() {
   return (
     <div className="cc-routes">
       {session ? (
-        <SessionPanel snapshot={snapshot} session={session} plan={plan} />
+        <SessionPanel snapshot={snapshot} session={session} plan={plan} chosen={chosen} onChoose={setChosen} />
       ) : (
         <Panel
           className="cc-routes__plans"
@@ -60,7 +63,11 @@ export function RoutesPage() {
           <PlanList plans={plans} selected={plan?.id ?? null} confirmed={snapshot.flow?.plan?.id ?? null} onSelect={setPicked} />
         </Panel>
       )}
-      <PlanPreview plan={plan} routes={routes} error={error} recording={session?.recording ?? null} />
+      {session ? (
+        <PhaseWaypoints snapshot={snapshot} session={session} plan={plan} routes={routes} chosen={chosen} />
+      ) : (
+        <PlanPreview plan={plan} routes={routes} error={error} />
+      )}
     </div>
   )
 }
