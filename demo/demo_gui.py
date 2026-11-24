@@ -541,7 +541,7 @@ class Demo(QtCore.QObject):
     def _inspect(self, msg):
         contents = self.contents
         result = re.match(r"^Box contents: (.*); image (.+)$", msg)
-        if msg.startswith("Taking a photo"):
+        if msg.startswith(("Taking a photo", "Taking photos")):
             contents["state"] = "capturing"
         elif result:
             found = [] if result.group(1) == "nothing found" else \

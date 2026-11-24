@@ -25,6 +25,25 @@ export const FLEET: Readonly<Record<RobotKey, RobotIdentity>> = {
   aloha: { key: 'aloha', label: 'ALOHA', id: '', kind: 'aloha', ip: '192.168.123.200', color: 'var(--robot-aloha)' },
 }
 
+/** A robot camera whose frames reach this laptop */
+export interface RobotCamera {
+  /** Its name in GET /api/mission/camera/<key>.jpg */
+  key: string
+  robot: RobotKey
+  /** "left wrist" */
+  label: string
+  /** Its frames: throttled JPEGs on the robot's ROS_DOMAIN_ID */
+  topic: string
+}
+
+/** The cameras the Command center shows: the ALOHA's two wrist cameras, throttled by aloha/robot/stream.launch and
+ * bridged by aloha/bridge.sh (ROS_DOMAIN_ID 1), which also photograph the box (aloha/manipulator.py). The dogs' cameras
+ * and the ALOHA's centre camera stay on the robots: over the shared Wi-Fi, they flooded it. */
+export const ROBOT_CAMERAS: readonly RobotCamera[] = [
+  { key: 'aloha-left', robot: 'aloha', label: 'left wrist', topic: '/camera_l/color/image_throttled/compressed' },
+  { key: 'aloha-right', robot: 'aloha', label: 'right wrist', topic: '/camera_r/color/image_throttled/compressed' },
+]
+
 export function robotOf(key: RobotKey): RobotIdentity {
   return FLEET[key]
 }

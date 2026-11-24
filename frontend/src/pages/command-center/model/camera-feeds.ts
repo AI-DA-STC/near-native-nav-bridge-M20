@@ -1,5 +1,5 @@
 import type { MissionSnapshot } from '@/shared/api'
-import { ROBOT_KEYS, robotOf, type RobotKey } from '@/shared/config'
+import { ROBOT_CAMERAS, type RobotKey } from '@/shared/config'
 import { formatDuration, formatTimeOfDay, type Tone } from '@/shared/lib'
 import { robotStateOf } from './robot-state'
 import type { ImageView } from './suspicious-item'
@@ -8,12 +8,14 @@ import type { ImageView } from './suspicious-item'
 export const CAMERA_STALE_MS = 3000
 
 export interface CameraTileView {
+  /** The camera's key (ROBOT_CAMERAS): "aloha-left" */
+  key: string
   robot: RobotKey
-  /** "R1 · 741" */
+  /** "ALOHA" */
   name: string
-  /** front camera, centre camera */
+  /** "left wrist camera" */
   camera: string
-  /** The robot's state word over its feed (SWEEPING, IN SLOT, NOT CONNECTED …) and its tone */
+  /** The robot's state word over its feed (SWEEPING, ARMS 4/5 · PHOTOS …) and its tone */
   word: string
   tone: Tone
   state: 'live' | 'stale' | 'none'
@@ -25,19 +27,19 @@ export interface CameraTileView {
   image: ImageView | null
 }
 
-/** One tile per robot in the mission, in the fleet's order: the dogs' front cameras and the ALOHA's centre camera, each
- * with its robot's state word */
+/** One tile per camera of the robots in the mission (ROBOT_CAMERAS: the ALOHA's two wrist cameras; the dogs' cameras
+ * and the ALOHA's centre camera stay on the robots), each with its robot's state word */
 export function cameraTilesOf(snap: MissionSnapshot): CameraTileView[] {
-  return ROBOT_KEYS.filter((k) => snap.robots[k].inMission).map((robot) => {
-    const facts = snap.cameras?.[robot]
+  return ROBOT_CAMERAS.filter((c) => snap.robots[c.robot].inMission).map(({ key, robot, label }) => {
+    const facts = snap.cameras?.[key]
     const at = facts?.at ?? null
-    const name = robot === 'aloha' ? 'ALOHA' : `${robotOf(robot).label} · ${snap.robots[robot].id}`
-    const camera = robot === 'aloha' ? 'centre camera' : 'front camera'
+    const name = 'ALOHA'
+    const camera = `${label} camera`
     const state = at === null ? 'none' : snap.serverTime - at < CAMERA_STALE_MS ? 'live' : 'stale'
-    const src = at === null ? null : `/api/mission/camera/${robot}.jpg?at=${at}`
-    const hint = robot === 'aloha' ? 'is stream.launch running on the ALOHA?' : 'is its relay running?'
+    const src = at === null ? null : `/api/mission/camera/${key}.jpg?at=${at}`
     const { word, tone } = robotStateOf(robot, snap)
     return {
+      key,
       robot,
       name,
       camera,
@@ -45,17 +47,11 @@ export function cameraTilesOf(snap: MissionSnapshot): CameraTileView[] {
       tone,
       state,
       src,
-      note: state === 'none' ? `No video: ${hint}` : state === 'stale' ? `no frame for ${formatDuration(snap.serverTime - at!)}` : null,
+      note: state === 'none' ? 'No video: is stream.launch running on the ALOHA?' : state === 'stale' ? `no frame for ${formatDuration(snap.serverTime - at!)}` : null,
       image:
         src && at !== null
-          ? { src, boxes: [], aspect: '16 / 9', caption: `${name} · ${camera} · ${formatTimeOfDay(at)}`, meta: facts?.topic ?? '' }
+          ? { src, boxes: [], aspect: '4 / 3', caption: `${name} · ${camera} · ${formatTimeOfDay(at)}`, meta: facts?.topic ?? '' }
           : null,
     }
   })
-}
-
-/** R3's camera, for the Suspicious item panel while it waits: whether its frames are arriving */
-export function cameraLive(snap: MissionSnapshot, robot: RobotKey): boolean {
-  const at = snap.cameras?.[robot]?.at ?? null
-  return at !== null && snap.serverTime - at < CAMERA_STALE_MS
 }

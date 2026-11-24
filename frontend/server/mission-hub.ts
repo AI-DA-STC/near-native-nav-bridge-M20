@@ -359,7 +359,7 @@ export class MissionHub {
       t.stop = robot.kind === 'aloha' ? watchAmclPose(this.deps.packageRoot, onPose) : watchOdom(id, this.deps.packageRoot, onPose)
       this.tracked.set(id, t)
     }
-    // The cameras of the same robots: a dog's camera relay runs with its relays, the ALOHA's frames come over its bridge
+    // The cameras of the same robots that have one reaching the laptop: the ALOHA's wrist cameras, over its bridge
     this.cameras.follow(this.cameraRoles(wanted))
     if (open) {
       void this.ensureGrid()
@@ -376,9 +376,9 @@ export class MissionHub {
     return Object.fromEntries([...this.roles()].filter(([id]) => ids.has(id)).map(([id, key]) => [key, id]))
   }
 
-  /** The latest frame of a robot's camera, for GET /api/mission/camera/<role>.jpg */
-  cameraFile(role: string): string | null {
-    return this.cameras.file(role)
+  /** The latest frame of a robot's camera, for GET /api/mission/camera/<key>.jpg */
+  cameraFile(key: string): string | null {
+    return this.cameras.file(key)
   }
 
   private posed(t: Tracked, pose: PoseFact): void {

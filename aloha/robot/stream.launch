@@ -1,7 +1,8 @@
 <!-- Run on the Aloha after the cameras are up: roslaunch stream.launch [fps:=3] [fps_f:=1] [jpeg_quality:=50]
      Throttles each camera's JPEG color stream to /camera_X/color/image_throttled/compressed for aloha/bridge.sh,
-     since only a throttle on the robot saves link bandwidth. The centre camera (camera_f) is only the Command
-     Center's feed: fps_f, 1 a second; the wrist cameras keep fps for the contents photo. jpeg_quality changes the
+     since only a throttle on the robot saves link bandwidth. bridge.sh bridges only the wrist cameras (the Command
+     Center's feeds and manipulator.py's photos of the box), at fps; the centre camera's (camera_f, fps_f) stays on the
+     robot. jpeg_quality changes the
      robot's /camera_X/color/image_raw/compressed for every subscriber; raw images on the robot are untouched. -->
 <launch>
   <arg name="fps" default="3"/>

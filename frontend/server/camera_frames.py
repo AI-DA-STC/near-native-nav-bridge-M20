@@ -3,8 +3,7 @@
 
 Subscribes to each sensor_msgs/CompressedImage topic and keeps at most one frame a second of each as <dir>/<key>.jpg,
 replaced whole (written aside, then renamed), printing `frame <key> <epoch ms>` for each. Run it with the topics'
-ROS_DOMAIN_ID: 0 for the dogs' /camera_front_relayed_<id> (scripts/camera_relay.py on each dog), 1 for the ALOHA's
-cameras through aloha/bridge.sh. Ctrl+C (SIGINT) ends it."""
+ROS_DOMAIN_ID: 1 for the ALOHA's cameras through aloha/bridge.sh. Ctrl+C (SIGINT) ends it."""
 
 import os
 import sys

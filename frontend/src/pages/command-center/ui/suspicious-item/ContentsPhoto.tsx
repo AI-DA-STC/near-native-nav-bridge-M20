@@ -12,8 +12,8 @@ export interface ContentsPhotoProps {
   className?: string
 }
 
-/** The ALOHA's photo of the open box, every object outlined and listed by confidence: the evidence for the verdict.
- * Nothing is filtered out: the operator judges. */
+/** The ALOHA's photos of the box, its two wrist cameras side by side, every object outlined and listed by confidence:
+ * the evidence for the verdict. Nothing is filtered out: the operator judges. */
 export function ContentsPhoto({ contents, layout = 'stack', onExpand, className }: ContentsPhotoProps) {
   const objects = [...contents.objects].sort((a, b) => b.confidence - a.confidence)
   const ready = contents.state === 'ready'
@@ -22,24 +22,24 @@ export function ContentsPhoto({ contents, layout = 'stack', onExpand, className 
       {ready ? (
         <DetectionImage
           src={contents.src ?? undefined}
-          alt="Contents of the box"
-          aspect="4 / 3"
+          alt="The box, from both wrist cameras"
+          aspect="auto"
           boxes={objects.map((o) => ({ ...o.box, label: o.label, confidence: o.confidence }))}
           onExpand={onExpand}
         />
       ) : (
-        <div className="cc-contents__wait" style={{ aspectRatio: '4 / 3' }}>
+        <div className="cc-contents__wait" style={{ aspectRatio: '8 / 3' }}>
           {contents.state === 'capturing' ? (
             <>
               <span className="cc-contents__ring" aria-hidden="true">
-                <span>{contents.holdLeft ?? 5}</span>
+                <span>{contents.holdLeft ?? 4}</span>
               </span>
-              <span className="cc-contents__msg">Lid open · holding {contents.holdLeft ?? 5} s for the photo</span>
+              <span className="cc-contents__msg">Arms held · photographing the box</span>
             </>
           ) : (
             <>
               <Icon name="camera" size={22} />
-              <span className="cc-contents__msg">The lid opens at arm pose 3/5; the photo follows.</span>
+              <span className="cc-contents__msg">Both wrist cameras photograph the box before the arms go home.</span>
             </>
           )}
         </div>

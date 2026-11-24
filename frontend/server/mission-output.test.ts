@@ -139,3 +139,51 @@ describe('readMission: the ALOHA docks where move_base could not reach (send_goa
     expect(read.failure).toMatch(/too far to dock/)
   })
 })
+
+describe('the ALOHA’s photos of the box', () => {
+  // manipulator.py at the last pose but one, then inspect_box.py on the photos while the arms go home
+  const PHOTOS = [
+    'Pose 4/5',
+    '[INSPECT] Taking photos with both wrist cameras',
+    '  Photos in 0.7 s: demo/detections/contents_20261124_070334_left.jpg, demo/detections/contents_20261124_070334_right.jpg',
+  ]
+
+  it('holds the arms while both wrist cameras take their photos', () => {
+    const read = readMission(linesOf(PHOTOS), '', ctx, 0)
+    expect(read.arms).toEqual({ pose: 4, of: 5, state: 'holding', holdEndsAt: 1001 + 4000 })
+    expect(read.contents.state).toBe('capturing')
+  })
+
+  it('then shows what the tools model found in them, side by side in one image', () => {
+    const read = readMission(
+      linesOf([...PHOTOS, 'Pose 5/5', '[INSPECT] Box contents: drill 0.91, pliers 0.84; image demo/detections/contents_20261124_070336.jpg']),
+      '',
+      ctx,
+      0,
+    )
+    expect(read.arms).toMatchObject({ pose: 5, state: 'moving' })
+    expect(read.contents).toMatchObject({
+      state: 'ready',
+      photo: { path: 'demo/detections/contents_20261124_070336.jpg' },
+      objects: [
+        { label: 'drill', confidence: 0.91, box: null },
+        { label: 'pliers', confidence: 0.84, box: null },
+      ],
+    })
+  })
+
+  it('warns when a camera sent nothing, and still shows the other’s photo', () => {
+    const read = readMission(
+      linesOf([
+        ...PHOTOS.slice(0, 2),
+        '[INSPECT] No photo: nothing from the left wrist camera (/camera_l/color/image_throttled/compressed) in 10 s. Is robot/stream.launch running on the ALOHA?',
+        '[INSPECT] Box contents: nothing found; image demo/detections/contents_20261124_070336.jpg',
+      ]),
+      '',
+      ctx,
+      0,
+    )
+    expect(read.warnings.map((w) => w.text)).toEqual([expect.stringMatching(/^Contents photo: No photo: nothing from the left wrist camera/)])
+    expect(read.contents).toMatchObject({ state: 'ready', objects: [] })
+  })
+})

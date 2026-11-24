@@ -2,10 +2,9 @@ import type { MissionSnapshot } from '@/shared/api'
 import { formatPercent, formatTimeOfDay, type Tone } from '@/shared/lib'
 import type { DetectionBox } from '@/shared/ui/DetectionImage'
 import type { IconName } from '@/shared/ui/Icon'
-import { cameraLive } from './camera-feeds'
 
 export interface FindingView {
-  /** The finding robot's photo of the box; empty when its camera sent no frame */
+  /** The finding robot's photo of the box (demo/detect_box.py); empty when found by reaching it (demo/find_box.py) */
   snapshot: string
   /** Found where demo/box.json has it, by a robot that reached it (demo/find_box.py reports confidence 1.00), not
    * estimated from a camera: no confidence, no refinements */
@@ -69,8 +68,9 @@ export function contentsImageOf(snap: MissionSnapshot): ImageView | null {
   return {
     src: photo.url,
     boxes: objects.flatMap((o) => (o.box ? [{ ...o.box, label: o.label, confidence: o.confidence }] : [])),
-    aspect: '4 / 3',
-    caption: `ALOHA · contents photo · ${formatTimeOfDay(photo.at)}`,
+    // the two wrist cameras side by side: the image's own shape
+    aspect: 'auto',
+    caption: `ALOHA · wrist cameras · ${formatTimeOfDay(photo.at)}`,
     meta: [objects.map((o) => `${o.label} ${formatPercent(o.confidence)}`).join(', '), photo.path].filter(Boolean).join(' · '),
   }
 }
@@ -97,9 +97,7 @@ export function suspiciousItemOf(snap: MissionSnapshot, contentsInOperator: bool
       ? { tone: 'live', icon: 'camera', text: 'ALOHA photo' }
       : finding
         ? { tone: 'warn', icon: 'warn', text: 'Object identified' }
-        : cameraLive(snap, 'r3')
-          ? { tone: 'live', icon: 'camera', text: 'R3 camera live' }
-          : { tone: 'neutral', icon: 'camera', text: 'R3 no video' }
+        : { tone: 'neutral', icon: 'wait', text: 'Waiting for R3' }
   return {
     stage,
     status,

@@ -1,6 +1,5 @@
 import { useState, type ReactNode } from 'react'
 import { useMissionSnapshot } from '@/shared/api'
-import type { RobotKey } from '@/shared/config'
 import { cx, useCompactLayout } from '@/shared/lib'
 import { Lightbox } from '@/shared/ui/Lightbox'
 import { useSiteMap } from '../api/fetch-site-map'
@@ -38,12 +37,12 @@ export function CommandCenterPage({ startControl }: CommandCenterPageProps) {
   const [phasesMin, setPhasesMin] = useMinimized('cc.command-center.phases-minimized')
   const [camerasMin, setCamerasMin] = useMinimized('cc.command-center.cameras-minimized')
   // A photo, or a camera's feed, which keeps updating while it is enlarged
-  const [enlarged, setEnlarged] = useState<{ image: ImageView } | { camera: RobotKey } | null>(null)
+  const [enlarged, setEnlarged] = useState<{ image: ImageView } | { camera: string } | null>(null)
   if (!snap) return null
   const track = phaseTrackOf(snap)
   const turn = operatorTurnOf(snap)
   const setLightbox = (image: ImageView) => setEnlarged({ image })
-  const lightbox = enlarged === null ? null : 'image' in enlarged ? enlarged.image : (cameraTilesOf(snap).find((t) => t.robot === enlarged.camera)?.image ?? null)
+  const lightbox = enlarged === null ? null : 'image' in enlarged ? enlarged.image : (cameraTilesOf(snap).find((t) => t.key === enlarged.camera)?.image ?? null)
   return (
     <div className={cx('cc-ccpage', compact && 'is-compact')}>
       {phasesMin ? (

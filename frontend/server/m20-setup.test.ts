@@ -11,7 +11,7 @@ const IP = '192.168.123.100'
 const ROBOT = { id: '741', ip: IP, user: 'user' }
 const UP_TO_DATE = `foxy: Pulling from m20-bridge\r\nDigest: sha256:${'a'.repeat(64)}\r\nStatus: Image is up to date for 192.168.123.160:5000/m20-bridge:foxy\r\n192.168.123.160:5000/m20-bridge:foxy\r\n`
 const INSECURE = 'Error response from daemon: Get "https://192.168.123.160:5000/v2/": http: server gave HTTP response to HTTPS client\r\n'
-const TOPICS = ['/ALIGNED_POINTS_relayed_741', '/GRID_MAP_relayed_741', '/ODOM_relayed_741', '/goal_pose_relayed_741', '/initialpose_relayed_741', '/parameter_events', '/rosout', '/tf_relayed', '/tf_static_relayed']
+const TOPICS = ['/GRID_MAP_relayed_741', '/ODOM_relayed_741', '/goal_pose_relayed_741', '/initialpose_relayed_741', '/parameter_events', '/rosout']
 
 type Place = 'laptop' | 'robot-user' | 'robot-root' | 'container'
 
@@ -24,6 +24,8 @@ interface RobotScript {
   publishers: number
   /** Listeners on /goal_pose_741 before the nav bridge: one started by hand */
   goalListeners: number
+  /** Nodes relays.launch.py starts: 8 in an image from before the relays were cut down */
+  relays: number
 }
 
 class ScriptedTerminal extends ShellTranscript implements Shell {
@@ -108,8 +110,7 @@ class ScriptedTerminal extends ShellTranscript implements Shell {
     if (line === README.launchRelays && at === 'container') {
       this.foreground = 'launch'
       this.print('[INFO] [launch]: All log files can be found below /root/.ros/log/2026-11-20-04-00-00-host-1\r\n')
-      // relays.launch.py's 7 relays and the front camera's camera_relay.py
-      for (let i = 1; i <= 8; i++) this.later(() => this.print(`[INFO] [relay-${i}]: process started with pid [${100 + i}]\r\n`), 150 * i)
+      for (let i = 1; i <= this.script.relays; i++) this.later(() => this.print(`[INFO] [relay-${i}]: process started with pid [${100 + i}]\r\n`), 150 * i)
       return
     }
     if (line === README.topicList && at === 'laptop') return done(`${TOPICS.join('\r\n')}\r\n`)
@@ -161,7 +162,7 @@ class ScriptedTerminal extends ShellTranscript implements Shell {
 }
 
 function setUp(script: Partial<RobotScript> = {}, answers: PromptChoice[] = [], typedPassword = "'") {
-  const robotScript: RobotScript = { password: "'", pulls: [], publishers: 0, goalListeners: 0, ...script }
+  const robotScript: RobotScript = { password: "'", pulls: [], publishers: 0, goalListeners: 0, relays: 4, ...script }
   // The robot's password as saved: an answer to the password prompt replaces it
   let saved = typedPassword
   const robot = new ScriptedTerminal(robotScript)
@@ -264,7 +265,7 @@ describe('an M20’s setup', () => {
       'source install/setup.bash',
       'ros2 topic list',
       'ros2 topic hz /ODOM_relayed_741',
-      'rviz2 -d frontend/server/rviz/robot_741.rviz --ros-args -r /tf:=/tf_relayed -r /tf_static:=/tf_static_relayed -r /goal_pose:=/goal_pose_741 -r /initialpose:=/initialpose_relayed_741',
+      'rviz2 -d frontend/server/rviz/robot_741.rviz --ros-args -r /goal_pose:=/goal_pose_741 -r /initialpose:=/initialpose_relayed_741',
     ])
     // f. the nav bridge, README Multi-robot Step 1, in its own terminal
     expect(t.navTerminal.typed).toEqual([
@@ -295,10 +296,19 @@ describe('an M20’s setup', () => {
     await finish(runM20Setup(t.ctx))
     expect(t.step('login').commands.map((c) => c.note)).toEqual(['user@host.v1.4', 'root@host.v1.4'])
     expect(t.step('image').detail).toBe('Image up to date, tagged m20-bridge:foxy')
-    expect(t.step('relay').commands.at(-1)!.note).toBe('8 of 8 relays started')
+    expect(t.step('relay').commands.at(-1)!.note).toBe('4 of 4 relays started')
     expect(t.step('topics').checks.every((c) => c.ok)).toBe(true)
     expect(t.step('topics').checks.at(-1)).toEqual({ label: '/ODOM_relayed_741 rate', ok: true, value: '10.0 Hz' })
     expect(t.step('localize').detail).toBe('Localized at x 1.25, y -0.50, heading 90°')
+  })
+
+  it('warns when the robot’s image still relays the lidar, TF and camera', async () => {
+    const t = setUp({ relays: 8 }, ['localized'])
+    await finish(runM20Setup(t.ctx))
+    expect(t.step('relay').status).toBe('done')
+    expect(t.step('relay').commands.at(-1)!.note).toBe('8 of 4 relays started')
+    expect(t.step('relay').checks.at(-1)).toMatchObject({ label: 'Relays in the image', ok: false })
+    expect(t.step('relay').checks.at(-1)!.value).toMatch(/^8, not 4: an older image/)
   })
 
   it('asks for the registry to be trusted, then pulls again', async () => {

@@ -83,7 +83,7 @@ install(DIRECTORY include/
   DESTINATION include/
 )
 
-install(PROGRAMS scripts/benchmark.py scripts/fleet_management.py scripts/camera_relay.py
+install(PROGRAMS scripts/benchmark.py scripts/fleet_management.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

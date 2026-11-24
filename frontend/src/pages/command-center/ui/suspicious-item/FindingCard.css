@@ -8,6 +8,8 @@
 .cc-finding__head { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
 .cc-finding__by { display: inline-flex; align-items: center; gap: 5px; color: var(--text-2); font-size: 12px; }
 .cc-finding__body { display: grid; grid-template-columns: minmax(0, 132px) minmax(0, 1fr); gap: 12px; align-items: start; }
+/* found by reaching it (demo/find_box.py): no photo, the facts take the width */
+.cc-finding__body.is-text { grid-template-columns: minmax(0, 1fr); }
 .cc-finding__facts { display: grid; grid-template-columns: 1fr 1fr; gap: 7px 12px; margin: 0; }
 .cc-finding__facts dt { font-size: 10.5px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--text-2); line-height: 14px; }
 .cc-finding__facts dd { margin: 1px 0 0; font-size: 13px; line-height: 18px; color: var(--text); white-space: nowrap; }
@@ -15,7 +17,3 @@
 .cc-finding__conf { display: block; height: 3px; margin-top: 3px; border-radius: 2px; background: var(--surface-raised-2); overflow: hidden; }
 .cc-finding__conf > span { display: block; height: 100%; background: var(--finding); border-radius: inherit; }
 .cc-finding .cc-rtag__id { color: var(--text-2); }
-.cc-finding__nophoto {
-  display: grid; place-items: center; aspect-ratio: 4 / 3; margin: 0; padding: 8px; border-radius: var(--radius-sm);
-  background: var(--surface-well); border: 1px solid var(--line); color: var(--text-muted); font-size: 11.5px; line-height: 15px; text-align: center;
-}

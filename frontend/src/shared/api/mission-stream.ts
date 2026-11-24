@@ -90,7 +90,7 @@ export interface AlohaFacts extends RobotFacts {
   nav: 'waiting' | 'ready'
   /** Docking at the box: correction n of 3, then docked, or failed with the reason */
   docking: { attempt: number; of: number; state: 'idle' | 'active' | 'docked' | 'failed'; reason: string | null }
-  /** Arms at pose n of 5; pose 3 opens the lid and is held 5 s for the photo */
+  /** Arms at pose n of 5; the last but one is held while both wrist cameras photograph the box */
   arms: { pose: number; of: number; state: 'idle' | 'moving' | 'holding' | 'done' | 'stopped' | 'failed'; holdEndsAt: Ms | null }
 }
 
@@ -218,9 +218,9 @@ export interface MissionSnapshot {
   timeline: MissionEvent[]
   /** The mission script's raw output, line by line, as printed */
   output: string[]
-  /** The cameras of the robots in the mission: each dog's front camera, the ALOHA's centre camera. Each frame is
-   * GET /api/mission/camera/<role>.jpg. Absent from a replay */
-  cameras?: Partial<Record<RobotKey, CameraFacts>>
+  /** The cameras of the robots in the mission (ROBOT_CAMERAS: the ALOHA's wrist cameras), by key. Each frame is
+   * GET /api/mission/camera/<key>.jpg. Absent from a replay */
+  cameras?: Record<string, CameraFacts>
   /** The ALOHA's map for its tab. Absent from a replay */
   alohaMap?: MapReadFacts
   /** Changes when the site map does (the plan in use, the SLAM map, the robots' roles): fetch it again */

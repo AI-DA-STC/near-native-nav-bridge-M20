@@ -1,6 +1,6 @@
 #!/bin/bash
-# Bridge the Aloha's navigation, Piper arm and camera topics (bridge.yaml) to ROS_DOMAIN_ID=1. The camera images need
-# robot/stream.launch running on the robot; arm_status and end_pose_euler need build_bridge.sh to have been run.
+# Bridge the Aloha's navigation, Piper arm joint and wrist camera topics (bridge.yaml) to ROS_DOMAIN_ID=1. The camera
+# images need robot/stream.launch running on the robot.
 ROBOT_IP=${ROBOT_IP:-192.168.123.200}
 ALOHA_BRIDGE=${ALOHA_BRIDGE:-/opt/aloha_bridge}
 export ROS_DOMAIN_ID=1
@@ -9,7 +9,7 @@ trap 'kill $(jobs -p) 2>/dev/null; wait' EXIT
 # Decompress the throttled JPEGs back to /camera_X/color/image_raw, with ROS 2 alone: noetic's libclass_loader
 # shadows foxy's
 source /opt/ros/foxy/setup.bash
-for cam in camera_f camera_l camera_r; do
+for cam in camera_l camera_r; do
     ros2 run image_transport republish compressed raw --ros-args -r __node:=decompress_$cam \
         -r in/compressed:=/$cam/color/image_throttled/compressed -r out:=/$cam/color/image_raw &
 done

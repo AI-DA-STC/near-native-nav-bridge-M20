@@ -148,19 +148,19 @@ function runningTurn(snap: MissionSnapshot, active: PhaseId | undefined): Operat
         kind: 'running',
         eyebrow: NEXT_VERDICT,
         question: 'Cordon: R1 and R2 are closing off zone 3.',
-        detail: 'R3 watches the item. Then the ALOHA drives to the box, docks and opens the lid; you give the verdict on what is inside.',
+        detail: 'R3 watches the item. Then the ALOHA drives to the box, docks and raises its arms; you give the verdict on its photos of the box.',
       }
     case 'inspect': {
       const { docking, arms } = robots.aloha
       const question =
         arms.state === 'holding'
-          ? 'Lid open: holding 5 s for the photo.'
+          ? 'Arms held: both wrist cameras are photographing the box.'
           : arms.pose > 0
-            ? `The ALOHA is opening the lid: arm pose ${arms.pose} of ${arms.of}.`
+            ? `The ALOHA is raising its arms: pose ${arms.pose} of ${arms.of}.`
             : docking.state === 'active'
               ? `The ALOHA is docking: correction ${docking.attempt} of ${docking.of}.`
               : 'The ALOHA is driving to the box.'
-      return { kind: 'running', eyebrow: NEXT_VERDICT, question, detail: 'At arm pose 3 the lid is open and held 5 s for one photo. You give the verdict as soon as the photo is in.' }
+      return { kind: 'running', eyebrow: NEXT_VERDICT, question, detail: 'Before the arms go home, both wrist cameras photograph the box. You give the verdict as soon as the photos are in.' }
     }
     default:
       return { kind: 'running', eyebrow: 'Mission running', question: 'The robots carry out the plan.', detail: '' }

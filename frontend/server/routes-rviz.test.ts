@@ -32,7 +32,7 @@ describe('the dogs’ recording RViz', () => {
   it('opens with the README’s Multi-robot Step 2 line, -d in front', () => {
     expect(readme).toContain(README.rvizFleet)
     expect(routesRvizCommand('dogs', routesRvizPath('dogs'))).toBe(
-      'rviz2 -d frontend/server/rviz/routes.rviz --ros-args -r /tf:=/tf_relayed -r /tf_static:=/tf_static_relayed -r /goal_pose:=/fleet_goal',
+      'rviz2 -d frontend/server/rviz/routes.rviz --ros-args -r /goal_pose:=/fleet_goal',
     )
   })
 })
@@ -121,7 +121,7 @@ describe('a recording RViz window', () => {
       'export ROS_DOMAIN_ID=0',
       'export FASTRTPS_DEFAULT_PROFILES_FILE=fastdds_profile.xml',
       'source install/setup.bash',
-      'rviz2 -d frontend/server/rviz/routes.rviz --ros-args -r /tf:=/tf_relayed -r /tf_static:=/tf_static_relayed -r /goal_pose:=/fleet_goal',
+      'rviz2 -d frontend/server/rviz/routes.rviz --ros-args -r /goal_pose:=/fleet_goal',
     ])
     // Open already: nothing typed again
     await t.window.open()

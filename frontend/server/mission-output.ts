@@ -402,10 +402,12 @@ export function readMission(lines: readonly OutputLine[], pending: string, ctx: 
 
   function readInspect(said: string, at: number) {
     let m: RegExpExecArray | null
-    if (/^Taking a photo/.test(said)) {
+    // manipulator.py at the last pose but one: "Taking photos with both wrist cameras" (inspect_box.py's own photo before)
+    if (/^Taking (?:a photo|photos)/.test(said)) {
       read.contents = { ...read.contents, state: 'capturing' }
-      read.arms = { ...read.arms, state: 'holding', holdEndsAt: at + 5000 }
-      event(at, 'INSPECT', 'Taking a photo of the box’s contents')
+      // The photos (about 1 s), then manipulator.py's PHOTO_HOLD_S (2 s) and --pause (1 s)
+      read.arms = { ...read.arms, state: 'holding', holdEndsAt: at + 4000 }
+      event(at, 'INSPECT', 'Photographing the box with both wrist cameras')
     } else if ((m = /^Box contents: (.*); image (.+)$/.exec(said))) {
       const objects =
         m[1] === 'nothing found'

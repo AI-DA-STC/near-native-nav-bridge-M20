@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { M20_STEPS, scriptOf } from './m20-setup.ts'
 import { RVIZ_MARKER_COLORS } from '../src/shared/config/fleet.ts'
-import { ALOHA, LAUNCH_NODE_COUNT, README, RELAY_NODE_COUNT, recordWaypoints, relayedTopics } from './readme-commands.ts'
+import { ALOHA, README, RELAY_NODE_COUNT, recordWaypoints, relayedTopics } from './readme-commands.ts'
 
 /* The setup types the README's commands as written: if README.md or relays.launch.py change, these say what to update */
 
@@ -30,7 +30,7 @@ describe('the commands the setup types', () => {
   it('open RViz on the robot’s own config, with the README’s arguments after it', () => {
     const [rviz] = scriptOf('localize', robot)
     expect(rviz.text).toBe(
-      'rviz2 -d frontend/server/rviz/robot_741.rviz --ros-args -r /tf:=/tf_relayed -r /tf_static:=/tf_static_relayed -r /goal_pose:=/goal_pose_741 -r /initialpose:=/initialpose_relayed_741',
+      'rviz2 -d frontend/server/rviz/robot_741.rviz --ros-args -r /goal_pose:=/goal_pose_741 -r /initialpose:=/initialpose_relayed_741',
     )
   })
 
@@ -44,25 +44,19 @@ describe('the topics the check expects', () => {
   const launch = readFileSync(new URL('../../launch/relays.launch.py', import.meta.url), 'utf8')
   const relays = [...launch.matchAll(/^\s*\('(\w+)',\s*'(\w+)',\s*'([^']+)',\s*'([^']+)'/gm)]
 
-  it('are one node per entry of relays.launch.py’s RELAYS', () => {
+  it('are one node per entry of relays.launch.py’s RELAYS, and the launch starts nothing else', () => {
     expect(relays).toHaveLength(RELAY_NODE_COUNT)
+    expect(launch).toMatch(/LaunchDescription\(\[relay_node\(\*entry\) for entry in RELAYS\]\)/)
   })
 
-  it('the launch starts the front camera’s relay too: one node more than RELAYS', () => {
-    expect(launch).toMatch(/\[relay_node\(\*entry\) for entry in RELAYS\] \+ \[camera_node\(\)\]/)
-    expect(LAUNCH_NODE_COUNT).toBe(RELAY_NODE_COUNT + 1)
-  })
-
-  it('are the _relayed topics relays.launch.py makes, suffixed with the robot ID except the shared TF', () => {
-    const { own, shared } = relayedTopics(robot.id)
+  it('are the _relayed topics relays.launch.py makes, suffixed with the robot ID', () => {
     const made = relays.flatMap((m) => [m[3], m[4]]).filter((t) => t.endsWith('_relayed'))
-    expect(shared.every((t) => made.includes(t))).toBe(true)
-    expect([...own].sort()).toEqual(
-      made
-        .filter((t) => !shared.includes(t))
-        .map((t) => `${t}_${robot.id}`)
-        .sort(),
-    )
+    expect([...relayedTopics(robot.id)].sort()).toEqual(made.map((t) => `${t}_${robot.id}`).sort())
+  })
+
+  it('leave the lidar, TF and camera on the robot', () => {
+    const topics = relays.flatMap((m) => [m[3], m[4]])
+    expect(topics.filter((t) => /ALIGNED_POINTS|^\/tf|camera/.test(t))).toEqual([])
   })
 })
 

@@ -268,17 +268,17 @@ describe('the ALOHA’s setup', () => {
     const t = setUp({ bridgeEveryMs: 4000 }, ['localized'], { masterMs: 700 })
     const run = runAlohaSetup(t.ctx)
     await vi.advanceTimersByTimeAsync(60_000)
-    expect(t.step('bridge')).toMatchObject({ status: 'active', detail: expect.stringMatching(/^Bridging \d+ of 28 topics: the ALOHA answers slowly \(0\.7 s a call to its ROS master\)$/) })
+    expect(t.step('bridge')).toMatchObject({ status: 'active', detail: expect.stringMatching(new RegExp(`^Bridging \\d+ of ${YAML_TOPICS.length} topics: the ALOHA answers slowly \\(0\\.7 s a call to its ROS master\\)$`)) })
     await finish(run)
     expect(t.step('bridge').status).toBe('done')
     expect(t.step('bridge').detail).toBe('ROS_DOMAIN_ID=1 · /scan at 10.0 Hz · the ALOHA answers slowly (0.7 s a call to its ROS master)')
-    expect(YAML_TOPICS).toHaveLength(28)
+    expect(YAML_TOPICS).toHaveLength(18)
   })
 
   it('gives up on a bridge that stops bridging, saying where it stopped', async () => {
     const t = setUp({ bridgeStallsAfter: 10 })
     await expect(finish(runAlohaSetup(t.ctx))).rejects.toThrow(
-      `aloha/bridge.sh bridged nothing more for 30 s, after 10 of 28 topics (the last: ${YAML_TOPICS[9]})`,
+      `aloha/bridge.sh bridged nothing more for 30 s, after 10 of ${YAML_TOPICS.length} topics (the last: ${YAML_TOPICS[9]})`,
     )
     expect(t.step('bridge').checks.map((c) => [c.label, c.ok])).toEqual([
       ['/scan', true],

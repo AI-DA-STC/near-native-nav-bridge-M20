@@ -7,13 +7,12 @@ describe('a robot’s RViz config', () => {
   const config = robotRviz('741')
   const topics = [...config.matchAll(/^\s+Value: (\/\S+)$/gm)].map((m) => m[1])
 
-  it('has the robot’s map, odometry, waypoints and point cloud, and no other robot’s', () => {
+  it('has the robot’s map, odometry and waypoints, and no other robot’s: no lidar, which stays on the robot', () => {
     expect(topics).toEqual([
       '/GRID_MAP_relayed_741',
       '/GRID_MAP_relayed_741_updates',
       '/ODOM_relayed_741',
       '/waypoint_markers_741',
-      '/ALIGNED_POINTS_relayed_741',
       '/initialpose',
       '/goal_pose',
       '/clicked_point',

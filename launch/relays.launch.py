@@ -11,14 +11,13 @@ from launch_ros.actions import Node
 # Unset means no suffix, i.e. the original single-robot names.
 ROBOT_ID = os.environ.get('ROBOT_ID', '').strip()
 SUFFIX = f'_{ROBOT_ID}' if ROBOT_ID else ''
-SHARED_TOPICS = ('/tf_relayed', '/tf_static_relayed')
 
 
 # Only the cross-machine side of each pair gets the suffix, and that side is always
 # the one ending in '_relayed'. The other side is a fixed name owned by the robot's
-# own AOS stack (/ODOM, /tf, /goal_pose ...) and must keep it to stay connected.
+# own AOS stack (/ODOM, /GRID_MAP, /goal_pose ...) and must keep it to stay connected.
 def per_robot(topic):
-    return topic + SUFFIX if topic.endswith('_relayed') and topic not in SHARED_TOPICS else topic
+    return topic + SUFFIX if topic.endswith('_relayed') else topic
 
 
 def relay_node(executable, name, in_topic, out_topic, qos_overrides=None):
@@ -39,19 +38,12 @@ def relay_node(executable, name, in_topic, out_topic, qos_overrides=None):
     )
 
 
-# AOS -> laptop: subscribe to AOS topic, republish under <topic>_relayed.
-# drdds/msg/* custom types are skipped — laptop docker doesn't have those defs.
+# Only what the laptop draws (the map, where the robot is) and the two poses it sends. Everything the robots relay
+# shares one Wi-Fi: the lidar cloud (/ALIGNED_POINTS), TF and the front camera flooded it, so they stay on the robot.
 RELAYS = [
-    # tf2_msgs/TFMessage  --  /tf_static is latched: needs transient_local QoS
-    ('tfmessage_relay',    'tf_relay',                '/tf',         '/tf_relayed',         None),
-    ('tfmessage_relay',    'tf_static_relay',         '/tf_static',  '/tf_static_relayed',
-        {'durability': 'transient_local'}),
-
-    # nav_msgs/Odometry
-    ('odom_relay',         'odom_relay',              '/ODOM',       '/ODOM_relayed',       None),
-
-    # sensor_msgs/PointCloud2
-    ('pointcloud_relay',   'aligned_points_relay',    '/ALIGNED_POINTS',        '/ALIGNED_POINTS_relayed',        None),
+    # AOS -> laptop: subscribe to the AOS topic, republish under <topic>_relayed_<ROBOT_ID>.
+    # nav_msgs/Odometry, in the map frame: where the robot is
+    ('odom_relay',         'odom_relay',              '/ODOM',                  '/ODOM_relayed',                  None),
 
     # nav_msgs/OccupancyGrid (latched: reliable+transient_local already default)
     ('occupancygrid_relay','grid_map_relay',          '/GRID_MAP',              '/GRID_MAP_relayed',              None),
@@ -66,17 +58,6 @@ RELAYS = [
     ('posestamped_relay',  'goal_pose_relay',         '/goal_pose_relayed',     '/goal_pose',                     None),
 ]
 
-# The front camera, cut down on the robot to one small JPEG a second (scripts/camera_relay.py, needs ffmpeg in the
-# image): /camera_front_relayed_<ROBOT_ID> for the laptop's Command Center.
-def camera_node():
-    return Node(
-        package='nav_cmd_bridge',
-        executable='camera_relay.py',
-        name='camera_relay' + SUFFIX,
-        output='screen',
-        parameters=[{'topic': per_robot('/camera_front_relayed')}],
-    )
-
 
 def generate_launch_description():
-    return LaunchDescription([relay_node(*entry) for entry in RELAYS] + [camera_node()])
+    return LaunchDescription([relay_node(*entry) for entry in RELAYS])

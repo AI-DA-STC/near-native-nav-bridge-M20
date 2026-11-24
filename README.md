@@ -75,13 +75,18 @@ wait for atleast 5s for the above relay node to start, you should see a bunch of
 
 `ROBOT_ID` suffixes every relayed topic and relay node name (`/ODOM_relayed_<robot_id>`, `odom_relay_<robot_id>`)
 and prefixes every frame id except `map` (`<robot_id>/base_link`), so any number of robots can share one
-`ROS_DOMAIN_ID`. All robots publish TF into the shared `/tf_relayed` and `/tf_static_relayed`, so they
-must all run the same map. Left unset you get the original single-robot names.
+`ROS_DOMAIN_ID`. Left unset you get the original single-robot names.
+
+Each robot relays only what the laptop draws and the two poses it sends: its odometry (`/ODOM_relayed_<id>`, in the
+`map` frame, 10 Hz) and SLAM map (`/GRID_MAP_relayed_<id>`) to the laptop, and `/initialpose_relayed_<id>` and
+`/goal_pose_relayed_<id>` from it. The lidar cloud (`/ALIGNED_POINTS`), TF (`/tf`, `/tf_static`) and the front camera stay
+on the robot: all robots share one Wi-Fi, and relayed they flooded it. An image built before that relays 8 nodes, not 4;
+the GUI's Setup flags it: rebuild and push the image (Build and push, above).
 
 - Step 4 : Localize the robot on the preloaded SLAM map, from the laptop's rviz (rviz2 on the robot is too slow).
 In a laptop terminal with the laptop side Step 3 exports:
 ```bash
-rviz2 --ros-args -r /tf:=/tf_relayed -r /tf_static:=/tf_static_relayed -r /initialpose:=/initialpose_relayed_<robot_id>
+rviz2 --ros-args -r /initialpose:=/initialpose_relayed_<robot_id>
 ```
 Set Fixed Frame to `map` (the robot's localizer only knows `map`, not the `<robot_id>/` frames) and enable
 /ODOM_relayed_<id> and /GRID_MAP_relayed_<id>. The odometry should roughly match where the robot stands. If it is
@@ -105,12 +110,12 @@ source install/setup.bash
 ros2 topic list
 ros2 topic hz /ODOM_relayed_<robot_id>
 ```
-- Step 5 : Launch rviz on the robots' shared TF. Do not relay TF into `/tf`: the robots would relay it back in a loop.
+- Step 5 : Launch rviz on the robots' map and odometry. No TF is relayed: the odometry is already in the `map` frame.
 ```bash
-rviz2 --ros-args -r /tf:=/tf_relayed -r /tf_static:=/tf_static_relayed -r /goal_pose:=/goal_pose_<robot_id> -r /initialpose:=/initialpose_relayed_<robot_id>
+rviz2 --ros-args -r /goal_pose:=/goal_pose_<robot_id> -r /initialpose:=/initialpose_relayed_<robot_id>
 ```
-Set Fixed Frame to `map`. Per robot id, enable /ALIGNED_POINTS_relayed_<id>, /ODOM_relayed_<id> and
-/NAV_POINTS_relayed_<id>, plus one /GRID_MAP_relayed_<id>, and add a "2D Goal Pose" tool with topic /goal_pose_<id>.
+Set Fixed Frame to `map`. Per robot id, enable /ODOM_relayed_<id>, plus one /GRID_MAP_relayed_<id>, and add a
+"2D Goal Pose" tool with topic /goal_pose_<id>.
 "2D Pose Estimate" relocalizes the robot, as in robot side Step 4.
 The goal arrow disappears once drawn, so the bridge publishes the waypoints back: Add → By topic →
 /waypoint_markers_<id> → MarkerArray. Each waypoint shows as a numbered arrow, green while it is the current target.
@@ -151,7 +156,7 @@ Likewise 665 with `--ip 192.168.123.101` and 738 with `--ip 192.168.123.103`.
 - Step 2 : Launch rviz with the "2D Goal Pose" tool publishing on /fleet_goal. No bridge listens there, so drawing
 an arrow never moves a robot by itself.
 ```bash
-rviz2 --ros-args -r /tf:=/tf_relayed -r /tf_static:=/tf_static_relayed -r /goal_pose:=/fleet_goal
+rviz2 --ros-args -r /goal_pose:=/fleet_goal
 ```
 Set up the displays as in Step 5, but keep only the default "2D Goal Pose" tool: a tool set to /goal_pose_<id>
 moves that robot as soon as you draw. Also Add → By topic → /fleet_goal_markers → MarkerArray, which shows the
@@ -251,30 +256,22 @@ The box stands at a known place on the dogs' map: `demo/box.json` (`x`, `y`, `z`
 too. Edit that file when the box moves. A UWB tag on the box will later replace it with a live topic.
 
 With `DETECT=fixed`, the default, `run_demo.sh` starts `demo/find_box.py` with the sweep. Once R3 (738) is within 2 m of
-the box (`--reach`) and has stood still for a second, it takes the next frame of R3's front camera
-(`/camera_front_relayed_738`, below) and prints, then exits:
-`[DETECT] Box found by robot 738 at x=1.45 y=6.51 (map), 1.6 m away, confidence 1.00, image demo/detections/box_….jpg`.
-Without a frame within 10 s it says `image none`. The sweep goes on to its end either way. R3's last sweep waypoint
+the box (`--reach`) and has stood still for a second, it prints, then exits:
+`[DETECT] Box found by robot 738 at x=1.45 y=6.51 (map), 1.6 m away, confidence 1.00, image none`.
+No photo: the dogs' cameras stay on the dogs. The sweep goes on to its end either way. R3's last sweep waypoint
 must therefore end near the box. To try it alone, with the fleet's exports: `python3 demo/find_box.py`.
 
-## The dogs' front cameras (scripts/camera_relay.py)
+## The cameras the Command Center shows
 
-Each M20's front camera streams `rtsp://10.21.31.103:8554/video1` from the motion host (10.21.31.103), where the
-relays' container runs. `launch/relays.launch.py` also starts `camera_relay.py` there. It runs ffmpeg at nice 10 to cut
-the stream down to one 640-px JPEG a second, published as `/camera_front_relayed_<ROBOT_ID>` (sensor_msgs/CompressedImage,
-about 50 KB/s per robot). The motion host's free CPU is its little cores (the big ones are kept for the controller), shared
-with the RTSP server and the lidar, so ffmpeg decodes as little as it can: only keyframes (`skip_frame` nokey). It needs
-`ffmpeg` in the image (`Dockerfile.deploy`): rebuild and push it once (Build and push, above), then pull it on each robot
-(Setup's image step). Check from the laptop: `ros2 topic hz /camera_front_relayed_741` (about 1 Hz). A watchdog restarts
-ffmpeg when no frame has come for 10 s (`stall_s`), since a stream that stalls without closing would hang it. If frames
-stopped because the camera sends too few keyframes, it logs `… too few keyframes, skip_frame nonintra from now on`, then
-`none` (every frame decoded, the most CPU: watch the robot's load with `top`). `-p skip_frame:=none` starts it there. While
-the camera sends nothing, it logs `No video from …` and tries again every 5 s. Its lines are in the robot's terminal, under
-the relays' launch.
+Only the ALOHA's two wrist cameras: `/camera_l/color/image_throttled/compressed` and `/camera_r/…` come over its bridge
+(ROS_DOMAIN_ID=1), throttled on the robot by `aloha/robot/stream.launch` to `fps` (3). They also photograph the box (Box
+contents, below). The dogs' cameras stay on the dogs (robot side Step 3), and the ALOHA's centre camera (`camera_f`) on
+the ALOHA: over the shared Wi-Fi, they flooded it.
 
-The ALOHA's centre camera (`camera_f` of `multi_camera.launch`) comes over its bridge as
-`/camera_f/color/image_throttled/compressed` (ROS_DOMAIN_ID=1). `aloha/robot/stream.launch` throttles it to `fps_f`,
-1 a second, on the robot; the wrist cameras keep `fps` (3). Copy the new `stream.launch` to the ALOHA once.
+The ALOHA's bridge (`aloha/bridge.yaml`) carries only what the laptop uses: the map, AMCL's pose and particles, the
+scan and TF (for RViz's Localize view), the initial pose and navigation goals, move_base's status, the arms' joints
+(`/puppet/joint_*` read, `/master/joint_*` commanded), the two wrist cameras and docking. The arms' end poses and status
+(200 Hz each), move_base's plans and the centre camera stay on the robot.
 
 ## Box detection with YOLO (demo/detect_box.py, DETECT=1)
 
@@ -308,14 +305,25 @@ stands`, and `dock.py` takes over. `dock.py` docks only from within 0.5 m and 0.
 off it answers `… too far to dock, move_base did not get there` and the run fails there. Both need the ALOHA localized
 on its own map (the Command Center's Setup, step d): from a wrong pose `move_base` finds no plan at all.
 
+Crop the ALOHA's map after saving it: a saved map is 4000 x 4000 cells (16 MB) however little is known, and
+`map_server` sends all of it through the bridge at every start of either, for minutes on the ALOHA's Wi-Fi, during which
+RViz and the Command Center show no map. On the ALOHA, `python3 crop_map.py <map.yaml>` (`aloha/robot/crop_map.py`,
+copied next to `start_aloha.sh`) keeps the known part plus 2 m, a few hundred KB, and moves the origin with it, so map
+coordinates and recorded waypoints stay valid. It keeps the originals as `.orig`. Then restart `map_server` (the
+`navigation` window: Ctrl+C, Up, Enter).
+
 ## Box contents (aloha/inspect_box.py)
 
-When the Aloha's arms reach pose 3 (the lid open), they hold it 5 s longer. In that time, `manipulator.py` runs
-`aloha/inspect_box.py`, which takes one photo from `/camera_r/color/image_raw` (ROS_DOMAIN_ID=1, the right wrist camera
-through `aloha/bridge.sh` and `robot/stream.launch`). It then runs the YOLO26 tools model,
-`external/lynx-M20-yolo/weights/tools_seg.pt`, on that one photo. The classes are screwdriver, drill, pliers, case,
-scissors and object. It prints `[INSPECT] Box contents: screwdriver 0.56, object 0.39; image demo/detections/contents_….jpg`.
-The operator window shows the photo, with the objects outlined, under the box's image, with the list of objects.
+When the Aloha's arms reach the last pose but one, before they go home, `manipulator.py` prints `[INSPECT] Taking
+photos with both wrist cameras` and saves the first frame each wrist camera took once the arms were there:
+`demo/detections/contents_…_left.jpg` and `_right.jpg`. It listens to both cameras from the start, and compares their
+stamps with the arms' (both the ALOHA's clock), so the photos are taken at once whatever the Wi-Fi's delay. The arms
+hold the pose until both photos are in (10 s at most), then 2 s longer, then go home. `--photo-pose N`
+(`run_manipulator.sh`) photographs at another pose. While they go home, `aloha/inspect_box.py` runs the YOLO26 tools
+model, `external/lynx-M20-yolo/weights/tools_seg.pt`, on both photos. The classes are screwdriver, drill, pliers, case,
+scissors and object. It prints each object once, at its best confidence, and both photos side by side with the objects
+outlined: `[INSPECT] Box contents: screwdriver 0.56, object 0.39; image demo/detections/contents_….jpg`.
+The operator window shows that image under the box's image, with the list of objects.
 It then asks at once for the operator's verdict: **Anomaly** or **Clear**. After **Clear**, R1, R2 and R3 go back to
 their formation slots (`formation.json`), the mission plan's last step, and the demo ends once they are there. After
 **Anomaly**, the demo ends at once and that step shows as skipped. A verdict given before `run_demo.sh` asks is kept until it asks. Click either image, or **⤢ Enlarge**, to
@@ -323,4 +331,4 @@ see it in a window of its own. Maximize that window (or double-click it, or pres
 
 - `tools_seg.pt` is on the detector repo's `instance-training-batch-updates` branch. The submodule is pinned to that
   branch's commit (`.gitmodules` names the branch).
-- To try it alone, with the bridge up: `ROS_DOMAIN_ID=1 python3 aloha/inspect_box.py`.
+- To try it alone on photos already taken: `python3 aloha/inspect_box.py demo/detections/contents_…_left.jpg demo/detections/contents_…_right.jpg`.

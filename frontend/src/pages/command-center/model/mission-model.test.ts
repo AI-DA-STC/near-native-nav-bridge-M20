@@ -98,11 +98,11 @@ describe('robot state words', () => {
     expect(robotStateOf('r1', withR1({ pose: null }))).toMatchObject({ word: 'NO POSITION', tone: 'warn' })
     expect(robotStateOf('r1', withR1({ pose: { ...r1.pose!, at: snap.serverTime - 4000 } }))).toMatchObject({ word: 'STALE 4 s', tone: 'warn' })
   })
-  it('follows the mission: patrol laps, docking, the lid', () => {
+  it('follows the mission: patrol laps, docking, the photos', () => {
     expect(robotStateOf('r1', at(2)).word).toBe('PATROLLING · LAP 3')
     expect(robotStateOf('r2', at(1))).toMatchObject({ word: 'NOT CONNECTED', task: 'Is its nav bridge running?' })
     expect(robotStateOf('aloha', at(10)).word).toBe('DOCKING 2/3')
-    expect(robotStateOf('aloha', at(11))).toMatchObject({ word: 'ARMS 3/5 · LID OPEN', task: 'Holding 5 s for the photo' })
+    expect(robotStateOf('aloha', at(11))).toMatchObject({ word: 'ARMS 3/5 · PHOTOS', task: 'Holding while the wrist cameras photograph the box' })
     expect(robotStateOf('r3', at(9)).word).toBe('WATCHING ITEM')
   })
   it('16: a robot that never confirmed the E-STOP is not shown as stopped', () => {
@@ -222,40 +222,37 @@ describe('the Operator panel', () => {
 
 describe('cameras', () => {
   const withCameras = (snap: MissionSnapshot, cameras: MissionSnapshot['cameras']): MissionSnapshot => ({ ...snap, cameras })
-  it('one tile per robot in the mission: live under 3 s, stale after, none before the first frame', () => {
+  it('one tile per ALOHA wrist camera: the dogs’ cameras and its centre camera stay on the robots', () => {
+    const snap = at(7)
+    const tiles = cameraTilesOf(withCameras(snap, {}))
+    expect(tiles.map((t) => [t.key, t.robot, t.camera])).toEqual([
+      ['aloha-left', 'aloha', 'left wrist camera'],
+      ['aloha-right', 'aloha', 'right wrist camera'],
+    ])
+    expect(tiles[0]).toMatchObject({ state: 'none', src: null, image: null, note: 'No video: is stream.launch running on the ALOHA?' })
+    // each feed carries the ALOHA's state word
+    expect(tiles.map((t) => t.word)).toEqual([robotStateOf('aloha', snap).word, robotStateOf('aloha', snap).word])
+  })
+  it('live under 3 s, stale after', () => {
     const snap = at(7)
     const now = snap.serverTime
     const tiles = cameraTilesOf(
       withCameras(snap, {
-        r1: { topic: '/camera_front_relayed_741', at: now - 1000 },
-        r2: { topic: '/camera_front_relayed_665', at: now - 12_000 },
-        r3: { topic: '/camera_front_relayed_738', at: null },
-        aloha: { topic: '/camera_f/color/image_throttled/compressed', at: null },
+        'aloha-left': { topic: '/camera_l/color/image_throttled/compressed', at: now - 1000 },
+        'aloha-right': { topic: '/camera_r/color/image_throttled/compressed', at: now - 12_000 },
       }),
     )
-    expect(tiles.map((t) => [t.robot, t.state])).toEqual([
-      ['r1', 'live'],
-      ['r2', 'stale'],
-      ['r3', 'none'],
-      ['aloha', 'none'],
-    ])
-    expect(tiles[0]).toMatchObject({ camera: 'front camera', src: `/api/mission/camera/r1.jpg?at=${now - 1000}`, note: null })
-    // each feed carries its robot's state word, now that the robot cards are gone
-    expect(tiles.map((t) => t.word)).toEqual((['r1', 'r2', 'r3', 'aloha'] as const).map((k) => robotStateOf(k, snap).word))
-    expect(tiles[1].note).toBe('no frame for 0:12')
-    expect(tiles[2]).toMatchObject({ src: null, image: null, note: 'No video: is its relay running?' })
-    expect(tiles[3]).toMatchObject({ camera: 'centre camera', note: 'No video: is stream.launch running on the ALOHA?' })
+    expect(tiles[0]).toMatchObject({ state: 'live', src: `/api/mission/camera/aloha-left.jpg?at=${now - 1000}`, note: null })
+    expect(tiles[0].image).toMatchObject({ caption: expect.stringMatching(/^ALOHA · left wrist camera · /) })
+    expect(tiles[1]).toMatchObject({ state: 'stale', note: 'no frame for 0:12' })
   })
-  it('a robot not in the mission has no tile', () => {
+  it('no tile without the ALOHA in the mission', () => {
     const snap = at(7)
-    const robots = { ...snap.robots, r2: { ...snap.robots.r2, inMission: false } }
-    expect(cameraTilesOf({ ...snap, robots }).map((t) => t.robot)).toEqual(['r1', 'r3', 'aloha'])
+    const robots = { ...snap.robots, aloha: { ...snap.robots.aloha, inMission: false } }
+    expect(cameraTilesOf({ ...snap, robots })).toEqual([])
   })
-  it('Suspicious item, before the box is found, says whether R3’s camera sends frames', () => {
-    const snap = at(4)
-    expect(suspiciousItemOf(snap, false).status.text).toBe('R3 no video')
-    const live = withCameras(snap, { r3: { topic: '/camera_front_relayed_738', at: snap.serverTime - 500 } })
-    expect(suspiciousItemOf(live, false).status).toMatchObject({ tone: 'live', text: 'R3 camera live' })
+  it('Suspicious item, before the box is found, waits for R3', () => {
+    expect(suspiciousItemOf(at(4), false).status).toMatchObject({ tone: 'neutral', text: 'Waiting for R3' })
   })
   it('Suspicious item: the box R3 reached, with no confidence and its photo, or none', () => {
     const snap = at(7)

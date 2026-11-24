@@ -1,6 +1,6 @@
 import type { PoseFact, RelayState, SetupPrompt, SetupStepFacts, SetupStepKey } from '../src/shared/api/setup-protocol.ts'
 import { afterEcho, errorLine, hzRates, lastLine, pullOutcome, relayLaunch, topicsListed } from './command-output.ts'
-import { LAUNCH_NODE_COUNT, README, RECOVERY, REGISTRY, relayedTopics, rvizWithConfig } from './readme-commands.ts'
+import { README, RELAY_NODE_COUNT, RECOVERY, REGISTRY, relayedTopics, rvizWithConfig } from './readme-commands.ts'
 import { rvizConfigPath } from './rviz-config.ts'
 import { placeOf, promptAtEnd, type ShellPrompt } from './shell-prompt.ts'
 import { Aborted, WaitTimeout, type Shell } from './shell-transcript.ts'
@@ -184,7 +184,7 @@ async function image(ctx: M20SetupContext) {
 async function relay(ctx: M20SetupContext) {
   const shell = ctx.robotShell()
   const step = ctx.step('relay')
-  const topic = relayedTopics(ctx.robot.id).own[0]
+  const topic = relayedTopics(ctx.robot.id)[0]
   // Started now, answered while compose runs: a relay already publishing would double every topic
   const publishersBefore = ctx.odomPublishers()
   await ensureRobotRoot(ctx, 'relay')
@@ -254,10 +254,18 @@ async function relay(ctx: M20SetupContext) {
     throw fail(launchCmd, problem ?? 'No relay started in 5 s')
   }
   launchCmd.status = 'done'
-  launchCmd.note = `${launched.started} of ${LAUNCH_NODE_COUNT} relays started`
+  launchCmd.note = `${launched.started} of ${RELAY_NODE_COUNT} relays started`
+  // An image from before relays.launch.py was cut down also relays the lidar, TF and camera, which flood the Wi-Fi
+  if (launched.started > RELAY_NODE_COUNT) {
+    step.checks.push({
+      label: 'Relays in the image',
+      ok: false,
+      value: `${launched.started}, not ${RELAY_NODE_COUNT}: an older image that also relays the lidar, TF and camera. Rebuild and push it (README "Docker build"), then run the image step again`,
+    })
+  }
   ctx.setRelay('running')
   ctx.relayLaunched(from)
-  step.detail = `relays.launch.py running as ROBOT_ID=${ctx.robot.id}, ${launched.started} of ${LAUNCH_NODE_COUNT} relays`
+  step.detail = `relays.launch.py running as ROBOT_ID=${ctx.robot.id}, ${launched.started} of ${RELAY_NODE_COUNT} relays`
 }
 
 /** c. The laptop's ROS domain, Fast DDS profile and workspace, in the package root */
@@ -275,8 +283,7 @@ async function topics(ctx: M20SetupContext) {
   const step = ctx.step('topics')
   await settle(shell, ctx.signal)
   const [listCmd, hzCmd] = step.commands
-  const { own, shared } = relayedTopics(ctx.robot.id)
-  const expected = [...own, ...shared]
+  const expected = relayedTopics(ctx.robot.id)
   step.checks = expected.map((label) => ({ label, ok: null, value: null }))
   step.detail = 'Waiting for the topics to be discovered'
   const deadline = Date.now() + 25_000
@@ -337,7 +344,7 @@ async function topics(ctx: M20SetupContext) {
   step.detail = `${expected.length} topics listed · /ODOM_relayed_${ctx.robot.id} at ${rate.toFixed(1)} Hz`
 }
 
-/** e. rviz2 on the robots' shared TF, with this robot's goal and initial pose topics: the operator localizes it */
+/** e. rviz2 on this robot's map and odometry, with its goal and initial pose topics: the operator localizes it */
 async function localize(ctx: M20SetupContext) {
   const shell = ctx.laptopShell()
   const step = ctx.step('localize')

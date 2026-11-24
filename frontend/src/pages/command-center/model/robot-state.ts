@@ -46,12 +46,12 @@ function dogState(key: DogKey, snap: MissionSnapshot): RobotState {
 function alohaState(snap: MissionSnapshot): RobotState {
   const { route, nav, docking, arms } = snap.robots.aloha
   if (nav === 'waiting') return { word: 'STANDBY', tone: 'warn', task: 'Waiting for move_base: is its bridge running?' }
-  if (arms.state === 'done') return { word: 'DONE', tone: 'ok', task: 'Arms done · photo taken' }
+  if (arms.state === 'done') return { word: 'DONE', tone: 'ok', task: 'Arms done · photos taken' }
   if (arms.pose > 0) {
     return {
-      word: `ARMS ${arms.pose}/${arms.of}${arms.pose === 3 ? ' · LID OPEN' : ''}`,
+      word: `ARMS ${arms.pose}/${arms.of}${arms.state === 'holding' ? ' · PHOTOS' : ''}`,
       tone: 'ok',
-      task: arms.state === 'holding' ? 'Holding 5 s for the photo' : `Arms to pose ${arms.pose} of ${arms.of}`,
+      task: arms.state === 'holding' ? 'Holding while the wrist cameras photograph the box' : `Arms to pose ${arms.pose} of ${arms.of}`,
     }
   }
   if (docking.state === 'docked') return { word: 'DOCKED', tone: 'ok', task: 'Docked at the box' }

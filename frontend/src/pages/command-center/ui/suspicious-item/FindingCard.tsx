@@ -37,12 +37,10 @@ export function FindingCard({ finding, by = 'r3', title = 'BOX FOUND', onExpand,
           </Badge>
         ) : null}
       </header>
-      <div className="cc-finding__body">
+      <div className={cx('cc-finding__body', !finding.snapshot && 'is-text')}>
         {finding.snapshot ? (
           <DetectionImage src={finding.snapshot} alt="Snapshot of the box" boxes={finding.detection ? [finding.detection] : []} aspect="4 / 3" onExpand={onExpand} />
-        ) : (
-          <p className="cc-finding__nophoto">No photo: {r.label}’s camera sent no frame.</p>
-        )}
+        ) : null}
         <dl className="cc-finding__facts">
           <div>
             <dt>X</dt>

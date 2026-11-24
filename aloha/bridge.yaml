@@ -9,22 +9,16 @@ topics:
   - {topic: /move_base_simple/goal, type: geometry_msgs/msg/PoseStamped, queue_size: 10}
   - {topic: /move_base/cancel, type: actionlib_msgs/msg/GoalID, queue_size: 10}
   - {topic: /move_base/status, type: actionlib_msgs/msg/GoalStatusArray, queue_size: 10}
-  - {topic: /move_base/current_goal, type: geometry_msgs/msg/PoseStamped, queue_size: 10}
-  - {topic: /move_base/GlobalPlanner/plan, type: nav_msgs/msg/Path, queue_size: 1}
-  - {topic: /move_base/DWAPlannerROS/local_plan, type: nav_msgs/msg/Path, queue_size: 1}
-  # Piper arms (start_ms_piper.launch), 200 Hz each. arm_status and end_pose_euler need build_bridge.sh's piper_msgs
+  # Piper arms (start_ms_piper.launch), 200 Hz each: only the joints, which manipulator.py reads (puppet) and commands
+  # (master). The end poses and arm status stay on the robot, as do move_base's plans: the ALOHA's Wi-Fi is its weakest
+  # link, and the bridge's traffic is what slows it
   - {topic: /master/joint_left, type: sensor_msgs/msg/JointState, queue_size: 10}
   - {topic: /master/joint_right, type: sensor_msgs/msg/JointState, queue_size: 10}
   - {topic: /puppet/joint_left, type: sensor_msgs/msg/JointState, queue_size: 10}
   - {topic: /puppet/joint_right, type: sensor_msgs/msg/JointState, queue_size: 10}
-  - {topic: /puppet/end_pose_left, type: geometry_msgs/msg/PoseStamped, queue_size: 10}
-  - {topic: /puppet/end_pose_right, type: geometry_msgs/msg/PoseStamped, queue_size: 10}
-  - {topic: /puppet/end_pose_euler_left, type: piper_msgs/msg/PosCmd, queue_size: 10}
-  - {topic: /puppet/end_pose_euler_right, type: piper_msgs/msg/PosCmd, queue_size: 10}
-  - {topic: /puppet/arm_status_left, type: piper_msgs/msg/PiperStatusMsg, queue_size: 10}
-  - {topic: /puppet/arm_status_right, type: piper_msgs/msg/PiperStatusMsg, queue_size: 10}
-  # Cameras: JPEG color throttled on the robot by robot/stream.launch, decompressed to /camera_X/color/image_raw here
-  - {topic: /camera_f/color/image_throttled/compressed, type: sensor_msgs/msg/CompressedImage, queue_size: 1}
+  # The wrist cameras: JPEG color throttled on the robot by robot/stream.launch, decompressed to
+  # /camera_X/color/image_raw here. manipulator.py photographs the box with both; the Command center shows them. The
+  # centre camera (camera_f) stays on the robot
   - {topic: /camera_l/color/image_throttled/compressed, type: sensor_msgs/msg/CompressedImage, queue_size: 1}
   - {topic: /camera_r/color/image_throttled/compressed, type: sensor_msgs/msg/CompressedImage, queue_size: 1}
   # Precise docking: send_goal.py --dock to robot/dock.py on the robot, and its answers

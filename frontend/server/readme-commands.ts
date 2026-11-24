@@ -29,13 +29,12 @@ export const README = {
   topicList: 'ros2 topic list',
   topicHz: (id: string) => `ros2 topic hz /ODOM_relayed_${id}`,
   // Laptop side, Step 5
-  rviz: (id: string) =>
-    `rviz2 --ros-args -r /tf:=/tf_relayed -r /tf_static:=/tf_static_relayed -r /goal_pose:=/goal_pose_${id} -r /initialpose:=/initialpose_relayed_${id}`,
+  rviz: (id: string) => `rviz2 --ros-args -r /goal_pose:=/goal_pose_${id} -r /initialpose:=/initialpose_relayed_${id}`,
   // Multi-robot, Step 1 (with ROBOT_ID exported): the plain bridge fleet_management.py's goals go through. It only sends
   // the robot a heartbeat until a goal arrives on /goal_pose_<id>
   navBridge: (ip: string) => `ros2 run nav_cmd_bridge nav_cmd_bridge bridge --ip ${ip}`,
   // Multi-robot, Step 2: the 2D Goal Pose tool on /fleet_goal, where no bridge listens (recording takes it as a waypoint)
-  rvizFleet: 'rviz2 --ros-args -r /tf:=/tf_relayed -r /tf_static:=/tf_static_relayed -r /goal_pose:=/fleet_goal',
+  rvizFleet: 'rviz2 --ros-args -r /goal_pose:=/fleet_goal',
   // Recording demo waypoints, the table's aloha row: the ALOHA's RViz, on aloha/bridge.sh's domain
   rvizAloha: 'ROS_DOMAIN_ID=1 rviz2 --ros-args -r /goal_pose:=/fleet_goal',
   // "On robot, trust the laptop's plain-HTTP registry": shown to the operator, never typed
@@ -78,18 +77,14 @@ export const DEFAULT_LOGIN: Readonly<Record<RobotKind, { user: string; password:
   aloha: { user: 'agilex', password: 'agx' },
 }
 
-/** relays.launch.py's RELAYS: one node each */
-export const RELAY_NODE_COUNT = 7
+/** Every node relays.launch.py starts: one per entry of its RELAYS. An image built before the relays were cut down to
+ * these starts 8 (the lidar, TF and camera too) */
+export const RELAY_NODE_COUNT = 4
 
-/** Every node relays.launch.py starts: the RELAYS, and camera_relay.py for the front camera */
-export const LAUNCH_NODE_COUNT = RELAY_NODE_COUNT + 1
-
-/** The topics relays.launch.py makes for a robot: its own, suffixed with its ID, then the two all robots share */
-export function relayedTopics(id: string): { own: string[]; shared: string[] } {
-  return {
-    own: ['ODOM', 'ALIGNED_POINTS', 'GRID_MAP', 'initialpose', 'goal_pose'].map((name) => `/${name}_relayed_${id}`),
-    shared: ['/tf_relayed', '/tf_static_relayed'],
-  }
+/** The topics relays.launch.py makes for a robot, suffixed with its ID: the odometry and map it publishes, and the two
+ * poses it takes from the laptop */
+export function relayedTopics(id: string): string[] {
+  return ['ODOM', 'GRID_MAP', 'initialpose', 'goal_pose'].map((name) => `/${name}_relayed_${id}`)
 }
 
 /** relays.launch.py uses the ID raw in topic and node names ("Must be alphanumeric/underscore"), and the setup types it

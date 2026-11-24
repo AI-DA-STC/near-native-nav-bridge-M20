@@ -12,8 +12,8 @@ export interface SuspiciousItemPanelProps {
   onExpand: (image: ImageView) => void
 }
 
-/** What it waits for, then the box R3 found with R3's photo of it, then the ALOHA's photo of the contents; every image
- * opens in the lightbox. R3 finds the box by reaching it on its sweep (demo/find_box.py). */
+/** What it waits for, then the box R3 found, then the ALOHA's photo of the contents; every image opens in the lightbox.
+ * R3 finds the box by reaching it on its sweep (demo/find_box.py). */
 export function SuspiciousItemPanel({ snap, contentsInOperator, onExpand }: SuspiciousItemPanelProps) {
   const item = suspiciousItemOf(snap, contentsInOperator)
   const expand = (image: ImageView | null) => (image ? () => onExpand(image) : undefined)
@@ -38,7 +38,7 @@ export function SuspiciousItemPanel({ snap, contentsInOperator, onExpand }: Susp
         />
       ) : (
         <div className="cc-ccpage__itemwait">
-          <p>R3 sweeps toward the box. When it stops there, its photo of the box shows here.</p>
+          <p>R3 sweeps toward the box. When it stops there, the box shows here and on the map.</p>
           <p>Then the ALOHA drives to the box and photographs what is inside; that photo shows here too, for your verdict.</p>
         </div>
       )}
