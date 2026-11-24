@@ -5,9 +5,9 @@ import { flowOf } from './flow'
 import { navTabs } from './nav-tabs'
 import { routesHeaderOf, setupHeaderOf } from './setup-header-state'
 
-const SUBTITLE: Record<string, string> = { '/routes': 'routes', '/terminals': 'terminals' }
+const SUBTITLE: Record<string, string> = { '/routes': 'routes', '/terminals': 'terminals', '/fleet-health': 'fleet health' }
 
-/** The header on Setup, Routes and Terminals: the fleet's setup state (or the routes' on Routes) instead of the
+/** The header on Setup, Routes, Terminals and Fleet health: the fleet's setup state (or the routes' on Routes) instead of the
  * mission's, and no mission actions, clock or E-STOP. Setting up moves no robot; E-STOP is on the Command center, where
  * missions run. */
 export function SetupHeader() {

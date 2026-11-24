@@ -98,11 +98,13 @@ export interface PhaseTrackProps {
   compact?: boolean
   /** Replaces PHASE n/8 once the mission has ended */
   total?: string | null
+  /** Shrinks it to one line (PhaseBar) */
+  onMinimize?: () => void
   className?: string
 }
 
 /** The hero: phases 0–8 left to right, readable from across the room */
-export function PhaseTrack({ phases, loops = [], lanes, lanesMode = 'full', preview = false, compact = false, total, className }: PhaseTrackProps) {
+export function PhaseTrack({ phases, loops = [], lanes, lanesMode = 'full', preview = false, compact = false, total, onMinimize, className }: PhaseTrackProps) {
   const columns = phaseColumns(phases)
   const active = phases.find((p) => p.status === 'active')
   const failed = phases.find((p) => p.status === 'failed')
@@ -113,6 +115,11 @@ export function PhaseTrack({ phases, loops = [], lanes, lanesMode = 'full', prev
   const indexOf = (id: string) => phases.findIndex((p) => p.id === id)
   return (
     <div className={cx('cc-track', compact && 'cc-track--compact', className)} role="group" aria-label="Mission phases">
+      {onMinimize ? (
+        <button type="button" className="cc-track__min" aria-expanded="true" aria-label="Minimize the phases" title="Minimize the phases" onClick={onMinimize}>
+          <Icon name="chevronDown" size={14} />
+        </button>
+      ) : null}
       <ol className="cc-track__row" style={{ gridTemplateColumns: columns }}>
         <li className="cc-track__head" aria-hidden="true">
           {total ? (

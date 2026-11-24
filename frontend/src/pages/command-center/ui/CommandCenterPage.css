@@ -1,17 +1,18 @@
-/* The main screen: the phase track full width, then the fleet, the map and a side column of Operator, Suspicious item
-   and History. The page never scrolls; panels scroll inside, History giving way first. */
+/* The main screen: the phase track full width, then the robots' cameras over the map, beside a side column of Operator,
+   Suspicious item and History. The page never scrolls; panels scroll inside, History giving way first. */
 .cc-ccpage {
   display: grid; grid-template-rows: auto minmax(0, 1fr); grid-template-columns: minmax(0, 1fr); gap: var(--panel-gap);
   height: 100%; min-height: 0; padding: 10px var(--gutter) var(--gutter);
 }
 .cc-ccpage__main {
-  display: grid; grid-template-columns: 320px minmax(0, 1fr) var(--side-w); gap: var(--panel-gap);
+  display: grid; grid-template-columns: minmax(0, 1fr) var(--side-w); gap: var(--panel-gap);
   min-width: 0; min-height: 0;
 }
 .cc-ccpage.is-compact { padding-top: 6px; }
-.cc-ccpage.is-compact .cc-ccpage__main { grid-template-columns: 284px minmax(0, 1fr) var(--side-w); }
 
-.cc-ccpage__fleet { display: flex; flex-direction: column; gap: 6px; min-height: 0; overflow: auto; }
+/* the cameras keep their height; the map takes what is left under them */
+.cc-ccpage__centre { display: flex; flex-direction: column; gap: var(--panel-gap); min-width: 0; min-height: 0; }
+.cc-ccpage__mapcell { flex: 1 1 0; min-height: 0; }
 
 .cc-ccpage__side { display: flex; flex-direction: column; gap: var(--panel-gap); min-height: 0; overflow: hidden; }
 /* each panel keeps at least its title row, and its body scrolls inside */

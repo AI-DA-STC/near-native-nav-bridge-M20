@@ -57,7 +57,7 @@ export const PHASE_INFO: Readonly<Record<RoutePhase, PhaseInfo>> = {
     short: 'Cordon',
     letter: 'C',
     mode: 'single-waypoint',
-    needs: 'Its cordon point around zone 3',
+    needs: 'R1, R2: their cordon points around the box; R3: where it watches the box from',
     min: 1,
     single: true,
   },
@@ -96,12 +96,6 @@ export function lobbyColumns(snapshot: SetupSnapshot): Array<{ id: string; key: 
     const key = (['r1', 'r2', 'r3'] as const).find((k) => FLEET[k].id === r.id)
     return { id: r.id, key: key && isRobotKey(key) ? key : null }
   })
-}
-
-/** Why a robot has no cell in a phase */
-export function sitsOut(phase: RoutePhase, kind: 'm20' | 'aloha'): string {
-  if (phase === 'cordon' && kind === 'm20') return 'watches the box'
-  return '—'
 }
 
 /** The colour fleet_management.py draws a robot in while `recorded` is recorded into a phase whose file has `order`: its

@@ -1,8 +1,9 @@
 import { readFileSync } from 'node:fs'
-import type { RelayState, SetupStepFacts, SetupStepKey, StepCheck, StepCommand } from '../src/shared/api/setup-protocol.ts'
+import type { PoseFact, RelayState, SetupPrompt, SetupStepFacts, SetupStepKey, StepCheck, StepCommand } from '../src/shared/api/setup-protocol.ts'
 import { afterEcho, lastLine } from './command-output.ts'
 import { ALOHA, README } from './readme-commands.ts'
 import type { SystemState } from './ros1-master.ts'
+import { alohaRvizCommand } from './rviz-config.ts'
 import { placeOf, promptAtEnd } from './shell-prompt.ts'
 import { Aborted, WaitTimeout, type Shell } from './shell-transcript.ts'
 import { leaveRobot, logIn, type LoginContext, type RobotLogin } from './ssh-login.ts'
@@ -10,9 +11,11 @@ import { StepFailed, command, fail, runSteps, settle, typeChecked } from './step
 
 /* The Mobile ALOHA's setup: ssh in as its user, run its own `bash start_aloha.sh` (roscore, the cameras, the Piper arms,
  * the lidar, the base, navigation, stream.launch and dock.py, one tmux window each), check each of them on its ROS
- * master, then bridge its topics to ROS_DOMAIN_ID=1 here with aloha/bridge.sh. No localization: its map is its own. */
+ * master, bridge its topics to ROS_DOMAIN_ID=1 here with aloha/bridge.sh, then localize it on its own map (not the
+ * dogs'): RViz here, where the operator sets its 2D Pose Estimate, which the bridge passes to AMCL on the robot. Without
+ * it AMCL starts wherever its parameters say, often off the map, and move_base can plan nothing. */
 
-export const ALOHA_STEPS: readonly SetupStepKey[] = ['login', 'start', 'stack', 'bridge']
+export const ALOHA_STEPS: readonly SetupStepKey[] = ['login', 'start', 'stack', 'bridge', 'localize']
 
 /** What start_aloha.sh starts, one tmux window each, and the topics that say it is up: each needs a publisher */
 export const ALOHA_STACK: ReadonlyArray<{ window: string; label: string; topics: readonly string[] }> = [
@@ -75,6 +78,16 @@ export interface AlohaSetupContext extends LoginContext {
   /** On ROS_DOMAIN_ID=1, here */
   domainTopics(): Promise<string[]>
   topicRate(topic: string): Promise<number | null>
+  /** A second terminal here, for RViz: the laptop one holds the bridge */
+  rvizShell(): Shell
+  /** RViz's config, written fresh from its template: what RViz saved into it last time does not stick */
+  writeRvizConfig(): void
+  /** /initialpose on ROS_DOMAIN_ID=1: each 2D Pose Estimate set in RViz; returns the stop */
+  watchInitialPose(onPose: (pose: PoseFact) => void): () => void
+  /** /amcl_pose on ROS_DOMAIN_ID=1: where AMCL on the robot has it; returns the stop */
+  watchAmclPose(onPose: (pose: PoseFact) => void): () => void
+  /** The prompt of a step waiting for the operator, changed while it waits */
+  updatePrompt(key: SetupStepKey, prompt: SetupPrompt): void
   sleep(ms: number): Promise<void>
 }
 
@@ -86,6 +99,8 @@ export function alohaScriptOf(key: SetupStepKey, robot: RobotLogin): SetupStepFa
       return [command(ALOHA.start, 'robot')]
     case 'bridge':
       return [command(README.exportProfile, 'laptop'), command(ALOHA.bridge, 'laptop')]
+    case 'localize':
+      return [command(README.exportProfile, 'laptop'), command(README.sourceInstall, 'laptop'), command(alohaRvizCommand(), 'laptop')]
     default:
       return []
   }
@@ -106,7 +121,7 @@ export function pendingAlohaStep(key: SetupStepKey, robot: RobotLogin): SetupSte
 }
 
 export async function runAlohaSetup(ctx: AlohaSetupContext, from: SetupStepKey = 'login'): Promise<void> {
-  await runSteps(ctx, ALOHA_STEPS, { login, start, stack, bridge }, (key) => pendingAlohaStep(key, ctx.robot), from)
+  await runSteps(ctx, ALOHA_STEPS, { login, start, stack, bridge, localize }, (key) => pendingAlohaStep(key, ctx.robot), from)
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -394,3 +409,77 @@ async function bridge(ctx: AlohaSetupContext) {
     ? `Bridged, but the ALOHA cannot connect back: goals and arm commands will not reach it (sudo ufw allow from ${ctx.robot.ip}, on the host)`
     : `ROS_DOMAIN_ID=${BRIDGE_DOMAIN} · /scan at ${rate.toFixed(1)} Hz${slow ? ` · ${slow}` : ''}`
 }
+
+/** d. Localize the ALOHA on its own map: RViz here on ROS_DOMAIN_ID=1, in a terminal of its own (the laptop one holds
+ * the bridge), where the operator sets its 2D Pose Estimate. It goes to /initialpose, which aloha/bridge.sh passes to
+ * AMCL on the robot; AMCL's answer (/amcl_pose) shows beside it, so an estimate that does not get through shows. */
+async function localize(ctx: AlohaSetupContext) {
+  const shell = ctx.rvizShell()
+  const step = ctx.step('localize')
+  const [profileCmd, sourceCmd, rvizCmd] = step.commands
+  let pose: PoseFact | null = null
+  let amcl: PoseFact | null = null
+  let rviz: 'running' | 'closed' = 'running'
+  const prompt = (): SetupPrompt => ({ kind: 'localize', rviz, pose, amcl })
+  // Set by the watchers below, between awaits
+  const rvizNow = () => rviz
+  const scope = new AbortController()
+  const onAbort = () => scope.abort()
+  ctx.signal.addEventListener('abort', onAbort)
+  const stopEstimates = ctx.watchInitialPose((p) => {
+    pose = p
+    ctx.updatePrompt('localize', prompt())
+  })
+  const stopAmcl = ctx.watchAmclPose((p) => {
+    amcl = p
+    ctx.updatePrompt('localize', prompt())
+  })
+  try {
+    await settle(shell, ctx.signal)
+    // This terminal's environment: the Fast DDS profile, and the workspace (which brings ROS 2 Foxy with it)
+    await typeChecked(ctx, shell, profileCmd, 15_000)
+    await typeChecked(ctx, shell, sourceCmd, 30_000)
+    for (;;) {
+      if (rviz === 'running' && rvizCmd.status !== 'running') {
+        await settle(shell, ctx.signal)
+        ctx.writeRvizConfig()
+        rvizCmd.status = 'running'
+        rvizCmd.note = null
+        step.detail = 'RViz is open: set the ALOHA’s 2D Pose Estimate'
+        ctx.setActivity('nav', 'rviz2')
+        const from = shell.mark()
+        shell.write(`${rvizCmd.text}\r`)
+        // RViz closing gives the prompt back
+        shell
+          .waitFor((t) => (promptAtEnd(afterEcho(t)) ? true : null), { from, timeoutMs: null, signal: scope.signal, what: 'RViz to close' })
+          .then(() => {
+            rviz = 'closed'
+            rvizCmd.status = 'done'
+            rvizCmd.note = 'closed'
+            ctx.setActivity('nav', 'bash')
+            ctx.updatePrompt('localize', prompt())
+          })
+          .catch(() => undefined)
+      }
+      const choice = await ctx.ask('localize', prompt())
+      if (choice === 'localized') break
+      if (choice === 'open-rviz') {
+        if (rvizNow() === 'closed') rviz = 'running'
+        continue
+      }
+      throw new Aborted()
+    }
+  } finally {
+    scope.abort()
+    ctx.signal.removeEventListener('abort', onAbort)
+    stopEstimates()
+    stopAmcl()
+  }
+  if (rvizCmd.status === 'running') rvizCmd.note = 'open'
+  rvizCmd.status = 'done'
+  const p = (amcl ?? pose) as PoseFact | null
+  step.detail = p
+    ? `Localized at x ${p.x.toFixed(2)}, y ${p.y.toFixed(2)}, heading ${Math.round(p.yaw)}° (${amcl ? 'AMCL' : 'the estimate'})`
+    : 'Localized (confirmed without a new pose estimate)'
+}
+

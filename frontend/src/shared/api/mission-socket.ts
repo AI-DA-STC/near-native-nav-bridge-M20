@@ -58,8 +58,8 @@ export function createMissionSocket(url = `${location.protocol === 'https:' ? 'w
         answers.set(req, resolve)
         ws.send(JSON.stringify({ ...command, req }))
       }),
-    siteMap: async (): Promise<SiteMap> => {
-      const res = await fetch('/api/mission/site', { cache: 'no-store' })
+    siteMap: async (map = 'dogs'): Promise<SiteMap> => {
+      const res = await fetch(map === 'aloha' ? '/api/mission/site?map=aloha' : '/api/mission/site', { cache: 'no-store' })
       if (!res.ok) throw new Error(`The site map did not load (${res.status})`)
       return (await res.json()) as SiteMap
     },

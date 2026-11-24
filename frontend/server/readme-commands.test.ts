@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { M20_STEPS, scriptOf } from './m20-setup.ts'
 import { RVIZ_MARKER_COLORS } from '../src/shared/config/fleet.ts'
-import { ALOHA, README, RELAY_NODE_COUNT, recordWaypoints, relayedTopics } from './readme-commands.ts'
+import { ALOHA, LAUNCH_NODE_COUNT, README, RELAY_NODE_COUNT, recordWaypoints, relayedTopics } from './readme-commands.ts'
 
 /* The setup types the README's commands as written: if README.md or relays.launch.py change, these say what to update */
 
@@ -46,6 +46,11 @@ describe('the topics the check expects', () => {
 
   it('are one node per entry of relays.launch.py’s RELAYS', () => {
     expect(relays).toHaveLength(RELAY_NODE_COUNT)
+  })
+
+  it('the launch starts the front camera’s relay too: one node more than RELAYS', () => {
+    expect(launch).toMatch(/\[relay_node\(\*entry\) for entry in RELAYS\] \+ \[camera_node\(\)\]/)
+    expect(LAUNCH_NODE_COUNT).toBe(RELAY_NODE_COUNT + 1)
   })
 
   it('are the _relayed topics relays.launch.py makes, suffixed with the robot ID except the shared TF', () => {

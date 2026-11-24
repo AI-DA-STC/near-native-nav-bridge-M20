@@ -161,6 +161,23 @@ export interface MissionEvent {
   text: string
 }
 
+/** The ALOHA's own map, read once through its bridge: why there is none yet, when there is none */
+export interface MapReadFacts {
+  /** waiting: nothing to read it from yet (its bridge not running); reading; ready; failed, with why */
+  state: 'waiting' | 'reading' | 'ready' | 'failed'
+  reason: string | null
+  /** When it was last tried */
+  at: Ms | null
+}
+
+/** A robot's camera as the Command center shows it: the latest frame, at most one a second */
+export interface CameraFacts {
+  /** The ROS topic it comes from */
+  topic: string
+  /** When the latest frame arrived; null before the first */
+  at: Ms | null
+}
+
 export interface MissionSnapshot {
   /** Increases with every snapshot */
   seq: number
@@ -201,6 +218,11 @@ export interface MissionSnapshot {
   timeline: MissionEvent[]
   /** The mission script's raw output, line by line, as printed */
   output: string[]
+  /** The cameras of the robots in the mission: each dog's front camera, the ALOHA's centre camera. Each frame is
+   * GET /api/mission/camera/<role>.jpg. Absent from a replay */
+  cameras?: Partial<Record<RobotKey, CameraFacts>>
+  /** The ALOHA's map for its tab. Absent from a replay */
+  alohaMap?: MapReadFacts
   /** Changes when the site map does (the plan in use, the SLAM map, the robots' roles): fetch it again */
   siteVersion?: string
 }
@@ -260,8 +282,12 @@ export interface MissionSource {
   subscribe(onChange: () => void): () => void
   getSnapshot(): MissionSnapshot | null
   send(command: MissionCommand): Promise<CommandResult>
-  siteMap(): Promise<SiteMap>
+  /** The dogs' map, or the ALOHA's own: the two are not aligned */
+  siteMap(map?: SiteMapKind): Promise<SiteMap>
 }
+
+/** Which map: the dogs' SLAM map, or the ALOHA's */
+export type SiteMapKind = 'dogs' | 'aloha'
 
 let source: MissionSource | null = null
 

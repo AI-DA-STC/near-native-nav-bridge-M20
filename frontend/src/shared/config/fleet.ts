@@ -29,6 +29,32 @@ export function robotOf(key: RobotKey): RobotIdentity {
   return FLEET[key]
 }
 
+const DOG_KEYS: readonly RobotKey[] = ['r1', 'r2', 'r3']
+
+/** Roles from the robots added: each dog's own role by its fleet ID, then the others in free roles, in the lobby's order */
+export function rolesOf(robots: readonly { id: string; kind: 'm20' | 'aloha' }[]): Map<string, RobotKey> {
+  const roles = new Map<string, RobotKey>()
+  const dogs = robots.filter((r) => r.kind === 'm20').map((r) => r.id)
+  for (const key of DOG_KEYS) if (dogs.includes(FLEET[key].id)) roles.set(FLEET[key].id, key)
+  const free = DOG_KEYS.filter((key) => ![...roles.values()].includes(key))
+  for (const id of dogs) if (!roles.has(id) && free.length) roles.set(id, free.shift()!)
+  const aloha = robots.find((r) => r.kind === 'aloha')
+  if (aloha) roles.set(aloha.id, 'aloha')
+  return roles
+}
+
+/** The robots' router (README: "near-robots-5G"), this workstation's default gateway: Fleet health pings it with the
+ * robots, under this ID */
+export const ROUTER_ID = 'router'
+
+/** A robot added in Setup as the console names it: role and ID ("R1 · 741"), "ALOHA", the router; else its ID */
+export function robotName(id: string, roles: ReadonlyMap<string, RobotKey>): string {
+  if (id === ROUTER_ID) return 'Router'
+  const key = roles.get(id)
+  if (!key) return id
+  return key === 'aloha' ? FLEET.aloha.label : `${FLEET[key].label} · ${id}`
+}
+
 /** A robot key, as opposed to a tone or a label: dots and bars accept either */
 export function isRobotKey(value: string | null | undefined): value is RobotKey {
   return value === 'r1' || value === 'r2' || value === 'r3' || value === 'aloha'

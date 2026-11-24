@@ -1,4 +1,5 @@
 import type { RobotKind, RobotSetupFacts, SetupSnapshot, TerminalRole, TerminalSessionFacts } from '@/shared/api'
+import { ROUTER_ID } from '@/shared/config'
 
 /* The terminals the setup server holds, by robot: the robot's (ssh, then its relay in the container, or the ALOHA's
  * tmux) before the laptop's (exports, checks, rviz2, the ALOHA's bridge), in the lobby's order; then Routes': the
@@ -11,7 +12,7 @@ export interface SessionGroup {
   sessions: TerminalSessionFacts[]
 }
 
-const ROLE_ORDER: Readonly<Record<TerminalRole, number>> = { robot: 0, laptop: 1, nav: 2, routes: 3, 'rviz-dogs': 4, 'rviz-aloha': 5, mission: 6 }
+const ROLE_ORDER: Readonly<Record<TerminalRole, number>> = { robot: 0, laptop: 1, nav: 2, ping: 3, routes: 4, 'rviz-dogs': 5, 'rviz-aloha': 6, mission: 7 }
 
 export function sessionGroups(snapshot: SetupSnapshot): SessionGroup[] {
   const order = snapshot.robots.map((r) => r.id)
@@ -45,6 +46,7 @@ export const ROLE_TITLE: Readonly<Record<TerminalRole, string>> = {
   robot: 'Robot · relay',
   laptop: 'Laptop',
   nav: 'Laptop · nav bridge',
+  ping: 'Network · ping',
   routes: 'Recorder',
   'rviz-dogs': 'RViz · dogs',
   'rviz-aloha': 'RViz · ALOHA',
@@ -55,6 +57,7 @@ export const ROLE_TITLE: Readonly<Record<TerminalRole, string>> = {
 export function sessionTitle(role: TerminalRole, kind: RobotKind | null): string {
   if (kind === 'aloha' && role === 'robot') return 'Robot · tmux'
   if (kind === 'aloha' && role === 'laptop') return 'Laptop · bridge'
+  if (kind === 'aloha' && role === 'nav') return 'Laptop · RViz'
   return ROLE_TITLE[role]
 }
 
@@ -62,13 +65,15 @@ export function sessionTitle(role: TerminalRole, kind: RobotKind | null): string
 export function sessionAbout(role: TerminalRole, kind: RobotKind | null): string {
   if (kind === 'aloha' && role === 'robot') return 'ssh into the ALOHA as agilex, where start_aloha.sh runs each part in a window of the tmux session aloha (Ctrl+b, then n or p, switches window)'
   if (kind === 'aloha' && role === 'laptop') return 'This workstation in the package root: aloha/bridge.sh, the ALOHA’s topics on ROS_DOMAIN_ID=1'
+  if (kind === 'aloha' && role === 'nav') return 'This workstation: RViz on the ALOHA’s own map (ROS_DOMAIN_ID=1), where its setup has you set its 2D Pose Estimate'
   return ROLE_ABOUT[role]
 }
 
-/** The group's name: the robot's ID, ALOHA, or Routes */
+/** The group's name: the robot's ID, ALOHA, Routes, Mission or Router */
 export function groupName(robot: string, snapshot: SetupSnapshot): string {
   if (robot === 'routes') return 'Routes'
   if (robot === 'mission') return 'Mission'
+  if (robot === ROUTER_ID) return 'Router'
   return snapshot.robots.find((r) => r.id === robot)?.kind === 'aloha' ? 'ALOHA' : robot
 }
 
@@ -77,8 +82,17 @@ export const ROLE_ABOUT: Record<TerminalRole, string> = {
   robot: 'ssh into the robot, su, then the nav_cmd_bridge container running relays.launch.py',
   laptop: 'This workstation in the package root: README exports, topic checks, rviz2, the ALOHA’s bridge',
   nav: 'This workstation: the robot’s nav bridge (README Multi-robot Step 1), which the mission’s goals go through',
+  ping: 'This workstation: frontend/server/net_dash.py, a ping a second with its latency now, over the last period and since it started (p period, r restart totals, q quit)',
   routes: 'This workstation in the package root: demo/record_waypoints.sh, one robot and phase at a time',
   'rviz-dogs': 'This workstation: the RViz the dogs’ routes are recorded in (ROS_DOMAIN_ID=0), on their map with /fleet_goal_markers',
   'rviz-aloha': 'This workstation: the RViz the ALOHA’s route is recorded in (ROS_DOMAIN_ID=1), on its own map with /fleet_goal_markers',
   mission: 'This workstation in the package root: demo/run_demo.sh on the confirmed plan, started by Start mission',
+}
+
+/** Beside a group's name when it is not a robot added: what it is */
+export function groupNote(robot: string): string {
+  if (robot === 'routes') return 'recorder'
+  if (robot === 'mission') return 'run_demo.sh'
+  if (robot === ROUTER_ID) return 'gateway'
+  return 'removed'
 }

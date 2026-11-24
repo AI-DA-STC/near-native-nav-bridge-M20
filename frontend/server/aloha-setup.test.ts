@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { PromptChoice, RelayState, SetupPrompt } from '../src/shared/api/setup-protocol.ts'
+import type { PoseFact, PromptChoice, RelayState, SetupPrompt } from '../src/shared/api/setup-protocol.ts'
 import {
   ALOHA_STACK,
   ALOHA_STEPS,
@@ -39,7 +39,7 @@ class ScriptedAloha extends ShellTranscript implements Shell {
   readonly typed: string[] = []
   place: 'laptop' | 'aloha' | 'tmux' = 'laptop'
   private awaiting = false
-  private foreground: 'bridge' | null = null
+  private foreground: 'bridge' | 'rviz' | null = null
   private timers: Array<ReturnType<typeof setTimeout>> = []
   private readonly script: AlohaScript
 
@@ -118,11 +118,15 @@ class ScriptedAloha extends ShellTranscript implements Shell {
       }
       return
     }
+    if (line.startsWith('ROS_DOMAIN_ID=1 rviz2 -d ') && this.place === 'laptop') {
+      this.foreground = 'rviz'
+      return
+    }
     if (line === 'exit' && this.place === 'aloha') {
       this.place = 'laptop'
       return done(`logout\r\nConnection to ${IP} closed.\r\n`)
     }
-    if (line.startsWith('export ')) return done()
+    if (line.startsWith('export ') || line.startsWith('source ')) return done()
     return done(`bash: ${line.split(' ')[0]}: command not found\r\n`)
   }
 }
@@ -138,6 +142,11 @@ function setUp(script: Partial<AlohaScript> = {}, answers: PromptChoice[] = [], 
   const aloha: AlohaScript = { password: 'agx', running: false, ...script }
   const robot = new ScriptedAloha(aloha)
   const laptop = new ScriptedAloha(aloha)
+  const rviz = new ScriptedAloha(aloha)
+  // What RViz and AMCL say, fed by a test: the operator's 2D Pose Estimate, then AMCL's pose
+  const estimates: Array<(pose: PoseFact) => void> = []
+  const amclPoses: Array<(pose: PoseFact) => void> = []
+  const updated: SetupPrompt[] = []
   const steps = ALOHA_STEPS.map((key) => pendingAlohaStep(key, ROBOT))
   const asked: SetupPrompt[] = []
   const relay: { state: RelayState; rate: number | null } = { state: 'none', rate: null }
@@ -175,9 +184,22 @@ function setUp(script: Partial<AlohaScript> = {}, answers: PromptChoice[] = [], 
     },
     domainTopics: async () => (bridging ? ['/scan', '/map', '/move_base/status', '/puppet/joint_left', '/aloha/dock/result', '/rosout'] : ['/rosout']),
     topicRate: async () => 10.04,
+    rvizShell: () => rviz,
+    writeRvizConfig: () => undefined,
+    watchInitialPose: (onPose) => {
+      estimates.push(onPose)
+      return () => estimates.splice(estimates.indexOf(onPose), 1)
+    },
+    watchAmclPose: (onPose) => {
+      amclPoses.push(onPose)
+      return () => amclPoses.splice(amclPoses.indexOf(onPose), 1)
+    },
+    updatePrompt: (_key, prompt) => {
+      updated.push(prompt)
+    },
     sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
   }
-  return { ctx, robot, laptop, steps, asked, relay, abort, step: ctx.step, aloha }
+  return { ctx, robot, laptop, rviz, steps, asked, relay, abort, step: ctx.step, aloha, estimates, amclPoses, updated }
 }
 
 async function finish<T>(promise: Promise<T>): Promise<T> {
@@ -198,12 +220,14 @@ afterEach(() => {
 })
 
 describe('the ALOHA’s setup', () => {
-  it('logs in as agilex, runs start_aloha.sh, checks its stack, then bridges it here', async () => {
-    const t = setUp()
+  it('logs in as agilex, runs start_aloha.sh, checks its stack, bridges it here, then localizes it in RViz', async () => {
+    const t = setUp({}, ['localized'])
     await finish(runAlohaSetup(t.ctx))
     expect(t.robot.typed).toEqual([`ssh agilex@${IP}`, 'bash start_aloha.sh'])
     expect(t.laptop.typed).toEqual(['export FASTRTPS_DEFAULT_PROFILES_FILE=fastdds_profile.xml', 'aloha/bridge.sh'])
-    expect(t.steps.map((s) => s.status)).toEqual(['done', 'done', 'done', 'done'])
+    // RViz in a terminal of its own: the laptop one holds the bridge
+    expect(t.rviz.typed).toEqual(['export FASTRTPS_DEFAULT_PROFILES_FILE=fastdds_profile.xml', 'source install/setup.bash', 'ROS_DOMAIN_ID=1 rviz2 -d frontend/server/rviz/aloha.rviz'])
+    expect(t.steps.map((s) => s.status)).toEqual(['done', 'done', 'done', 'done', 'done'])
     expect(t.step('stack').checks.map((c) => [c.label, c.ok])).toEqual(ALOHA_STACK.map((p) => [p.label, true]))
     expect(t.step('bridge').checks.find((c) => c.label === '/scan rate')).toEqual({ label: '/scan rate', ok: true, value: '10.0 Hz' })
     expect(t.relay).toEqual({ state: 'running', rate: 10.04 })
@@ -212,16 +236,16 @@ describe('the ALOHA’s setup', () => {
   })
 
   it('keeps a session already running, without starting a second one', async () => {
-    const t = setUp({ running: true }, ['keep-aloha'])
+    const t = setUp({ running: true }, ['keep-aloha', 'localized'])
     await finish(runAlohaSetup(t.ctx))
-    expect(t.asked).toEqual([{ kind: 'aloha-running' }])
+    expect(t.asked[0]).toEqual({ kind: 'aloha-running' })
     expect(t.robot.typed.filter((l) => l === 'bash start_aloha.sh')).toHaveLength(1)
     expect(t.step('start').commands.map((c) => c.status)).toEqual(['skipped'])
     expect(t.steps.every((s) => s.status === 'done')).toBe(true)
   })
 
   it('restarts a session already running when asked: stop, then start', async () => {
-    const t = setUp({ running: true }, ['restart-aloha'])
+    const t = setUp({ running: true }, ['restart-aloha', 'localized'])
     await finish(runAlohaSetup(t.ctx))
     expect(t.robot.typed).toEqual([`ssh agilex@${IP}`, 'bash start_aloha.sh', 'bash start_aloha.sh stop', 'bash start_aloha.sh'])
     expect(t.step('start').commands.map((c) => [c.text, c.status])).toEqual([
@@ -241,7 +265,7 @@ describe('the ALOHA’s setup', () => {
 
   it('waits for a bridge that is slow to start, as long as it bridges topic after topic, and says the link is slow', async () => {
     // 4 s a topic, as over the ALOHA's slow WiFi: two minutes for bridge.yaml
-    const t = setUp({ bridgeEveryMs: 4000 }, [], { masterMs: 700 })
+    const t = setUp({ bridgeEveryMs: 4000 }, ['localized'], { masterMs: 700 })
     const run = runAlohaSetup(t.ctx)
     await vi.advanceTimersByTimeAsync(60_000)
     expect(t.step('bridge')).toMatchObject({ status: 'active', detail: expect.stringMatching(/^Bridging \d+ of 28 topics: the ALOHA answers slowly \(0\.7 s a call to its ROS master\)$/) })
@@ -266,22 +290,53 @@ describe('the ALOHA’s setup', () => {
   })
 
   it('keeps a bridge already running on ROS_DOMAIN_ID=1', async () => {
-    const t = setUp({}, [], { bridged: true })
+    const t = setUp({}, ['localized'], { bridged: true })
     await finish(runAlohaSetup(t.ctx))
     expect(t.laptop.typed).toEqual([])
     expect(t.relay.state).toBe('kept')
   })
 
   it('detaches from tmux, never Ctrl+C, when it runs again', async () => {
-    const t = setUp()
+    const t = setUp({}, ['localized'])
     await finish(runAlohaSetup(t.ctx))
-    const again = setUp({ running: true }, ['keep-aloha'])
+    const again = setUp({ running: true }, ['keep-aloha', 'localized'])
     // The same terminals, still in tmux
     const ctx = { ...again.ctx, robotShell: () => t.robot, laptopShell: () => t.laptop }
     t.aloha.running = true
     await finish(runAlohaSetup(ctx))
     expect(t.robot.typed.slice(2)).toEqual(['exit', `ssh agilex@${IP}`, 'bash start_aloha.sh'])
     expect(t.robot.textSince(0)).not.toContain('^C')
+  })
+})
+
+describe('localizing the ALOHA', () => {
+  it('shows the operator’s 2D Pose Estimate and where AMCL then has it, while it waits for the operator', async () => {
+    const t = setUp({}, [], { bridged: true })
+    const run = runAlohaSetup(t.ctx)
+    run.catch(() => undefined)
+    for (let i = 0; i < 1200 && !t.asked.some((p) => p.kind === 'localize'); i++) await vi.advanceTimersByTimeAsync(100)
+    expect(t.asked.at(-1)).toEqual({ kind: 'localize', rviz: 'running', pose: null, amcl: null })
+    t.estimates.forEach((on) => on({ x: 1.2, y: 5.1, yaw: 88, at: 1 }))
+    t.amclPoses.forEach((on) => on({ x: 1.25, y: 5.05, yaw: 90, at: 2 }))
+    expect(t.updated.at(-1)).toEqual({ kind: 'localize', rviz: 'running', pose: { x: 1.2, y: 5.1, yaw: 88, at: 1 }, amcl: { x: 1.25, y: 5.05, yaw: 90, at: 2 } })
+    t.abort.abort()
+    await expect(finish(run)).rejects.toThrow()
+    // its watchers end with the step
+    expect(t.estimates).toHaveLength(0)
+    expect(t.amclPoses).toHaveLength(0)
+  })
+
+  it('says where AMCL has the ALOHA once it is confirmed', async () => {
+    const t = setUp({}, [], { bridged: true })
+    t.ctx.ask = (key, prompt) => {
+      t.asked.push(prompt)
+      if (key !== 'localize') return Promise.reject(new Error(`unexpected ${key}`))
+      t.amclPoses.forEach((on) => on({ x: 1.254, y: 5.049, yaw: 89.6, at: 3 }))
+      return Promise.resolve('localized')
+    }
+    await finish(runAlohaSetup(t.ctx))
+    expect(t.step('localize')).toMatchObject({ status: 'done', detail: 'Localized at x 1.25, y 5.05, heading 90° (AMCL)' })
+    expect(t.step('localize').commands.at(-1)).toMatchObject({ status: 'done', note: 'open' })
   })
 })
 

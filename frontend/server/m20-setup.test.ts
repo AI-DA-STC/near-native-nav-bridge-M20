@@ -108,7 +108,8 @@ class ScriptedTerminal extends ShellTranscript implements Shell {
     if (line === README.launchRelays && at === 'container') {
       this.foreground = 'launch'
       this.print('[INFO] [launch]: All log files can be found below /root/.ros/log/2026-11-20-04-00-00-host-1\r\n')
-      for (let i = 1; i <= 7; i++) this.later(() => this.print(`[INFO] [relay-${i}]: process started with pid [${100 + i}]\r\n`), 150 * i)
+      // relays.launch.py's 7 relays and the front camera's camera_relay.py
+      for (let i = 1; i <= 8; i++) this.later(() => this.print(`[INFO] [relay-${i}]: process started with pid [${100 + i}]\r\n`), 150 * i)
       return
     }
     if (line === README.topicList && at === 'laptop') return done(`${TOPICS.join('\r\n')}\r\n`)
@@ -294,7 +295,7 @@ describe('an M20’s setup', () => {
     await finish(runM20Setup(t.ctx))
     expect(t.step('login').commands.map((c) => c.note)).toEqual(['user@host.v1.4', 'root@host.v1.4'])
     expect(t.step('image').detail).toBe('Image up to date, tagged m20-bridge:foxy')
-    expect(t.step('relay').commands.at(-1)!.note).toBe('7 of 7 relays started')
+    expect(t.step('relay').commands.at(-1)!.note).toBe('8 of 8 relays started')
     expect(t.step('topics').checks.every((c) => c.ok)).toBe(true)
     expect(t.step('topics').checks.at(-1)).toEqual({ label: '/ODOM_relayed_741 rate', ok: true, value: '10.0 Hz' })
     expect(t.step('localize').detail).toBe('Localized at x 1.25, y -0.50, heading 90°')

@@ -79,7 +79,7 @@ function snapshot(over: Partial<SetupSnapshot> = {}): SetupSnapshot {
     flow: { setupConfirmedAt: 1, plan: null, unlocked: false },
     plans: [plan(SESSION, { basedOn: BASE, leftOut: ['665'] }), plan(BASE, { current: true, problems: ['Sweep: 665 is in it but not added in Setup: run_demo.sh would wait for it'], phases: phases({ sweep: '665 is in it but not added in Setup: run_demo.sh would wait for it' }) })],
     session: null,
-    participants: { patrol: ['741', '738'], formation: ['741', '738'], sweep: ['741', '738'], cordon: ['741'], aloha: ['aloha'] },
+    participants: { patrol: ['741', '738'], formation: ['741', '738'], sweep: ['741', '738'], cordon: ['741', '738'], aloha: ['aloha'] },
     ...over,
   }
 }
@@ -154,7 +154,8 @@ describe('a recording session', () => {
     const grid = screen.getByRole('table')
     expect(within(grid).getAllByRole('columnheader').map((h) => h.textContent)).toEqual(['Phase', 'R1· 741', 'R3· 738', 'ALOHA'])
     const cordon = within(grid).getByRole('row', { name: /^Cordon/ })
-    expect(cordon).toHaveTextContent('watches the box')
+    // R3 records its cordon waypoint too: where it watches the box from
+    expect(within(cordon).getByRole('button', { name: 'Record 738: Cordon' })).toBeInTheDocument()
     const alohaRow = within(grid).getByRole('row', { name: /^ALOHA to the box/ })
     expect(within(alohaRow).getAllByRole('button')).toHaveLength(1)
     await user.click(within(alohaRow).getByRole('button', { name: 'Record aloha: ALOHA to the box' }))

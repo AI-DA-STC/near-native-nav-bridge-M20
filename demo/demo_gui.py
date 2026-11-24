@@ -492,7 +492,8 @@ class Demo(QtCore.QObject):
             self._robot(halted.group(1), "Stopped")
 
     def _aloha(self, msg):
-        if re.match(r"^Robot \S+ (?:→ WP|WP \d+/\d+ SUCCEEDED|docking onto|docked:|finished its route)", msg):
+        if re.match(r"^Robot \S+ (?:→ WP|WP \d+/\d+ (?:SUCCEEDED|not reached by move_base)|docking onto|docked:|"
+                    r"finished its route)", msg):
             self._robot(ALOHA, "In progress")
         elif msg.startswith("Waiting for"):
             self.notice = f"Aloha {msg[0].lower() + msg[1:]}"

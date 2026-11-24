@@ -9,7 +9,7 @@ import { StatusDot } from '@/shared/ui/StatusDot'
 import { addRobot } from '../../api/robot-commands'
 import { defaultsFor, problemWith, type NewRobot } from '../../model/add-robot'
 import { KIND_LABEL, identityOf, nameOf } from '../../model/roster'
-import { STEPS_OF, STEP_INFO } from '../../model/setup-steps'
+import { STEPS_OF, stepInfo } from '../../model/setup-steps'
 import './AddRobot.css'
 
 export interface AddRobotProps {
@@ -194,7 +194,8 @@ export function AddRobot({ robots, suggestions, onAdded }: AddRobotProps) {
           {draft.kind === 'aloha' ? (
             <>
               Adding the ALOHA while it answers starts its setup at once: <code>bash start_aloha.sh</code> on the robot, each part checked on its
-              ROS master, then its bridge here. You answer when a step needs you; the terminals stay under <b>Terminals</b>.
+              ROS master, its bridge here, then you localize it on its own map in RViz. You answer when a step needs you; the terminals stay
+              under <b>Terminals</b>.
             </>
           ) : (
             <>
@@ -204,13 +205,16 @@ export function AddRobot({ robots, suggestions, onAdded }: AddRobotProps) {
           )}
         </p>
         <ol className="cc-add__steps">
-          {STEPS_OF[draft.kind].map((key) => (
-            <li key={key}>
-              <span className="cc-add__letter">{STEP_INFO[key].letter}</span>
-              <span className="cc-add__step">{STEP_INFO[key].title}</span>
-              <span className="cc-add__purpose">{STEP_INFO[key].purpose}</span>
-            </li>
-          ))}
+          {STEPS_OF[draft.kind].map((key) => {
+            const info = stepInfo(key, draft.kind)
+            return (
+              <li key={key}>
+                <span className="cc-add__letter">{info.letter}</span>
+                <span className="cc-add__step">{info.title}</span>
+                <span className="cc-add__purpose">{info.purpose}</span>
+              </li>
+            )
+          })}
         </ol>
         <p className="cc-add__lead">
           The robots answer on the robots’ router (near-robots-5G). A robot that does not answer joins the lobby faded, and its setup waits until

@@ -1,0 +1,15 @@
+{
+  "basedOn": "2026-11-23_17-36-15",
+  "startedAt": 1795428041217,
+  "finishedAt": 1795428098384,
+  "recorded": [
+    {
+      "phase": "cordon",
+      "robot": "738",
+      "append": false,
+      "waypoints": 1,
+      "at": 1795428096434
+    }
+  ],
+  "leftOut": []
+}

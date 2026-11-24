@@ -4,8 +4,8 @@ import type { StepStatus } from '@/shared/ui/StatusMark'
 /** A robot's terminals: ssh to the robot, this workstation's checks and RViz, and an M20's nav bridge */
 type SetupTerminal = 'robot' | 'laptop' | 'nav'
 
-/** The steps as the operator's checklist names them: log in, then a–f on an M20, a–c on the ALOHA. `terminal` is where
- * the step types. */
+/** The steps as the operator's checklist names them: log in, then a–f on an M20, a–d on the ALOHA (stepInfo letters
+ * them by kind). `terminal` is where the step types. */
 export const STEP_INFO: Readonly<Record<SetupStepKey, { title: string; letter: string; terminal: SetupTerminal; purpose: string }>> = {
   login: { title: 'Log in', letter: '·', terminal: 'robot', purpose: 'ssh into the robot (on an M20, then su to root)' },
   image: { title: 'Pull image', letter: 'a', terminal: 'robot', purpose: 'Pull and tag the latest m20-bridge:foxy on the motion host' },
@@ -22,7 +22,19 @@ export const STEP_INFO: Readonly<Record<SetupStepKey, { title: string; letter: s
 /** Each kind's steps, in order */
 export const STEPS_OF: Readonly<Record<RobotKind, readonly SetupStepKey[]>> = {
   m20: ['login', 'image', 'relay', 'laptop', 'topics', 'localize', 'nav'],
-  aloha: ['login', 'start', 'stack', 'bridge'],
+  aloha: ['login', 'start', 'stack', 'bridge', 'localize'],
+}
+
+/** A step as this kind of robot has it: lettered by its place (log in, then a, b, c …). The ALOHA localizes on its own
+ * map, in RViz in a terminal of its own: its laptop terminal holds the bridge. */
+export function stepInfo(key: SetupStepKey, kind: RobotKind): { title: string; letter: string; terminal: SetupTerminal; purpose: string } {
+  const info = STEP_INFO[key]
+  const n = STEPS_OF[kind].indexOf(key)
+  const letter = key === 'login' || n < 1 ? info.letter : String.fromCharCode(96 + n)
+  if (kind === 'aloha' && key === 'localize') {
+    return { ...info, letter, terminal: 'nav', purpose: 'Set its pose on its own map in RViz with 2D Pose Estimate, for AMCL' }
+  }
+  return { ...info, letter }
 }
 
 export const PLACE_LABEL: Readonly<Record<CommandPlace, string>> = { laptop: 'laptop', robot: 'robot', container: 'container' }
@@ -45,7 +57,7 @@ export function currentStep(steps: readonly SetupStepFacts[]): SetupStepFacts | 
 /** Where Open in Terminals goes: the terminal the current step types into, else whichever one is open */
 export function terminalToOpen(robot: RobotSetupFacts): { session: string; role: SetupTerminal } | null {
   const step = currentStep(robot.setup.steps)
-  const first = step ? STEP_INFO[step.key].terminal : 'robot'
+  const first = step ? stepInfo(step.key, robot.kind).terminal : 'robot'
   const order: SetupTerminal[] = [first, ...(['robot', 'laptop', 'nav'] as const).filter((r) => r !== first)]
   for (const role of order) {
     const session = robot.sessions[role]

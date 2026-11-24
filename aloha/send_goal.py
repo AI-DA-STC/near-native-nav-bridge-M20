@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
 """Drive the Aloha through the waypoints in a demo JSON file with move_base, one after another, and exit once
 the last is reached: send_goal.py <file.json> [--dock]. move_base stops anywhere within 25 cm of a waypoint; --dock then
-has dock.py on the robot put the base precisely on the last one. Run with the bridge's ROS_DOMAIN_ID. Ctrl+C sends no
-more waypoints; the Aloha still drives to (or docks onto) the one it has."""
+has dock.py on the robot put the base precisely on the last one, through /aloha/dock/goal. The last waypoint is the
+dock pose, right by the box: if move_base cannot get there (the box is an obstacle in its costmap, so it may find no
+plan right up to it), --dock still asks dock.py, which docks from where the base stands when that is close enough
+(0.5 m, 0.5 rad) and says how far off it is when not. Run with the bridge's ROS_DOMAIN_ID. Ctrl+C sends no more
+waypoints; the Aloha still drives to (or docks onto) the one it has."""
 
 import json
 import math
@@ -112,6 +115,10 @@ def main():
             state = node.wait(lambda: node.goals[gid] if node.goals[gid] in DONE else None, WP_TIMEOUT_S)
             if state != GoalStatus.SUCCEEDED:
                 outcome = NAMES[state] if state is not None else f"not reached after {WP_TIMEOUT_S:.0f} s"
+                if docking and n == len(route):  # dock.py takes it from here, or says how far off it is
+                    print(f"[ALOHA] Robot {rid} WP {n}/{len(route)} not reached by move_base ({outcome}): "
+                          "docking onto it from where it stands")
+                    break
                 sys.exit(f"[ALOHA] Robot {rid} WP {n}/{len(route)} {outcome}")
             print(f"[ALOHA] Robot {rid} WP {n}/{len(route)} SUCCEEDED")
         if docking:

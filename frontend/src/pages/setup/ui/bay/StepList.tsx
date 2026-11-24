@@ -2,7 +2,7 @@ import { useState } from 'react'
 import type { RobotSetupFacts, SetupStepFacts, SetupStepKey } from '@/shared/api'
 import { cx, formatDuration } from '@/shared/lib'
 import { StatusMark } from '@/shared/ui/StatusMark'
-import { COMMAND_MARK, PLACE_LABEL, STEP_INFO, opensByItself, stepElapsed } from '../../model/setup-steps'
+import { COMMAND_MARK, PLACE_LABEL, opensByItself, stepElapsed, stepInfo } from '../../model/setup-steps'
 import { StepPrompt } from './StepPrompt'
 import './StepList.css'
 
@@ -44,7 +44,7 @@ interface StepRowProps {
 }
 
 function StepRow({ robot, step, open, now, onToggle }: StepRowProps) {
-  const info = STEP_INFO[step.key]
+  const info = stepInfo(step.key, robot.kind)
   const elapsed = stepElapsed(step, now)
   const bodyId = `cc-setupstep-${robot.id}-${step.key}`
   return (

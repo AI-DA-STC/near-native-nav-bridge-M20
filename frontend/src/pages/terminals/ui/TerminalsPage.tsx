@@ -6,7 +6,7 @@ import { Button } from '@/shared/ui/Button'
 import { Panel } from '@/shared/ui/Panel'
 import { StatusDot } from '@/shared/ui/StatusDot'
 import { XtermPane } from '@/shared/ui/XtermPane'
-import { groupName, pickSession, sessionAbout, sessionGroups, sessionTitle } from '../model/session-groups'
+import { groupName, groupNote, pickSession, sessionAbout, sessionGroups, sessionTitle } from '../model/session-groups'
 import './TerminalsPage.css'
 
 /** Every terminal the setup opened, live: the robots' relay sessions and the laptop's. Typing goes to the one in front. */
@@ -44,7 +44,7 @@ export function TerminalsPage() {
                   <StatusDot tone={group.facts.presence === 'online' ? 'ok' : 'unknown'} size={7} label={group.facts.presence} />
                 </>
               ) : (
-                <span className="cc-terms__ip">{group.robot === 'routes' ? 'recorder' : 'removed'}</span>
+                <span className="cc-terms__ip">{groupNote(group.robot)}</span>
               )}
             </h3>
             <ul className="cc-terms__sessions">

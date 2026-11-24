@@ -27,7 +27,7 @@ export interface StepCommand {
   text: string
   where: CommandPlace
   status: CommandStatus
-  /** The outcome in a few words: "up to date", "7 of 7 relays started" */
+  /** The outcome in a few words: "up to date", "8 of 8 relays started" */
   note: string | null
 }
 
@@ -57,7 +57,7 @@ export type SetupPrompt =
   /** ssh refuses the robot's new host key */
   | { kind: 'host-key'; ip: string }
   /** rviz2 is open: set the 2D Pose Estimate, then confirm */
-  | { kind: 'localize'; rviz: 'running' | 'closed'; pose: PoseFact | null }
+  | { kind: 'localize'; rviz: 'running' | 'closed'; pose: PoseFact | null; /** the ALOHA: where AMCL has it after the estimate */ amcl?: PoseFact | null }
   /** ssh or su refused the password: the operator types it again ("agilex@192.168.123.200") */
   | { kind: 'password'; login: string; error: string }
   /** start_aloha.sh found its tmux session already running on the ALOHA */
@@ -137,9 +137,10 @@ export interface RobotSuggestion {
 }
 
 /** robot: ssh to the robot (its relay, or start_aloha.sh's tmux) · laptop: this workstation's checks, rviz2, the
- * ALOHA's bridge · nav: an M20's nav bridge · routes: demo/record_waypoints.sh · rviz-dogs, rviz-aloha: the RViz that
- * recording draws in · mission: demo/run_demo.sh */
-export type TerminalRole = 'robot' | 'laptop' | 'nav' | 'routes' | 'rviz-dogs' | 'rviz-aloha' | 'mission'
+ * ALOHA's bridge · nav: an M20's nav bridge · ping: Fleet health's ping dashboard for a robot or the router (its robot is
+ * then ROUTER_ID) · routes: demo/record_waypoints.sh · rviz-dogs, rviz-aloha: the RViz that recording draws in ·
+ * mission: demo/run_demo.sh */
+export type TerminalRole = 'robot' | 'laptop' | 'nav' | 'ping' | 'routes' | 'rviz-dogs' | 'rviz-aloha' | 'mission'
 
 export interface TerminalSessionFacts {
   id: string

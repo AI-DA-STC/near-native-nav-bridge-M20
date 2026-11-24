@@ -1,0 +1,31 @@
+/* CameraStrip: the robots' feeds side by side over the map. Each feed keeps 16:9 at the strip's height and narrows
+   (cropping its sides) when they do not all fit; fewer robots leave the rest of the row empty. */
+.cc-camstrip { --cam-h: clamp(120px, 24vh, 260px); flex: none; }
+.cc-camstrip.is-compact { --cam-h: clamp(96px, 20vh, 170px); }
+.cc-camstrip__meta { font-family: var(--font-mono); font-size: 11.5px; }
+.cc-camstrip__row { display: flex; gap: 8px; padding: 8px; min-width: 0; }
+
+.cc-camtile {
+  position: relative; flex: 0 1 calc(var(--cam-h) * 16 / 9); height: var(--cam-h); min-width: 0; padding: 0; overflow: hidden;
+  border-radius: var(--radius-sm); border: 1px solid var(--line); background: var(--surface-well);
+  color: var(--text); font: inherit; text-align: left; cursor: zoom-in;
+}
+.cc-camtile:hover:not(:disabled) { border-color: var(--line-strong); }
+.cc-camtile:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.cc-camtile:disabled { cursor: default; }
+.cc-camtile__img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.cc-camtile.is-stale .cc-camtile__img { opacity: .45; }
+
+/* the robot and its state word over the top of the feed, on a dark band so they read on any frame */
+.cc-camtile__top {
+  position: absolute; top: 0; left: 0; right: 0; display: flex; align-items: center; gap: 8px; padding: 5px 8px;
+  background: color-mix(in srgb, var(--surface-well) 80%, transparent);
+}
+.cc-camtile__word { margin-left: auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; font-weight: 700; letter-spacing: .06em; }
+.cc-camtile__note {
+  position: absolute; left: 8px; right: 8px; bottom: 8px; font-size: 12px; line-height: 16px; color: var(--text-muted);
+}
+.cc-camtile__note.is-stale {
+  right: auto; padding: 1px 6px; border-radius: var(--radius-xs); color: var(--warn-text); font-family: var(--font-mono); font-size: 11px;
+  background: color-mix(in srgb, var(--surface-well) 80%, transparent);
+}

@@ -1,17 +1,19 @@
 #!/usr/bin/env bash
 # Suspicious-item search demo from a plan's waypoints (WAYPOINTS, default demo/waypoints/current: the plan picked
 # under Routes in the Command Center, or recorded with demo/record_waypoints.sh). Start every
-# robot's bridge first, and for the Aloha what aloha/run_aloha.sh needs. From the sweep on, demo/detect_box.py watches
-# R3's camera (only R3's) for the box (R3 default 738); without video after 3 tries, the sweep ends and the cordon starts.
-# DETECT=0 runs without the camera: no detection, every robot sweeps its whole route. Ctrl+C ends the demo: no more
-# waypoints are sent, each robot still drives to the one it has, and the Aloha's arms stop where they are.
+# robot's bridge first, and for the Aloha what aloha/run_aloha.sh needs. From the sweep on, demo/find_box.py reports the
+# box (where demo/box.json has it) once R3 (default 738) has stopped next to it, with R3's photo of it (DETECT=fixed,
+# the default). DETECT=1 runs demo/detect_box.py instead: YOLO on R3's camera, and without video after 3 tries the sweep
+# ends and the cordon starts. DETECT=0 looks for nothing. Every robot sweeps its whole route unless DETECT=1 gives up.
+# Ctrl+C ends the demo: no more waypoints are sent, each robot still drives to the one it has, and the Aloha's arms stop
+# where they are.
 set -euo pipefail
 
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 WAYPOINTS=${WAYPOINTS:-$HERE/waypoints/current}
 INSTRUCTION="Execute a systematic sweep of Zone A to scan for unattended or anomalous items"
 R3=${R3:-738}
-DETECT=${DETECT:-1}
+DETECT=${DETECT:-fixed}
 
 fleet() {
     python3 "$HERE/../scripts/fleet_management.py" "$1" --load "$WAYPOINTS/$2.json" --ros-args -p show_box:=${3:-false} &
@@ -76,7 +78,11 @@ echo "[DEMO] Plan SR2-01 approved, waiting for every robot to reach its slot"
 wait "$pid"
 
 echo -e "\n=== Sweep: every robot sweeps its zone ===\n"
-if [[ $DETECT == 0 ]]; then  # no camera to watch: every robot sweeps its whole route
+if [[ $DETECT == fixed ]]; then  # the box is reported once R3 stops next to it; every robot sweeps its whole route
+    python3 "$HERE/find_box.py" --robot "$R3" &
+    fleet multi-waypoint sweep
+    wait "$pid"
+elif [[ $DETECT == 0 ]]; then  # nothing to look for: every robot sweeps its whole route
     fleet multi-waypoint sweep
     wait "$pid"
 else

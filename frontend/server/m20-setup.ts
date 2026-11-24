@@ -1,6 +1,6 @@
 import type { PoseFact, RelayState, SetupPrompt, SetupStepFacts, SetupStepKey } from '../src/shared/api/setup-protocol.ts'
 import { afterEcho, errorLine, hzRates, lastLine, pullOutcome, relayLaunch, topicsListed } from './command-output.ts'
-import { README, RECOVERY, REGISTRY, RELAY_NODE_COUNT, relayedTopics, rvizWithConfig } from './readme-commands.ts'
+import { LAUNCH_NODE_COUNT, README, RECOVERY, REGISTRY, relayedTopics, rvizWithConfig } from './readme-commands.ts'
 import { rvizConfigPath } from './rviz-config.ts'
 import { placeOf, promptAtEnd, type ShellPrompt } from './shell-prompt.ts'
 import { Aborted, WaitTimeout, type Shell } from './shell-transcript.ts'
@@ -254,10 +254,10 @@ async function relay(ctx: M20SetupContext) {
     throw fail(launchCmd, problem ?? 'No relay started in 5 s')
   }
   launchCmd.status = 'done'
-  launchCmd.note = `${launched.started} of ${RELAY_NODE_COUNT} relays started`
+  launchCmd.note = `${launched.started} of ${LAUNCH_NODE_COUNT} relays started`
   ctx.setRelay('running')
   ctx.relayLaunched(from)
-  step.detail = `relays.launch.py running as ROBOT_ID=${ctx.robot.id}, ${launched.started} of ${RELAY_NODE_COUNT} relays`
+  step.detail = `relays.launch.py running as ROBOT_ID=${ctx.robot.id}, ${launched.started} of ${LAUNCH_NODE_COUNT} relays`
 }
 
 /** c. The laptop's ROS domain, Fast DDS profile and workspace, in the package root */

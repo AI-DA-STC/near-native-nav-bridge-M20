@@ -11,14 +11,14 @@ const COMPLETE = {
   patrol: { '741': [wp(1), wp(2), wp(3)], '665': [wp(1), wp(2), wp(3), wp(4)], '738': [wp(1), wp(2), wp(3)] },
   formation: { '741': [wp(1)], '665': [wp(2)], '738': [wp(3)] },
   sweep: { '741': [wp(1)], '665': [wp(1), wp(2)], '738': [wp(1)] },
-  cordon: { '741': [wp(5)], '665': [wp(6)] },
+  cordon: { '741': [wp(5)], '665': [wp(6)], '738': [wp(7)] },
   aloha: { aloha: [wp(4)] },
   manipulator: { poses: [{ left: [0], right: [0] }] },
 }
 
 function lobbyOf(...ids: string[]): Lobby {
   const robots = ids.map((id) => ({ id, kind: id === 'aloha' ? ('aloha' as const) : ('m20' as const) }))
-  return { robots: ids, participants: participantsOf(robots, '738') }
+  return { robots: ids, participants: participantsOf(robots) }
 }
 const ALL = lobbyOf('741', '665', '738', 'aloha')
 
@@ -50,12 +50,12 @@ beforeEach(() => {
 afterEach(() => rmSync(dir, { recursive: true, force: true }))
 
 describe('who takes part', () => {
-  it('is every dog added, but the box watcher in the cordon, and the ALOHA in its route', () => {
+  it('is every dog added, R3 in the cordon too (where it watches the box), and the ALOHA in its route', () => {
     expect(ALL.participants).toEqual({
       patrol: ['741', '665', '738'],
       formation: ['741', '665', '738'],
       sweep: ['741', '665', '738'],
-      cordon: ['741', '665'],
+      cordon: ['741', '665', '738'],
       aloha: ['aloha'],
     })
     expect(lobbyOf('802', 'aloha').participants.cordon).toEqual(['802'])
@@ -80,7 +80,7 @@ describe('the plans', () => {
 
   it('check each phase against the robots added', () => {
     const routes = (r: Record<string, ReturnType<typeof wp>[]>) => Object.entries(r)
-    expect(phaseFacts('cordon', routes({ '741': [wp(1)] }), ALL, false).problem).toBe('665 has no waypoint')
+    expect(phaseFacts('cordon', routes({ '741': [wp(1)] }), ALL, false).problem).toBe('665 has no waypoint · 738 has no waypoint')
     expect(phaseFacts('formation', routes({ '741': [wp(1), wp(2)], '665': [wp(1)], '738': [wp(1)] }), ALL, false).problem).toBe(
       '741 has 2 waypoints; the formation takes 1',
     )

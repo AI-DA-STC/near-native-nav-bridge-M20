@@ -81,6 +81,9 @@ export const DEFAULT_LOGIN: Readonly<Record<RobotKind, { user: string; password:
 /** relays.launch.py's RELAYS: one node each */
 export const RELAY_NODE_COUNT = 7
 
+/** Every node relays.launch.py starts: the RELAYS, and camera_relay.py for the front camera */
+export const LAUNCH_NODE_COUNT = RELAY_NODE_COUNT + 1
+
 /** The topics relays.launch.py makes for a robot: its own, suffixed with its ID, then the two all robots share */
 export function relayedTopics(id: string): { own: string[]; shared: string[] } {
   return {

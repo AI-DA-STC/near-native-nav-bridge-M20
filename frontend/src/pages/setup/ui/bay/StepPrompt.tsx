@@ -195,17 +195,31 @@ function PromptBody({ robot, name, prompt, now }: { robot: RobotSetupFacts; name
       return (
         <>
           <h3 className="cc-prompt__title">Localize {name} in RViz</h3>
-          <ol className="cc-prompt__list">
-            <li>
-              The RViz window <code>robot_{robot.id}.rviz</code> shows {name}’s own map (<code>/GRID_MAP_relayed_{robot.id}</code>), odometry and
-              waypoints, in the <code>map</code> frame.
-            </li>
-            <li>
-              Pick <b>2D Pose Estimate</b>, click where {name} stands and drag towards where it faces. It goes to{' '}
-              <code>/initialpose_relayed_{robot.id}</code>.
-            </li>
-            <li>The odometry should now sit on the map where {name} stands. Then confirm below.</li>
-          </ol>
+          {robot.kind === 'aloha' ? (
+            <ol className="cc-prompt__list">
+              <li>
+                The RViz window <code>aloha.rviz</code> shows the ALOHA’s own map (<code>/map</code> through its bridge, ROS_DOMAIN_ID=1), its laser
+                scan and AMCL’s particles, in the <code>map</code> frame.
+              </li>
+              <li>
+                Pick <b>2D Pose Estimate</b>, click where the ALOHA stands and drag towards where it faces. It goes to <code>/initialpose</code>,
+                which the bridge passes to AMCL on the robot.
+              </li>
+              <li>The laser scan should now lie on the map’s walls, and AMCL’s pose below follow your estimate. Then confirm below.</li>
+            </ol>
+          ) : (
+            <ol className="cc-prompt__list">
+              <li>
+                The RViz window <code>robot_{robot.id}.rviz</code> shows {name}’s own map (<code>/GRID_MAP_relayed_{robot.id}</code>), odometry and
+                waypoints, in the <code>map</code> frame.
+              </li>
+              <li>
+                Pick <b>2D Pose Estimate</b>, click where {name} stands and drag towards where it faces. It goes to{' '}
+                <code>/initialpose_relayed_{robot.id}</code>.
+              </li>
+              <li>The odometry should now sit on the map where {name} stands. Then confirm below.</li>
+            </ol>
+          )}
           <dl className="cc-prompt__facts">
             <dt>RViz</dt>
             <dd className={prompt.rviz === 'running' ? 'cc-tone--ok' : 'cc-tone--warn'}>{prompt.rviz === 'running' ? 'Open' : 'Closed'}</dd>
@@ -220,6 +234,21 @@ function PromptBody({ robot, name, prompt, now }: { robot: RobotSetupFacts; name
                 <span className="cc-tone--muted">None received yet</span>
               )}
             </dd>
+            {robot.kind === 'aloha' ? (
+              <>
+                <dt>AMCL</dt>
+                <dd>
+                  {prompt.amcl ? (
+                    <span className={prompt.pose && prompt.amcl.at >= prompt.pose.at ? 'cc-tone--ok' : undefined}>
+                      x {prompt.amcl.x.toFixed(2)} m, y {prompt.amcl.y.toFixed(2)} m, heading {Math.round(prompt.amcl.yaw)}° ·{' '}
+                      {formatTimeOfDay(prompt.amcl.at)}
+                    </span>
+                  ) : (
+                    <span className="cc-tone--muted">No pose from AMCL yet</span>
+                  )}
+                </dd>
+              </>
+            ) : null}
           </dl>
         </>
       )

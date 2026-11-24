@@ -22,6 +22,7 @@ Every robot runs `nav_cmd_bridge bridge` (plain bridge mode). RViz2's arrows mus
 import argparse
 import json
 import math
+import os
 import signal
 import sys
 import threading
@@ -41,11 +42,15 @@ ARROW_TOPIC  = "/fleet_goal"
 MARKER_TOPIC = "/fleet_goal_markers"
 COLORS = [(0.3, 0.6, 1.0), (1.0, 0.6, 0.2), (0.9, 0.3, 0.9), (0.3, 0.9, 0.4)]
 
-BOX_POSE = Pose(position=Point(x=4.028576043040737, y=-1.7151867644572376, z=0.10705792596173548),
-                orientation=Quaternion(x=-0.009816617024025786, y=0.004273924488796177,
-                                       z=-0.01920510358448826, w=0.9997593352645202))
-BOX_LENGTH_M = 0.60
-BOX_WIDTH_M  = 0.38
+# The suspicious box, on the map: demo/box.json (x, y, z, yaw in radians, length and width in metres), shared with
+# demo/find_box.py and the Command Center
+BOX_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "demo", "box.json")
+with open(BOX_FILE) as _f:
+    _BOX = json.load(_f)
+BOX_POSE = Pose(position=Point(x=float(_BOX["x"]), y=float(_BOX["y"]), z=float(_BOX.get("z", 0.0))),
+                orientation=Quaternion(z=math.sin(_BOX["yaw"] / 2), w=math.cos(_BOX["yaw"] / 2)))
+BOX_LENGTH_M = float(_BOX["length"])
+BOX_WIDTH_M  = float(_BOX["width"])
 
 # Just past the bridge's own 120 s timeout, so its thread for this waypoint has given up first.
 WP_TIMEOUT_S = 125.0

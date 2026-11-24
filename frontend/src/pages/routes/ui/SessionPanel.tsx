@@ -7,7 +7,7 @@ import { Panel } from '@/shared/ui/Panel'
 import { RobotTag } from '@/shared/ui/RobotTag'
 import { StatusMark } from '@/shared/ui/StatusMark'
 import { discardSession, finishSession, openRviz, recordKey, recordStart } from '../api/route-commands'
-import { PHASES, PHASE_INFO, canSave, lobbyColumns, planWhen, recordBlocked, robotName, rvizOf, sitsOut, type Choice } from '../model/plans'
+import { PHASES, PHASE_INFO, canSave, lobbyColumns, planWhen, recordBlocked, robotName, rvizOf, type Choice } from '../model/plans'
 import './SessionPanel.css'
 
 export interface SessionPanelProps {
@@ -91,11 +91,12 @@ export function SessionPanel({ snapshot, session, plan, chosen, onChoose }: Sess
                     <span className="cc-session__phase">{info.title}</span>
                     <span className="cc-session__needs">{info.needs}</span>
                   </th>
-                  {columns.map(({ id: robot, key }) => {
+                  {columns.map(({ id: robot }) => {
                     if (!snapshot.participants[phase].includes(robot)) {
+                      // a dog has no part in the ALOHA's route, nor the ALOHA in the dogs' phases
                       return (
                         <td key={robot} className="cc-session__none">
-                          {sitsOut(phase, key === 'aloha' ? 'aloha' : 'm20')}
+                          —
                         </td>
                       )
                     }

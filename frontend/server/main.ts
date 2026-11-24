@@ -71,17 +71,19 @@ function serveFile(res: ServerResponse, file: string | null): void {
   createReadStream(file).pipe(res)
 }
 
-/** The Command center's files: GET /api/mission/site (the map, from the plan in use), /api/mission/map.png (the dogs'
- * SLAM map), /api/mission/image?path= (a detection or contents photo, from demo/detections only). True when it
- * answered. */
+/** The Command center's files: GET /api/mission/site (the dogs' map, from the plan in use; ?map=aloha the ALOHA's own),
+ * /api/mission/map.png and /api/mission/aloha-map.png (the dogs' and the ALOHA's SLAM grids), /api/mission/image?path= (a detection or contents photo, from demo/detections only),
+ * /api/mission/camera/<role>.jpg (a robot camera's latest frame). True when it answered. */
 function serveMission(req: IncomingMessage, res: ServerResponse): boolean {
   const url = new URL(req.url ?? '/', 'http://localhost')
   if (req.method !== 'GET' || !url.pathname.startsWith('/api/mission/')) return false
   if (url.pathname === '/api/mission/site') {
     res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' })
-    res.end(JSON.stringify(hub.mission.site()))
+    res.end(JSON.stringify(url.searchParams.get('map') === 'aloha' ? hub.mission.alohaSite() : hub.mission.site()))
   } else if (url.pathname === '/api/mission/map.png') serveFile(res, hub.mission.gridFile())
+  else if (url.pathname === '/api/mission/aloha-map.png') serveFile(res, hub.mission.alohaGridFile())
   else if (url.pathname === '/api/mission/image') serveFile(res, hub.mission.imageFile(url.searchParams.get('path') ?? ''))
+  else if (/^\/api\/mission\/camera\/[a-z0-9]+\.jpg$/.test(url.pathname)) serveFile(res, hub.mission.cameraFile(url.pathname.slice(20, -4)))
   else serveFile(res, null)
   return true
 }

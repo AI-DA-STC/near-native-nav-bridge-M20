@@ -188,20 +188,19 @@ describe('the way through the console', () => {
     expect(screen.getByRole('tab', { name: 'Setup' })).toHaveAttribute('aria-selected', 'true')
   })
 
-  it('locks the Command center and Fleet health until Setup and Routes are confirmed, and has no Log', () => {
+  it('locks the Command center until Setup and Routes are confirmed, keeps Fleet health open, and has no Log', () => {
     renderApp(1, '/mission', setupFacts({ plan: null }))
     // Sent on to the step that is missing
     expect(screen.getByRole('tab', { name: 'Routes' })).toHaveAttribute('aria-selected', 'true')
-    for (const name of ['Command center', 'Fleet health']) {
-      expect(screen.getByRole('tab', { name })).toBeDisabled()
-      expect(screen.getByRole('tab', { name })).toHaveAttribute('title', 'Confirm Setup and Routes first')
-    }
+    expect(screen.getByRole('tab', { name: 'Command center' })).toBeDisabled()
+    expect(screen.getByRole('tab', { name: 'Command center' })).toHaveAttribute('title', 'Confirm Setup and Routes first')
+    expect(screen.getByRole('tab', { name: 'Fleet health' })).toBeEnabled()
     expect(screen.queryByRole('tab', { name: 'Log' })).toBeNull()
   })
 
   it('opens the Command center once both are confirmed', () => {
     renderApp(1, '/mission')
     expect(screen.getByRole('tab', { name: 'Command center' })).toBeEnabled()
-    expect(screen.getByRole('tab', { name: 'Fleet health' })).toHaveAttribute('title', 'Comes in a later round')
+    expect(screen.getByRole('tab', { name: 'Fleet health' })).toBeEnabled()
   })
 })

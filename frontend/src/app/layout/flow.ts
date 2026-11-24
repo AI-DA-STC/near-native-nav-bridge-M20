@@ -1,7 +1,7 @@
 import type { SetupSnapshot } from '@/shared/api'
 
 /* The operator's way through the console: Setup, then Routes, then the Command center. The setup server holds what was
- * confirmed (snapshot.flow); Fleet health opens with the Command center. */
+ * confirmed (snapshot.flow). Terminals and Fleet health are open at any time. */
 
 export interface FlowState {
   setupDone: boolean

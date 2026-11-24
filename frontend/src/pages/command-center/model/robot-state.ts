@@ -1,7 +1,6 @@
-import type { MissionSnapshot, RouteFacts } from '@/shared/api'
+import type { MissionSnapshot } from '@/shared/api'
 import type { RobotKey } from '@/shared/config'
 import type { Tone } from '@/shared/lib'
-import { waypointsDone } from './route-progress'
 
 type DogKey = Exclude<RobotKey, 'aloha'>
 
@@ -12,23 +11,6 @@ export interface RobotState {
   tone: Tone
   /** What it is doing, in a line */
   task: string | null
-}
-
-export interface RobotCardView extends RobotState {
-  robot: RobotKey
-  /** Waypoints done of the route's total */
-  progress: { value: number; max: number } | null
-  /** What it is driving to: "WP 2", "slot 1", "dock" */
-  goal: string | null
-  /** Metres to the goal */
-  dist: number | null
-  speed: number | null
-  pose: { x: number; y: number; yaw: number } | null
-  /** Age of the last pose: "0.2 s" */
-  updated: string | null
-  stale: boolean
-  docking: { step: number; of: number; state: 'active' | 'done' | 'failed'; detail?: string } | null
-  arms: { pose: number; of: number; state: 'active' | 'done' | 'failed'; detail?: string } | null
 }
 
 /** Each dog's slot in the line and its sweep zone, as plan SR2 assigns them */
@@ -104,56 +86,4 @@ export function robotStateOf(key: RobotKey, snap: MissionSnapshot): RobotState {
     return { word: 'STOPPED', tone: 'neutral', task: aloha && aloha.arms.pose ? `Arms frozen at pose ${aloha.arms.pose}/${aloha.arms.of}` : why }
   }
   return doing
-}
-
-function goalOf(key: RobotKey, route: RouteFacts): string | null {
-  if (route.state !== 'driving') return null
-  switch (route.kind) {
-    case 'patrol':
-    case 'sweep':
-      return route.target === null ? null : `WP ${route.target}`
-    case 'formation':
-    case 'return':
-      return key === 'aloha' ? null : `slot ${SLOT[key]}`
-    case 'cordon':
-      return key === 'r3' ? 'watch point' : 'cordon point'
-    case 'aloha':
-      return 'dock'
-  }
-}
-
-export function robotCardOf(key: RobotKey, snap: MissionSnapshot): RobotCardView {
-  const facts = snap.robots[key]
-  const { route, pose } = facts
-  const age = pose ? snap.serverTime - pose.at : null
-  const aloha = key === 'aloha' ? snap.robots.aloha : null
-  // the ALOHA's docking and arms show from the inspection on
-  const inspecting = aloha !== null && (aloha.route?.kind === 'aloha' || aloha.docking.state !== 'idle' || aloha.arms.pose > 0)
-  return {
-    robot: key,
-    ...robotStateOf(key, snap),
-    progress: route ? { value: waypointsDone(route), max: route.total } : null,
-    goal: route ? goalOf(key, route) : null,
-    dist: route?.state === 'driving' ? route.distanceRemaining : null,
-    speed: facts.speed,
-    pose: pose ? { x: pose.x, y: pose.y, yaw: pose.yawDeg } : null,
-    updated: age === null ? null : `${(age / 1000).toFixed(1)} s`,
-    stale: age !== null && age > snap.limits.poseStaleMs,
-    docking: inspecting
-      ? {
-          step: aloha.docking.attempt,
-          of: aloha.docking.of,
-          state: aloha.docking.state === 'docked' ? 'done' : aloha.docking.state === 'failed' ? 'failed' : 'active',
-          detail: aloha.docking.reason ?? undefined,
-        }
-      : null,
-    arms: inspecting
-      ? {
-          pose: aloha.arms.pose,
-          of: aloha.arms.of,
-          state: aloha.arms.state === 'done' ? 'done' : 'active',
-          detail: aloha.arms.state === 'holding' ? `pose ${aloha.arms.pose}/${aloha.arms.of} · lid open` : undefined,
-        }
-      : null,
-  }
 }

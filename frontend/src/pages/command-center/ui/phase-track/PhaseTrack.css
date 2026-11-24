@@ -1,5 +1,12 @@
 /* PhaseTrack: Command Center design system, components/bundle.css */
-.cc-track { min-width: 0; padding: 8px 10px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-md); box-shadow: var(--shadow-panel); }
+.cc-track { position: relative; min-width: 0; padding: 8px 10px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-md); box-shadow: var(--shadow-panel); }
+/* Minimize: a quiet chevron in the head column's corner, clear of the phases */
+.cc-track__min {
+  position: absolute; top: 6px; left: 6px; z-index: 1; display: grid; place-items: center; width: 22px; height: 22px; padding: 0;
+  border: 1px solid transparent; border-radius: var(--radius-xs); background: none; color: var(--text-muted); cursor: pointer;
+}
+.cc-track__min:hover { color: var(--text); border-color: var(--line-strong); background: var(--surface-raised); }
+.cc-track__min:focus-visible { outline: none; box-shadow: var(--focus-ring); }
 .cc-track__row { display: grid; align-items: stretch; column-gap: 6px; row-gap: 2px; margin: 0; padding: 0; list-style: none; }
 .cc-track__head { display: flex; flex-direction: column; justify-content: center; gap: 2px; padding-left: 4px; }
 .cc-track__label { font-size: 10.5px; font-weight: 600; letter-spacing: .08em; color: var(--text-muted); line-height: 14px; }

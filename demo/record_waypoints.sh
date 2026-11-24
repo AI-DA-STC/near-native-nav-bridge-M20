@@ -43,7 +43,8 @@ for phase; do
                        "each robot's sweep of zone 1, 2, 3 in order, ENTER at every waypoint; R3 ends next to the box" \
                        "$R1" "$R2" "$R3" ;;
         cordon)    record cordon single-waypoint \
-                       "R1 and R2 to their cordon points around zone 3, ENTER once per robot" "$R1" "$R2" ;;
+                       "R1 and R2 to their cordon points around the box, R3 to where it watches the box, ENTER once per robot" \
+                       "$R1" "$R2" "$R3" ;;
         # The Aloha's map is not the dogs': no box
         aloha)     ROS_DOMAIN_ID=1 SHOW_BOX=false POSE_TOPIC=/amcl_pose record aloha multi-waypoint \
                        "the Aloha's route to the box, ENTER at every waypoint; it docks onto the last one" aloha ;;

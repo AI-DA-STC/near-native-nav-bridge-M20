@@ -24,16 +24,17 @@ import { FLEET, ROBOT_KEYS } from '../src/shared/config/fleet.ts'
 import { ALOHA_STEPS, detachTmux, leaveAloha, pendingAlohaStep, runAlohaSetup, type AlohaSetupContext } from './aloha-setup.ts'
 import { afterEcho } from './command-output.ts'
 import { M20_STEPS, pendingStep, runM20Setup, type M20SetupContext } from './m20-setup.ts'
+import { pingCommand, pingTargets, readDefaultGateway } from './ping-terminals.ts'
 import { PresenceMonitor, answers, type PresenceTarget } from './presence.ts'
 import { ALOHA, DEFAULT_LOGIN, README, ROBOT_ID_PATTERN, USER_PATTERN } from './readme-commands.ts'
 import { RobotStore, type StoredRobot } from './robot-store.ts'
 import { masterSystemState } from './ros1-master.ts'
-import { domainTopics, goalListeners, odomPublishers, topicRate, watchAmclPose, watchInitialPose, watchOdom } from './ros-checks.ts'
+import { domainTopics, goalListeners, odomPublishers, topicRate, watchAlohaInitialPose, watchAmclPose, watchInitialPose, watchOdom } from './ros-checks.ts'
 import { PHASES, PHASE_RULES, PHASE_TITLE, RoutePlans, participantsOf, planName, type Lobby } from './route-plans.ts'
 import { MissionHub } from './mission-hub.ts'
 import { RouteRecorder } from './route-recorder.ts'
 import { RvizWindow, writeRoutesRviz } from './routes-rviz.ts'
-import { writeRobotRviz } from './rviz-config.ts'
+import { writeAlohaRviz, writeRobotRviz } from './rviz-config.ts'
 import { placeOf, promptAtEnd } from './shell-prompt.ts'
 import { Aborted, ShellExited, type Shell } from './shell-transcript.ts'
 import { leaveRobot, logIn, type LoginContext } from './ssh-login.ts'
@@ -92,9 +93,6 @@ const README_ROBOTS: Array<{ kind: RobotKind; id: string; ip: string; user: stri
   return { kind, id: r.kind === 'aloha' ? 'aloha' : r.id, ip: r.ip, user: DEFAULT_LOGIN[kind].user }
 })
 
-/** The dog that sits out the cordon: R3 watches the box (run_demo.sh's R3) */
-const BOX_WATCHER = FLEET.r3.id
-
 /** record_waypoints.sh records the ALOHA under this ID, the key aloha.json keeps its route under */
 const ALOHA_ROUTE_ID = 'aloha'
 
@@ -119,6 +117,10 @@ export class SetupHub {
   /** The Command center: the robots in their mission roles, their poses, the mission run */
   readonly mission: MissionHub
   private missionTerminal: TerminalSession | null = null
+  /** Fleet health's ping dashboards, by robot ID (or the router's) */
+  private readonly pingTerminals = new Map<string, { name: string; ip: string; session: TerminalSession }>()
+  private router: string | null = null
+  private pingTimer: ReturnType<typeof setInterval> | null = null
   private sessionCount = 0
   private broadcastTimer: ReturnType<typeof setTimeout> | null = null
   private closing = false
@@ -178,6 +180,9 @@ export class SetupHub {
     this.presence.start()
     this.plans.start()
     this.mission.start()
+    this.followPing()
+    this.pingTimer = setInterval(() => this.followPing(), 30_000)
+    this.pingTimer.unref()
   }
 
   // -------------------------------------------------------------------------------------------------------------------
@@ -276,7 +281,7 @@ export class SetupHub {
   /** What the plans are checked against: the robots added in Setup, and who of them takes part in each phase */
   private lobby(): Lobby {
     const robots = this.lobbyRobots().map((r) => r.stored)
-    return { robots: robots.map((r) => r.id), participants: participantsOf(robots, BOX_WATCHER) }
+    return { robots: robots.map((r) => r.id), participants: participantsOf(robots) }
   }
 
   snapshot(): SetupSnapshot {
@@ -430,6 +435,7 @@ export class SetupHub {
     this.flow = { ...this.flow, setupConfirmedAt: null }
     this.save()
     this.updatePresenceTargets()
+    this.followPing()
     this.plans.invalidate()
     // A robot that answers starts its setup at once; one that does not waits for the operator
     if (await answers(ip, 22)) await this.startSetup(id, 'login')
@@ -444,6 +450,7 @@ export class SetupHub {
     this.flow = { ...this.flow, setupConfirmedAt: null }
     this.save()
     this.updatePresenceTargets()
+    this.followPing()
     this.plans.invalidate()
   }
 
@@ -649,6 +656,40 @@ export class SetupHub {
     this.sessions.set(session.id, session)
     this.changed()
     return session
+  }
+
+  /** Fleet health: a ping dashboard (net_dash.py) for every robot added and the router, each in a laptop terminal of
+   * its own, from the start. One that ended (exit typed in it) opens again within 30 s. While the Wi-Fi is down the
+   * router stays the last gateway seen, whose terminal then shows the pings failing. */
+  private followPing(): void {
+    if (this.closing) return
+    this.router = readDefaultGateway() ?? this.router
+    const targets = pingTargets(
+      this.lobbyRobots().map((r) => r.stored),
+      this.router,
+    )
+    let changed = false
+    for (const [key, held] of this.pingTerminals) {
+      const target = targets.find((t) => t.key === key)
+      if (target && target.ip === held.ip && target.name === held.name && !held.session.exited) continue
+      held.session.kill()
+      this.sessions.delete(held.session.id)
+      this.pingTerminals.delete(key)
+      changed = true
+    }
+    for (const target of targets) {
+      if (this.pingTerminals.has(target.key)) continue
+      const session = new TerminalSession(
+        { id: `${target.key}-ping-${++this.sessionCount}`, robot: target.key, role: 'ping', cwd: this.packageRoot, cols: 100, rows: 30 },
+        () => this.changed(),
+      )
+      session.activity = `net_dash.py ${target.ip}`
+      session.write(`${pingCommand(target)}\r`)
+      this.sessions.set(session.id, session)
+      this.pingTerminals.set(target.key, { name: target.name, ip: target.ip, session })
+      changed = true
+    }
+    if (changed) this.changed()
   }
 
   // -------------------------------------------------------------------------------------------------------------------
@@ -869,10 +910,22 @@ export class SetupHub {
   }
 
   private alohaContextFor(robot: Robot, signal: AbortSignal): AlohaSetupContext {
+    const parts = this.loginParts(robot, signal)
     return {
-      ...this.loginParts(robot, signal),
+      ...parts,
       robotShell: (): Shell => this.shell(robot, 'robot'),
       laptopShell: (): Shell => this.shell(robot, 'laptop'),
+      // The ALOHA has no nav bridge: its third terminal is the RViz it is localized in
+      rvizShell: (): Shell => this.shell(robot, 'nav'),
+      writeRvizConfig: () => void writeAlohaRviz(),
+      watchInitialPose: (onPose) => watchAlohaInitialPose(this.packageRoot, onPose),
+      watchAmclPose: (onPose) => watchAmclPose(this.packageRoot, onPose),
+      updatePrompt: (key, prompt) => {
+        const s = parts.step(key)
+        if (s.status !== 'decision') return
+        s.prompt = prompt
+        this.changed()
+      },
       setRelay: (state, rateHz) => this.setRelay(robot, state, rateHz),
       bridgeLaunched: (from) => this.watchRelay(robot, from),
       masterState: () => masterSystemState(robot.stored.ip),
@@ -888,6 +941,7 @@ export class SetupHub {
    * `budgetMs`. The ALOHA's tmux session keeps running, as start_aloha.sh means it to. */
   async shutdown(budgetMs = 8000): Promise<void> {
     this.closing = true
+    if (this.pingTimer) clearInterval(this.pingTimer)
     this.presence.stop()
     this.plans.close()
     const robots = [...this.robots.values()]

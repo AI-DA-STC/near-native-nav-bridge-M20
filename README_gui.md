@@ -6,7 +6,7 @@ The operator console runs on this workstation and opens in a browser at http://l
 2. **Routes.** You pick the mission plan's routes, or record new ones robot by robot for the robots you added, the way `demo/record_waypoints.sh` does, watching them in RViz on the map.
 3. **Command center.** The mission screen, live: the robots you set up, the plan in use, and `demo/run_demo.sh` when you start it. It opens once Setup and Routes are both confirmed.
 
-**Terminals** shows every terminal the GUI opened, live, at any time.
+**Terminals** shows every terminal the GUI opened, live, at any time. **Fleet health** shows the link to each robot and the router, also at any time.
 
 ## Before the first run
 
@@ -63,8 +63,9 @@ To stop it, press Ctrl+C in that terminal. The GUI then stops the relays it star
    | a | Start ALOHA | `bash start_aloha.sh`: roscore, the cameras, the Piper arms, the lidar, the base, navigation, `stream.launch` and `dock.py`, each in a window of the tmux session `aloha` |
    | b | Check its stack | nothing typed: each of the eight is checked on the ALOHA's ROS master, by the topics it publishes |
    | c | Bridge | `export FASTRTPS_DEFAULT_PROFILES_FILE=fastdds_profile.xml`, then `aloha/bridge.sh` on this workstation: the ALOHA's topics on ROS_DOMAIN_ID=1, with `/scan`'s rate checked |
+   | d | Localize | in a terminal of its own (**Laptop · RViz**): the exports, `source install/setup.bash`, then `ROS_DOMAIN_ID=1 rviz2 -d frontend/server/rviz/aloha.rviz`. Set its **2D Pose Estimate** on its own map; it goes to `/initialpose`, which the bridge passes to AMCL on the robot. The step shows your estimate and AMCL's pose after it, then you confirm |
 
-   The ALOHA has no Localize step: its map is not aligned with the dogs' map yet.
+   The ALOHA is localized on its own map, not the dogs': the two are not aligned. Without it, AMCL starts wherever its parameters put it, often in unknown space, and `move_base` finds no plan (`Failed to get a plan`, `Rotate recovery can't rotate in place … Cost: -1.00`). The localize window has no 2D Goal Pose: there it would drive the ALOHA.
 3. **Answer when asked.** A step that needs you turns blue, and the header says WAITING FOR YOU.
    - **The robot refused the password:** type it in the step and click **Log in again**. It replaces the saved one.
    - **The robot's Docker doesn't trust the registry:** add the registry to `/etc/docker/daemon.json` on the robot and restart Docker. **Open the robot terminal** takes you to the robot's terminal under Terminals, which is already root on the robot. Then come back to Setup and click **Retry pull**.
@@ -82,7 +83,7 @@ Routes are recorded for the robots added in Setup, the ALOHA included. Each miss
 | Phase | Who takes part |
 |---|---|
 | Patrol, Formation, Sweep | every dog added |
-| Cordon | every dog added but 738, which watches the box (R3 in `run_demo.sh`) |
+| Cordon | every dog added: R1 and R2 cordon the box, R3's waypoint is where it watches it from |
 | ALOHA to the box (`aloha.json`) | the ALOHA: its route, in order; it docks onto the last waypoint, at the box |
 
 - **Pick a plan.** The plans are listed newest first, and the latest is selected. The sketches on the right show its routes in map-frame metres, without the map; RViz shows them on the map while you record. Each plan shows whether each phase is complete for the robots added, and what it re-recorded. A plan that names a robot you did not add is flagged: `run_demo.sh` would wait for that robot.
@@ -113,15 +114,18 @@ The ALOHA's arm poses (`manipulator.json`) are carried over from plan to plan; t
 
 ## 3. The Command center
 
-Its tab, and Fleet health, stay locked until Setup and Routes are both confirmed. After a restart of the GUI you confirm them again.
+Its tab stays locked until Setup and Routes are both confirmed. After a restart of the GUI you confirm them again.
 
-- **Robots.** R1, R2 and R3 are the dogs you added, by their IDs (741, 665, 738); a dog with another ID takes a free role. A robot is in the mission when it is added and in the plan in use; the others show *not in this mission*. **Fleet** counts the dogs whose nav bridge listens, **Positions** those whose `/ODOM_relayed_<id>` is fresh (3 s). The ALOHA's pose comes from its `/amcl_pose`, shown on its card only: its map is not the dogs' yet.
-- **Map.** The dogs' SLAM map, read once from `/GRID_MAP_relayed_<id>` of a dog that is set up (`frontend/server/map_grid.py`), under the plan's routes for the phase under way, the box (`BOX_POSE`), and the dogs' positions and trails.
+- **Robots.** R1, R2 and R3 are the dogs you added, by their IDs (741, 665, 738); a dog with another ID takes a free role. A robot is in the mission when it is added and in the plan in use; the others are left out. **Fleet** counts the dogs whose nav bridge listens, **Positions** those whose `/ODOM_relayed_<id>` is fresh (3 s). The ALOHA's pose comes from its `/amcl_pose`, drawn on its own map in the ALOHA tab.
+- **Map.** The dogs' SLAM map, read once from `/GRID_MAP_relayed_<id>` of a dog that is set up (`frontend/server/map_grid.py`), under the plan's routes for the phase under way, and the dogs' positions and trails. The box (`demo/box.json`) appears only once R3 has found it.
+- **Map tabs.** **Dogs** is the dogs' SLAM map with R1–R3, their routes and the box. **ALOHA** is the ALOHA's own map (`/map` through its bridge, ROS_DOMAIN_ID=1) with its position (`/amcl_pose`), its route to the box (`aloha.json`) and its dock pose. The two maps are not aligned, so each has its tab; the ALOHA tab shows only while the ALOHA is in the mission. Each map is read once (`frontend/server/map_grid.py`), cropped to its known part: the ALOHA's 4000 x 4000 map becomes the few dozen metres it covers. Until the ALOHA's map is in, its tab says why: its bridge not running, being read, or what the read found (e.g. `no map on /map within 40 s`); it tries again every 30 s, and the server's console says the same.
+- **Layout.** The phases across the top, the cameras under them over the map, and Operator, Suspicious item and History on the right. The chevron at the phases' top left, and the one by **Cameras**, minimize each to one line; this browser remembers your choice.
+- **Cameras.** Side by side over the map, one frame a second from each robot in the mission, with the robot's state word (SWEEPING, IN SLOT, NOT CONNECTED …): every dog's front camera (`/camera_front_relayed_<id>`, from `scripts/camera_relay.py` on the dog, started with its relays) and the ALOHA's centre camera (`/camera_f/color/image_throttled/compressed` through its bridge). `frontend/server/camera_frames.py` keeps the latest frame of each. A tile says when its feed has stopped, or that it never had one. Click a tile to enlarge it; it keeps updating.
 - **Start mission** is enabled once nothing blocks it (each blocker says what to fix). It runs, in the **Mission** terminal under Terminals:
   ```bash
-  WAYPOINTS=demo/waypoints/<plan> R3=<R3's id> DETECT=0 demo/run_demo.sh
+  WAYPOINTS=demo/waypoints/<plan> R3=<R3's id> DETECT=fixed demo/run_demo.sh
   ```
-  `DETECT=0` because R3's camera is disabled for now: no box detection, every robot sweeps its whole route. The page follows its output: phases, the plan to approve or deny, each robot's waypoints, docking, the arms, the contents photo, your verdict. Your answers are typed into it as you would type them.
+  `DETECT=fixed`: once R3 stops within 2 m of the box during the sweep, `demo/find_box.py` reports it with R3's photo. A notification says **Anomalous object identified**, the box appears on the map, and Suspicious item shows R3's photo with where the box is. The page follows the script's output: phases, the plan to approve or deny, each robot's waypoints, docking, the arms, the contents photo, your verdict. Your answers are typed into it as you would type them.
 - **Stop** is Ctrl+C: no new waypoints, each robot finishes the one it drives to, the ALOHA's arms freeze. **Force stop** closes the Mission terminal.
 - **E-STOP** sends each dog in the mission `nav_cmd_bridge estop --ip <ip>` (confirmed when the robot replies within 3 s), cancels the ALOHA's `move_base` (`/move_base/cancel`), and ends the run. The ALOHA's docking and arms have no remote stop: ending the run freezes the arms.
 
@@ -131,12 +135,23 @@ Setup shows only each step's status. **Open in Terminals**, at the top of a robo
 
 - **Robot · relay** is `ssh` to an M20, then `su`, then the container running `relays.launch.py`.
 - **Robot · tmux** is `ssh` to the ALOHA, attached to `start_aloha.sh`'s tmux session when the setup started it (after **Keep it**, type `tmux attach -t aloha`): Ctrl+b then n or p switches windows, Ctrl+b then d detaches.
-- **Laptop** has the exports, the topic checks and `rviz2`; for the ALOHA, its bridge.
+- **Laptop** has the exports, the topic checks and `rviz2`; for the ALOHA, its bridge, and **Laptop · RViz** the RViz it is localized in.
 - **Laptop · nav bridge** is an M20's nav bridge (step f).
 - **Routes · Recorder** is where `demo/record_waypoints.sh` runs; **Routes · RViz dogs** and **Routes · RViz ALOHA** hold the RViz windows recording draws in.
 - **Mission** is where Start mission runs `demo/run_demo.sh`.
+- **Network · ping**, under each robot and under Router, is that robot's Fleet health dashboard.
 
 They are live: what you type goes to the terminal in front, and **Ctrl+C** interrupts it.
+
+## Fleet health
+
+One terminal per robot added in Setup, plus one for the router (this laptop's default gateway, 192.168.123.1), three to a row. Each runs `frontend/server/net_dash.py`, which pings its host once a second from the laptop (no `ping` binary needed) and shows:
+
+- **UP**, **SLOW**, **LOSING PINGS**, or **DOWN** after three pings in a row get no reply, and the latest round-trip time.
+- min, mean, max, jitter and loss over the last 10 s, 60 s and 5 min, and since it started. A narrow pane shows one period, and **p** switches it.
+- A chart of the latest pings: green up to 30 ms, amber up to 100 ms, red above, and × for a lost ping.
+
+Click a terminal to type into it: **r** restarts the totals, **q** quits to its shell (↑ then Enter runs it again). The GUI starts them when it starts, follows the robots you add or remove, and reopens one you `exit` within 30 s. If a robot is slow or down while the router is fine, the problem is that robot's link, not the Wi-Fi.
 
 ## Good to know
 

@@ -54,15 +54,15 @@ export interface Lobby {
   participants: Record<RoutePhase, string[]>
 }
 
-/** Who takes part in each phase, from the robots added (in the lobby's order): every M20 in the dogs' phases but the
- * cordon, which `boxWatcher` sits out (R3, 738: it watches the box, as run_demo.sh has it); the ALOHA in its route */
-export function participantsOf(robots: ReadonlyArray<{ id: string; kind: 'm20' | 'aloha' }>, boxWatcher: string): Record<RoutePhase, string[]> {
+/** Who takes part in each phase, from the robots added (in the lobby's order): every M20 in the dogs' phases (in the
+ * cordon R3's waypoint is where it watches the box), the ALOHA in its route */
+export function participantsOf(robots: ReadonlyArray<{ id: string; kind: 'm20' | 'aloha' }>): Record<RoutePhase, string[]> {
   const dogs = robots.filter((r) => r.kind === 'm20').map((r) => r.id)
   return {
     patrol: dogs,
     formation: dogs,
     sweep: dogs,
-    cordon: dogs.filter((id) => id !== boxWatcher),
+    cordon: dogs,
     aloha: robots.filter((r) => r.kind === 'aloha').map((r) => r.id),
   }
 }

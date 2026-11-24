@@ -14,7 +14,8 @@ export interface FindingCardProps {
   className?: string
 }
 
-/** BOX FOUND, framed by the finding's corner brackets, never fault red; it updates in place on refinement */
+/** BOX FOUND, or the anomalous object a robot reached, framed by the finding's corner brackets, never fault red; it
+ * updates in place on refinement */
 export function FindingCard({ finding, by = 'r3', title = 'BOX FOUND', onExpand, className }: FindingCardProps) {
   const r = robotOf(by)
   return (
@@ -37,7 +38,11 @@ export function FindingCard({ finding, by = 'r3', title = 'BOX FOUND', onExpand,
         ) : null}
       </header>
       <div className="cc-finding__body">
-        <DetectionImage src={finding.snapshot} alt="Snapshot of the box" boxes={finding.detection ? [finding.detection] : []} aspect="4 / 3" onExpand={onExpand} />
+        {finding.snapshot ? (
+          <DetectionImage src={finding.snapshot} alt="Snapshot of the box" boxes={finding.detection ? [finding.detection] : []} aspect="4 / 3" onExpand={onExpand} />
+        ) : (
+          <p className="cc-finding__nophoto">No photo: {r.label}’s camera sent no frame.</p>
+        )}
         <dl className="cc-finding__facts">
           <div>
             <dt>X</dt>
@@ -53,23 +58,27 @@ export function FindingCard({ finding, by = 'r3', title = 'BOX FOUND', onExpand,
               {formatNumber(finding.dist, 1)} m <small>from {r.label}</small>
             </dd>
           </div>
-          <div>
-            <dt>Confidence</dt>
-            <dd className="cc-mono cc-num">
-              {formatPercent(finding.confidence)}
-              <span className="cc-finding__conf" aria-hidden="true">
-                <span style={{ width: `${finding.confidence * 100}%` }} />
-              </span>
-            </dd>
-          </div>
+          {finding.atKnownPlace ? null : (
+            <div>
+              <dt>Confidence</dt>
+              <dd className="cc-mono cc-num">
+                {formatPercent(finding.confidence)}
+                <span className="cc-finding__conf" aria-hidden="true">
+                  <span style={{ width: `${finding.confidence * 100}%` }} />
+                </span>
+              </dd>
+            </div>
+          )}
           <div>
             <dt>Found</dt>
             <dd className="cc-mono cc-num">{finding.foundAt}</dd>
           </div>
-          <div>
-            <dt>Refined</dt>
-            <dd className="cc-mono cc-num">{finding.refinedAt ?? '—'}</dd>
-          </div>
+          {finding.atKnownPlace ? null : (
+            <div>
+              <dt>Refined</dt>
+              <dd className="cc-mono cc-num">{finding.refinedAt ?? '—'}</dd>
+            </div>
+          )}
         </dl>
       </div>
     </article>

@@ -115,8 +115,10 @@ export function mapSceneOf(snap: MissionSnapshot, site: SiteMap): MapScene {
       break
   }
 
-  // Where the box is: as the detector found it, else where the plan knows it to be
+  // Where the box is: as it was found, else where the plan knows it to be. Only the found box is drawn
   const boxAt: Pt | null = detection ? [detection.x, detection.y] : site.box ? [site.box.x, site.box.y] : null
+  // demo/find_box.py reports the box where demo/box.json has it (confidence 1.00): its footprint and heading, no halo
+  const knownBox = detection && detection.confidence >= 1 && detection.refinements === 0 && site.box ? { ...site.box, x: detection.x, y: detection.y } : null
   const boxZone = boxAt ? site.zones.find((z) => inside(boxAt, z.points)) : undefined
   const watching = ['sweep', 'cordon', 'inspect', 'verdict'].includes(shown)
   const sight = detection && watching && robots[detection.by].pose ? { from: detection.by } : null
@@ -141,8 +143,7 @@ export function mapSceneOf(snap: MissionSnapshot, site: SiteMap): MapScene {
   if (routes.some((r) => r.kind === 'sweep')) legend.push({ kind: 'sweep', label: 'route' }, { kind: 'waypoint', label: 'waypoint' }, { kind: 'target', label: 'current target' })
   if (slots.length) legend.push({ kind: 'slot', label: 'formation slot' })
   if (cordon.length) legend.push({ kind: 'cordon', label: 'cordon point' })
-  if (detection) legend.push({ kind: 'box', label: 'box · confidence halo' })
-  else if (site.box) legend.push({ kind: 'box', label: 'box' })
+  if (detection) legend.push({ kind: 'box', label: knownBox ? 'box' : 'box · confidence halo' })
   if (sight) legend.push({ kind: 'sight', label: 'sight line' })
   if (dock) legend.push({ kind: 'dock', label: 'dock pose' })
 
@@ -165,20 +166,57 @@ export function mapSceneOf(snap: MissionSnapshot, site: SiteMap): MapScene {
       if (!pose || !inMission || (k === 'aloha' && !alohaShown)) return []
       return [{ robot: k, x: pose.x, y: pose.y, yaw: pose.yawDeg, trail, label: FLEET[k].label, stale: snap.serverTime - pose.at > snap.limits.poseStaleMs }]
     }),
+    // The box appears once it is found (R3 reached it), not before
     box: detection
-      ? {
-          x: detection.x,
-          y: detection.y,
-          w: detection.size.w,
-          h: detection.size.h,
-          halo: detection.uncertaintyM,
-          label: `BOX ${formatPercent(detection.confidence)}`,
-          state: detection.refinements ? 'refined' : 'found',
-        }
-      : site.box
-        ? { x: site.box.x, y: site.box.y, yaw: site.box.yaw, w: site.box.w, h: site.box.h, halo: 0, label: 'BOX', state: 'known' }
-        : null,
+      ? knownBox
+        ? { x: knownBox.x, y: knownBox.y, yaw: knownBox.yaw, w: knownBox.w, h: knownBox.h, halo: 0, label: 'BOX', state: 'found' }
+        : {
+            x: detection.x,
+            y: detection.y,
+            w: detection.size.w,
+            h: detection.size.h,
+            halo: detection.uncertaintyM,
+            label: `BOX ${formatPercent(detection.confidence)}`,
+            state: detection.refinements ? 'refined' : 'found',
+          }
+      : null,
     sight,
+    dock,
+    legend,
+  }
+}
+
+/** The ALOHA's own map, apart from the dogs': its grid, its route to the box with the waypoint it drives to, the pose
+ * it docks from, and where it is (its /amcl_pose, on that map). The two maps are not aligned, so nothing of the dogs'
+ * is drawn on it. */
+export function alohaSceneOf(snap: MissionSnapshot, site: SiteMap): MapScene {
+  const aloha = snap.robots.aloha
+  const route = site.routes.aloha
+  const driving = aloha.route?.kind === 'aloha' ? aloha.route : null
+  const routes: MapRoute[] = route
+    ? [{ robot: 'aloha', kind: 'aloha', points: route.path, reached: driving?.reached ?? 0, current: driving?.state === 'driving' ? driving.target : null }]
+    : []
+  const dock: MapDock | null = route ? { ...route.dock, docked: aloha.docking.state === 'docked' } : null
+  const legend: LegendItem[] = []
+  if (route) legend.push({ kind: 'aloha', label: 'route to the box' }, { kind: 'waypoint', label: 'waypoint' })
+  if (dock) legend.push({ kind: 'dock', label: 'dock pose at the box' })
+  return {
+    extent: site.extent,
+    focus: null,
+    walls: site.walls,
+    free: site.free,
+    occupancy: site.occupancy,
+    zones: [],
+    routes,
+    slots: [],
+    cordon: [],
+    watch: null,
+    robots:
+      aloha.pose && aloha.inMission
+        ? [{ robot: 'aloha', x: aloha.pose.x, y: aloha.pose.y, yaw: aloha.pose.yawDeg, trail: aloha.trail, label: FLEET.aloha.label, stale: snap.serverTime - aloha.pose.at > snap.limits.poseStaleMs }]
+        : [],
+    box: null,
+    sight: null,
     dock,
     legend,
   }

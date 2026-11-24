@@ -5,6 +5,7 @@ import type {
   AlohaFacts,
   CommandResult,
   MissionCommand,
+  MapReadFacts,
   MissionSnapshot,
   Notice,
   PhaseFacts,
@@ -15,10 +16,11 @@ import type {
   SiteMap,
 } from '../src/shared/api/mission-stream.ts'
 import type { FlowFacts, PlanRoutes, PoseFact, Presence, RelayState, RobotKind } from '../src/shared/api/setup-protocol.ts'
-import { FLEET, type RobotKey } from '../src/shared/config/fleet.ts'
+import { FLEET, rolesOf, type RobotKey } from '../src/shared/config/fleet.ts'
 import { EXIT_MARK, MissionRun, type EStopTarget } from './mission-run.ts'
 import { readMission, type MissionRead } from './mission-output.ts'
-import { siteMapOf, type GridImage } from './mission-site.ts'
+import { CameraFeeds, type CameraRoles } from './camera-feeds.ts'
+import { alohaSiteOf, readBox, siteMapOf, type GridImage } from './mission-site.ts'
 import { readGrid, watchAmclPose, watchOdom } from './ros-checks.ts'
 import type { Shell } from './shell-transcript.ts'
 
@@ -74,27 +76,21 @@ interface Tracked {
   stop: () => void
 }
 
-/** Roles from the robots added: each dog's own role by its fleet ID, then the others in free roles, in the lobby's order */
-export function rolesOf(robots: readonly { id: string; kind: RobotKind }[]): Map<string, RobotKey> {
-  const roles = new Map<string, RobotKey>()
-  const dogs = robots.filter((r) => r.kind === 'm20').map((r) => r.id)
-  for (const key of DOGS) if (dogs.includes(FLEET[key].id)) roles.set(FLEET[key].id, key)
-  const free = DOGS.filter((key) => ![...roles.values()].includes(key))
-  for (const id of dogs) if (!roles.has(id) && free.length) roles.set(id, free.shift()!)
-  const aloha = robots.find((r) => r.kind === 'aloha')
-  if (aloha) roles.set(aloha.id, 'aloha')
-  return roles
-}
-
 export class MissionHub {
   private readonly deps: MissionHubDeps
   private readonly clients = new Set<WebSocket>()
   private readonly run: MissionRun
   private readonly tracked = new Map<string, Tracked>()
+  private readonly cameras: CameraFeeds
   private seq = 0
   private grid: (GridImage & { robot: string }) | null = null
   private gridTried = 0
   private gridBusy = false
+  /** The ALOHA's own map: /map on its bridge's ROS_DOMAIN_ID, and why there is none yet */
+  private alohaGrid: GridImage | null = null
+  private alohaGridTried = 0
+  private alohaGridBusy = false
+  private alohaGridFailure: { reason: string; at: number } | null = null
   private timer: ReturnType<typeof setInterval> | null = null
   private pushTimer: ReturnType<typeof setTimeout> | null = null
   private readonly defaultInstruction: string
@@ -103,6 +99,7 @@ export class MissionHub {
   constructor(deps: MissionHubDeps) {
     this.deps = deps
     this.run = new MissionRun({ terminal: deps.terminal, script: deps.script, packageRoot: deps.packageRoot, onChange: () => this.changed() })
+    this.cameras = new CameraFeeds(deps.packageRoot, () => this.changed())
     let instruction = 'Execute a systematic sweep of Zone A to scan for unattended or anomalous items'
     try {
       instruction = /^INSTRUCTION="(.*)"$/m.exec(readFileSync(join(deps.packageRoot, 'demo', 'run_demo.sh'), 'utf8'))?.[1] ?? instruction
@@ -120,6 +117,7 @@ export class MissionHub {
     if (this.timer) clearInterval(this.timer)
     for (const t of this.tracked.values()) t.stop()
     this.tracked.clear()
+    this.cameras.stop()
     await this.run.shutdown()
     for (const ws of this.clients) ws.close(1001, 'The setup server stopped')
   }
@@ -212,7 +210,18 @@ export class MissionHub {
   /** GET /api/mission/site */
   site(): SiteMap {
     const plan = this.plan()
-    return siteMapOf(plan ? this.routesOf(plan) : null, (id) => this.roles().get(id) ?? null, this.grid)
+    return siteMapOf(plan ? this.routesOf(plan) : null, (id) => this.roles().get(id) ?? null, this.grid, readBox(this.deps.packageRoot))
+  }
+
+  /** GET /api/mission/site?map=aloha: the ALOHA's own map, apart from the dogs' */
+  alohaSite(): SiteMap {
+    const plan = this.plan()
+    return alohaSiteOf(plan ? this.routesOf(plan) : null, this.alohaGrid)
+  }
+
+  /** The ALOHA's grid image, for GET /api/mission/aloha-map.png */
+  alohaGridFile(): string {
+    return join(this.deps.packageRoot, 'frontend', 'server', 'maps', 'aloha_grid.png')
   }
 
   /** The grid image's file, for GET /api/mission/map.png */
@@ -239,7 +248,8 @@ export class MissionHub {
     try {
       mkdirSync(join(this.deps.packageRoot, 'frontend', 'server', 'maps'), { recursive: true })
       const read = await readGrid(`/GRID_MAP_relayed_${source.id}`, 'frontend/server/maps/grid.png', this.deps.packageRoot)
-      if (read) {
+      if (!read.ok) console.warn(`[mission] No map from ${source.id} yet: ${read.reason}`)
+      else {
         this.grid = { robot: source.id, url: `/api/mission/map.png?v=${Date.now()}`, x: read.x, y: read.y, w: read.w, h: read.h }
         if (Math.abs(read.yaw) > 0.5) console.warn(`[mission] ${source.id}'s map origin is rotated ${read.yaw.toFixed(1)}°: the image is drawn unrotated`)
         this.changed()
@@ -247,6 +257,48 @@ export class MissionHub {
     } finally {
       this.gridBusy = false
     }
+  }
+
+  /** The ALOHA's map, read once from /map through its bridge (ROS_DOMAIN_ID=1) while its bridge runs. Its map server's
+   * grid can be large (4000 x 4000 cells): map_grid.py keeps its known part, and is given 40 s for it to come through */
+  private async ensureAlohaGrid(): Promise<void> {
+    const { robots } = this.deps.inputs()
+    const aloha = robots.find((r) => r.kind === 'aloha' && RUNNING.has(r.relay) && r.presence === 'online')
+    if (!aloha || this.alohaGrid || this.alohaGridBusy || Date.now() - this.alohaGridTried < 30_000) return
+    this.alohaGridBusy = true
+    this.alohaGridTried = Date.now()
+    this.changed()
+    try {
+      mkdirSync(join(this.deps.packageRoot, 'frontend', 'server', 'maps'), { recursive: true })
+      const read = await readGrid('/map', 'frontend/server/maps/aloha_grid.png', this.deps.packageRoot, 1, 40)
+      if (read.ok) {
+        this.alohaGrid = { url: `/api/mission/aloha-map.png?v=${Date.now()}`, x: read.x, y: read.y, w: read.w, h: read.h }
+        this.alohaGridFailure = null
+        if (Math.abs(read.yaw) > 0.5) console.warn(`[mission] the ALOHA's map origin is rotated ${read.yaw.toFixed(1)}°: the image is drawn unrotated`)
+      } else {
+        if (read.reason !== this.alohaGridFailure?.reason) console.warn(`[mission] No map from the ALOHA yet: ${read.reason}`)
+        this.alohaGridFailure = { reason: read.reason, at: Date.now() }
+      }
+    } finally {
+      this.alohaGridBusy = false
+      this.changed()
+    }
+  }
+
+  /** The ALOHA's map for its tab: there, being read, or why not */
+  private alohaMapFacts(): MapReadFacts {
+    if (this.alohaGrid) return { state: 'ready', reason: null, at: this.alohaGridTried }
+    if (this.alohaGridBusy) return { state: 'reading', reason: null, at: this.alohaGridTried }
+    if (this.alohaGridFailure) return { state: 'failed', reason: this.alohaGridFailure.reason, at: this.alohaGridFailure.at }
+    const aloha = this.deps.inputs().robots.find((r) => r.kind === 'aloha')
+    const reason = !aloha
+      ? 'The ALOHA is not added in Setup'
+      : aloha.presence !== 'online'
+        ? 'The ALOHA is offline'
+        : !RUNNING.has(aloha.relay)
+          ? 'Its bridge (aloha/bridge.sh) is not running: run the ALOHA’s setup'
+          : null
+    return { state: 'waiting', reason, at: null }
   }
 
   // -------------------------------------------------------------------------------------------------------------------
@@ -307,11 +359,26 @@ export class MissionHub {
       t.stop = robot.kind === 'aloha' ? watchAmclPose(this.deps.packageRoot, onPose) : watchOdom(id, this.deps.packageRoot, onPose)
       this.tracked.set(id, t)
     }
-    if (open) void this.ensureGrid()
+    // The cameras of the same robots: a dog's camera relay runs with its relays, the ALOHA's frames come over its bridge
+    this.cameras.follow(this.cameraRoles(wanted))
+    if (open) {
+      void this.ensureGrid()
+      void this.ensureAlohaGrid()
+    }
     if (this.clients.size) {
       const message = JSON.stringify({ type: 'snapshot', snapshot: this.snapshot() })
       for (const ws of this.clients) ws.send(message)
     }
+  }
+
+  /** Each role whose robot is among `ids`, with that robot's ID */
+  private cameraRoles(ids: ReadonlySet<string>): CameraRoles {
+    return Object.fromEntries([...this.roles()].filter(([id]) => ids.has(id)).map(([id, key]) => [key, id]))
+  }
+
+  /** The latest frame of a robot's camera, for GET /api/mission/camera/<role>.jpg */
+  cameraFile(role: string): string | null {
+    return this.cameras.file(role)
   }
 
   private posed(t: Tracked, pose: PoseFact): void {
@@ -462,7 +529,9 @@ export class MissionHub {
       estop: run.estop,
       timeline: read?.timeline ?? [],
       output: run.lines.slice(-400).map((l) => l.text),
-      siteVersion: `${plan ?? ''}|${this.grid?.url ?? ''}|${[...roles].map(([id, k]) => `${id}=${k}`).join(',')}`,
+      cameras: this.cameras.facts(this.cameraRoles(inMission)),
+      alohaMap: this.alohaMapFacts(),
+      siteVersion: `${plan ?? ''}|${this.grid?.url ?? ''}|${[...roles].map(([id, k]) => `${id}=${k}`).join(',')}|${JSON.stringify(readBox(this.deps.packageRoot))}|${this.alohaGrid?.url ?? ''}`,
     }
   }
 }

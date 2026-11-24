@@ -6,6 +6,7 @@ import { Toast, ToastRegion, dismissToast, useToasts } from '@/shared/ui/Toast'
 import { EstopBanner } from './EstopBanner'
 import { Header } from './Header'
 import { SetupHeader } from './SetupHeader'
+import { useMissionToasts } from './mission-toasts'
 import { useSetupToasts } from './setup-toasts'
 import './AppShell.css'
 
@@ -15,6 +16,7 @@ export function AppShell() {
   const snap = useMissionSnapshot()
   const mission = useLocation().pathname.startsWith('/mission')
   useSetupToasts()
+  useMissionToasts()
   return (
     <div className="cc-shell">
       {!mission ? <SetupHeader /> : snap ? <Header snap={snap} /> : null}

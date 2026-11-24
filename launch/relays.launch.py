@@ -66,5 +66,17 @@ RELAYS = [
     ('posestamped_relay',  'goal_pose_relay',         '/goal_pose_relayed',     '/goal_pose',                     None),
 ]
 
+# The front camera, cut down on the robot to one small JPEG a second (scripts/camera_relay.py, needs ffmpeg in the
+# image): /camera_front_relayed_<ROBOT_ID> for the laptop's Command Center.
+def camera_node():
+    return Node(
+        package='nav_cmd_bridge',
+        executable='camera_relay.py',
+        name='camera_relay' + SUFFIX,
+        output='screen',
+        parameters=[{'topic': per_robot('/camera_front_relayed')}],
+    )
+
+
 def generate_launch_description():
-    return LaunchDescription([relay_node(*entry) for entry in RELAYS])
+    return LaunchDescription([relay_node(*entry) for entry in RELAYS] + [camera_node()])

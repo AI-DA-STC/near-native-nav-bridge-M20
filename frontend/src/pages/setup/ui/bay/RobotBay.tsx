@@ -187,8 +187,8 @@ interface SetupDoneProps {
 /** Ready: what the setup found, then the next robot, or on to Routes */
 function SetupDone({ robot, next, now, onAddNext, onContinue, continueBlocked }: SetupDoneProps) {
   const name = nameOf(robot)
-  // An M20 ends localized; the ALOHA ends with its stack checked
-  const last = robot.setup.steps.find((s) => s.key === (robot.kind === 'aloha' ? 'stack' : 'localize'))
+  // Each ends localized: an M20 on the dogs' map, the ALOHA on its own
+  const last = robot.setup.steps.find((s) => s.key === 'localize')
   const relayStopped = robot.relay.state === 'exited'
   return (
     <div className="cc-done">

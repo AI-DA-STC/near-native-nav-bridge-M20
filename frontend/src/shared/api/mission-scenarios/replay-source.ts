@@ -185,7 +185,11 @@ export function createReplaySource(options: { state?: number; now?: () => Ms } =
       emit()
       return Promise.resolve(result)
     },
-    siteMap: () => Promise.resolve(SITE),
+    // the replay's ALOHA shares the dogs' map: its own map is the same ground with only its route
+    siteMap: (map = 'dogs') =>
+      Promise.resolve(
+        map === 'aloha' ? { ...SITE, zones: [], box: null, routes: { patrol: {}, slots: [], sweep: {}, cordon: [], watch: null, aloha: SITE.routes.aloha } } : SITE,
+      ),
     index: () => presetIndex,
     go(index) {
       enter(index)

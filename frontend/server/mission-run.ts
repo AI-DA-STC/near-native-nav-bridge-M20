@@ -33,7 +33,7 @@ export interface EStopTarget {
 
 /** The command run_demo.sh is started with */
 export function missionCommand(script: string, waypoints: string, r3: string | null): string {
-  const env = [`WAYPOINTS=${waypoints}`, ...(r3 ? [`R3=${r3}`] : []), 'DETECT=0'].join(' ')
+  const env = [`WAYPOINTS=${waypoints}`, ...(r3 ? [`R3=${r3}`] : []), 'DETECT=fixed'].join(' ')
   // No echo while it runs: what the operator answers does not come back as output
   return `stty -echo; ${env} ${script}; echo "${EXIT_MARK} $?"; stty echo`
 }

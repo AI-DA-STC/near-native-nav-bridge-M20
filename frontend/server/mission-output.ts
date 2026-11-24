@@ -344,6 +344,11 @@ export function readMission(lines: readonly OutputLine[], pending: string, ctx: 
     } else if ((m = /^Robot \S+ WP (\d+)\/(\d+) SUCCEEDED/.exec(said))) {
       const wp = Number(m[1])
       Object.assign(aloha(at), { reached: wp, last: { wp, outcome: 'succeeded', at } })
+    } else if ((m = /^Robot \S+ WP (\d+)\/(\d+) not reached by move_base \(([^)]*)\)/.exec(said))) {
+      // The dock pose, by the box: send_goal.py --dock has dock.py take it from where the base stands
+      const wp = Number(m[1])
+      Object.assign(aloha(at), { target: null, last: { wp, outcome: /ABORTED/.test(m[3]) ? 'aborted' : 'timeout', at } })
+      event(at, 'ALOHA', `move_base could not reach WP ${m[1]}/${m[2]} (${m[3].toLowerCase()}): docking from where it stands`)
     } else if (/^Robot \S+ docking onto/.test(said)) {
       read.docking = { attempt: 1, of: 1, state: 'active', reason: null }
       event(at, 'ALOHA', 'Docking onto the box')
@@ -389,7 +394,8 @@ export function readMission(lines: readonly OutputLine[], pending: string, ctx: 
       foundAt: previous?.foundAt ?? at,
       refinedAt: m[1] === 'update' ? at : null,
       refinements: (previous?.refinements ?? -1) + 1,
-      snapshot: { url: ctx.imageUrl(m[7]), box: null, path: m[7] },
+      // demo/find_box.py says "image none" when the robot's camera sent no frame
+      snapshot: m[7] === 'none' ? { url: '', box: null, path: null } : { url: ctx.imageUrl(m[7]), box: null, path: m[7] },
     }
     event(at, 'DETECT', `Box ${m[1]} by robot ${m[2]} at x ${x.toFixed(2)}, y ${y.toFixed(2)}`)
   }

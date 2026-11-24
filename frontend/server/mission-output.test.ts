@@ -77,3 +77,65 @@ describe('readMission: prompts', () => {
     expect(read.verdict?.value).toBe('clear')
   })
 })
+
+describe('readMission: the box R3 reached (demo/find_box.py)', () => {
+  const found = (image: string) =>
+    readMission(
+      linesOf([
+        '=== Sweep: every robot sweeps its zone ===',
+        '[DETECT] Waiting for robot 738 to stop within 2.0 m of the box at x=1.45 y=6.51',
+        `[DETECT] Box found by robot 738 at x=1.45 y=6.51 (map), 1.6 m away, confidence 1.00, image ${image}`,
+      ]),
+      '',
+      ctx,
+      0,
+    )
+  it('with R3’s photo', () => {
+    expect(found('/ws/demo/detections/box_20261123_110000_738.jpg').detection).toMatchObject({
+      by: 'r3',
+      x: 1.45,
+      y: 6.51,
+      distM: 1.6,
+      confidence: 1,
+      refinements: 0,
+      snapshot: { url: '/ws/demo/detections/box_20261123_110000_738.jpg', path: '/ws/demo/detections/box_20261123_110000_738.jpg' },
+    })
+  })
+  it('without one, when R3’s camera sent no frame', () => {
+    expect(found('none').detection?.snapshot).toEqual({ url: '', box: null, path: null })
+  })
+})
+
+describe('readMission: the ALOHA docks where move_base could not reach (send_goal.py --dock)', () => {
+  const run = (last: string[]) =>
+    readMission(
+      linesOf([
+        '=== Aloha: drive to the box, dock and open the lid ===',
+        '',
+        '=== Aloha: drive to the box ===',
+        '',
+        '[ALOHA] Robot aloha → WP 1/1: x=1.000 y=2.000 yaw=90.0deg',
+        '[ALOHA] Robot aloha WP 1/1 not reached by move_base (ABORTED): docking onto it from where it stands',
+        '[ALOHA] Robot aloha docking onto its last WP',
+        ...last,
+      ]),
+      '',
+      ctx,
+      0,
+    )
+
+  it('docks from where it stands, and nothing failed', () => {
+    const read = run(['[ALOHA] Robot aloha docked: 1.2 cm and 0.30 deg off, after 1 correction(s)', '[ALOHA] Robot aloha finished its route in 1 s'])
+    expect(read.failure).toBeNull()
+    expect(read.warnings).toEqual([])
+    expect(read.docking).toMatchObject({ state: 'docked' })
+    expect(read.routes.aloha).toMatchObject({ state: 'finished', last: { wp: 1, outcome: 'aborted' } })
+    expect(read.timeline.map((e) => e.text)).toContain('move_base could not reach WP 1/1 (aborted): docking from where it stands')
+  })
+
+  it('fails with dock.py’s reason when it stands too far off to dock', () => {
+    const read = run(['[ALOHA] Robot aloha docking failed: 412.0 cm and 37.10 deg off: too far to dock, move_base did not get there'])
+    expect(read.docking).toMatchObject({ state: 'failed', reason: 'docking failed: 412.0 cm and 37.10 deg off: too far to dock, move_base did not get there' })
+    expect(read.failure).toMatch(/too far to dock/)
+  })
+})

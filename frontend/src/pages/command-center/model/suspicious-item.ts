@@ -2,9 +2,14 @@ import type { MissionSnapshot } from '@/shared/api'
 import { formatPercent, formatTimeOfDay, type Tone } from '@/shared/lib'
 import type { DetectionBox } from '@/shared/ui/DetectionImage'
 import type { IconName } from '@/shared/ui/Icon'
+import { cameraLive } from './camera-feeds'
 
 export interface FindingView {
+  /** The finding robot's photo of the box; empty when its camera sent no frame */
   snapshot: string
+  /** Found where demo/box.json has it, by a robot that reached it (demo/find_box.py reports confidence 1.00), not
+   * estimated from a camera: no confidence, no refinements */
+  atKnownPlace: boolean
   detection: DetectionBox | null
   x: number
   y: number
@@ -35,8 +40,8 @@ export interface ImageView {
 }
 
 export interface SuspiciousItemView {
-  /** What the panel shows: what it waits for (R3's camera is disabled for now), then BOX FOUND, then the ALOHA's photo
-   * of the contents */
+  /** What the panel shows: what it waits for (R3 to reach the box), then the box R3 found with its photo, then the
+   * ALOHA's photo of the contents */
   stage: 'waiting' | 'finding' | 'contents'
   status: { tone: Tone; icon: IconName; text: string }
   finding: FindingView | null
@@ -75,6 +80,7 @@ export function suspiciousItemOf(snap: MissionSnapshot, contentsInOperator: bool
   const { detection } = snap
   const finding: FindingView | null = detection && {
     snapshot: detection.snapshot.url,
+    atKnownPlace: detection.confidence >= 1 && detection.refinements === 0,
     detection: detection.snapshot.box ? { ...detection.snapshot.box, label: 'box', confidence: detection.confidence } : null,
     x: detection.x,
     y: detection.y,
@@ -90,8 +96,10 @@ export function suspiciousItemOf(snap: MissionSnapshot, contentsInOperator: bool
     stage === 'contents'
       ? { tone: 'live', icon: 'camera', text: 'ALOHA photo' }
       : finding
-        ? { tone: 'warn', icon: 'warn', text: 'Box found' }
-        : { tone: 'neutral', icon: 'camera', text: 'R3 camera off' }
+        ? { tone: 'warn', icon: 'warn', text: 'Object identified' }
+        : cameraLive(snap, 'r3')
+          ? { tone: 'live', icon: 'camera', text: 'R3 camera live' }
+          : { tone: 'neutral', icon: 'camera', text: 'R3 no video' }
   return {
     stage,
     status,
@@ -99,13 +107,13 @@ export function suspiciousItemOf(snap: MissionSnapshot, contentsInOperator: bool
     contents,
     images: {
       finding:
-        detection && finding
+        detection && finding && finding.snapshot
           ? {
               src: detection.snapshot.url,
               boxes: finding.detection ? [finding.detection] : [],
               aspect: '16 / 9',
-              caption: `${detection.by.toUpperCase()} · BOX FOUND · ${finding.refinedAt ?? finding.foundAt}`,
-              meta: [`box ${formatPercent(detection.confidence)}`, detection.snapshot.path].filter(Boolean).join(' · '),
+              caption: `${detection.by.toUpperCase()} · ${finding.atKnownPlace ? 'ANOMALOUS OBJECT' : 'BOX FOUND'} · ${finding.refinedAt ?? finding.foundAt}`,
+              meta: [finding.atKnownPlace ? null : `box ${formatPercent(detection.confidence)}`, detection.snapshot.path].filter(Boolean).join(' · '),
             }
           : null,
       contents: contentsImageOf(snap),

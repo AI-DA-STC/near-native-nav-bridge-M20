@@ -1,9 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createReplaySource, type MissionSnapshot, type ReplaySource, type SiteMap } from '@/shared/api'
-import { mapSceneOf } from './map-layers'
+import { cameraTilesOf } from './camera-feeds'
+import { alohaSceneOf, mapSceneOf } from './map-layers'
 import { isOperatorsTurn, operatorTurnOf, planViewOf } from './operator-turn'
 import { phaseTrackOf } from './phase-track'
-import { robotCardOf, robotStateOf } from './robot-state'
+import { robotStateOf } from './robot-state'
+import { suspiciousItemOf } from './suspicious-item'
 import { taskLanesOf } from './task-lanes'
 
 /* The page's model against the replay's snapshots of the brief's 16 states */
@@ -108,14 +110,6 @@ describe('robot state words', () => {
     expect(robotStateOf('r1', snap)).toMatchObject({ word: 'STOPPED', task: 'Stopped by E-STOP · confirmed 210 ms' })
     expect(robotStateOf('r2', snap)).toMatchObject({ word: 'E-STOP NOT CONFIRMED', tone: 'fault' })
   })
-  it('a card: its goal, the distance to it, its waypoints', () => {
-    const card = robotCardOf('r1', at(7))
-    expect(card.goal).toBe('WP 3')
-    expect(card.dist).toBeGreaterThan(0)
-    expect(card.progress?.max).toBe(3)
-    expect(robotCardOf('aloha', at(7)).docking).toBeNull()
-    expect(robotCardOf('aloha', at(11)).arms).toMatchObject({ pose: 3, detail: 'pose 3/5 · lid open' })
-  })
 })
 
 describe('map layers', () => {
@@ -134,6 +128,29 @@ describe('map layers', () => {
     expect(scene.box).toMatchObject({ halo: 0.35, label: 'BOX 91 %', state: 'refined' })
     expect(scene.sight).toEqual({ from: 'r3' })
     expect(scene.zones.every((z) => z.active)).toBe(true)
+  })
+  it('the box is not drawn before it is found, though the plan knows where it is', async () => {
+    const site = await siteOf()
+    expect(site.box).not.toBeNull()
+    for (const state of [2, 4, 6]) expect(mapSceneOf(at(state), site).box).toBeNull()
+    expect(mapSceneOf(at(4), site).legend.some((l) => l.kind === 'box')).toBe(false)
+  })
+  it('a box reached at its known place (confidence 1.00): its footprint and heading, no halo', async () => {
+    const snap = at(7)
+    const site = { ...(await siteOf()), box: { x: 1.45, y: 6.51, yaw: -2.84, w: 0.6, h: 0.38 } }
+    const reached = { ...snap, detection: { ...snap.detection!, x: 1.45, y: 6.51, confidence: 1, refinements: 0, refinedAt: null } }
+    expect(mapSceneOf(reached, site).box).toMatchObject({ x: 1.45, y: 6.51, yaw: -2.84, w: 0.6, h: 0.38, halo: 0, label: 'BOX', state: 'found' })
+  })
+  it('the ALOHA’s own map: its route with the waypoint it drives to, its dock, itself, and no dog', async () => {
+    const snap = at(10)
+    const site = await createReplaySource().siteMap('aloha')
+    const scene = alohaSceneOf(snap, site)
+    expect(scene.robots.map((r) => r.robot)).toEqual(['aloha'])
+    expect(scene.routes).toHaveLength(1)
+    expect(scene.routes[0]).toMatchObject({ robot: 'aloha', kind: 'aloha', points: site.routes.aloha!.path })
+    expect(scene.dock).toMatchObject({ x: site.routes.aloha!.dock.x, y: site.routes.aloha!.dock.y })
+    expect(scene.box).toBeNull()
+    expect(scene.legend.map((l) => l.kind)).toEqual(['aloha', 'waypoint', 'dock'])
   })
   it('11: focused on zone 3, with the ALOHA’s path and dock pose', async () => {
     const scene = mapSceneOf(at(11), await siteOf())
@@ -200,5 +217,51 @@ describe('the Operator panel', () => {
     const turn = operatorTurnOf(at(13))
     expect(turn).toMatchObject({ kind: 'outcome', outcome: 'complete', verdict: 'clear', total: '7:42' })
     if (turn.kind === 'outcome') expect(turn.facts[0]).toEqual({ label: 'Box at', value: '(4.05, −1.70)', mono: true })
+  })
+})
+
+describe('cameras', () => {
+  const withCameras = (snap: MissionSnapshot, cameras: MissionSnapshot['cameras']): MissionSnapshot => ({ ...snap, cameras })
+  it('one tile per robot in the mission: live under 3 s, stale after, none before the first frame', () => {
+    const snap = at(7)
+    const now = snap.serverTime
+    const tiles = cameraTilesOf(
+      withCameras(snap, {
+        r1: { topic: '/camera_front_relayed_741', at: now - 1000 },
+        r2: { topic: '/camera_front_relayed_665', at: now - 12_000 },
+        r3: { topic: '/camera_front_relayed_738', at: null },
+        aloha: { topic: '/camera_f/color/image_throttled/compressed', at: null },
+      }),
+    )
+    expect(tiles.map((t) => [t.robot, t.state])).toEqual([
+      ['r1', 'live'],
+      ['r2', 'stale'],
+      ['r3', 'none'],
+      ['aloha', 'none'],
+    ])
+    expect(tiles[0]).toMatchObject({ camera: 'front camera', src: `/api/mission/camera/r1.jpg?at=${now - 1000}`, note: null })
+    // each feed carries its robot's state word, now that the robot cards are gone
+    expect(tiles.map((t) => t.word)).toEqual((['r1', 'r2', 'r3', 'aloha'] as const).map((k) => robotStateOf(k, snap).word))
+    expect(tiles[1].note).toBe('no frame for 0:12')
+    expect(tiles[2]).toMatchObject({ src: null, image: null, note: 'No video: is its relay running?' })
+    expect(tiles[3]).toMatchObject({ camera: 'centre camera', note: 'No video: is stream.launch running on the ALOHA?' })
+  })
+  it('a robot not in the mission has no tile', () => {
+    const snap = at(7)
+    const robots = { ...snap.robots, r2: { ...snap.robots.r2, inMission: false } }
+    expect(cameraTilesOf({ ...snap, robots }).map((t) => t.robot)).toEqual(['r1', 'r3', 'aloha'])
+  })
+  it('Suspicious item, before the box is found, says whether R3’s camera sends frames', () => {
+    const snap = at(4)
+    expect(suspiciousItemOf(snap, false).status.text).toBe('R3 no video')
+    const live = withCameras(snap, { r3: { topic: '/camera_front_relayed_738', at: snap.serverTime - 500 } })
+    expect(suspiciousItemOf(live, false).status).toMatchObject({ tone: 'live', text: 'R3 camera live' })
+  })
+  it('Suspicious item: the box R3 reached, with no confidence and its photo, or none', () => {
+    const snap = at(7)
+    const reached = { ...snap, detection: { ...snap.detection!, confidence: 1, refinements: 0, refinedAt: null } }
+    expect(suspiciousItemOf(reached, false)).toMatchObject({ stage: 'finding', status: { text: 'Object identified' }, finding: { atKnownPlace: true } })
+    const noPhoto = { ...reached, detection: { ...reached.detection, snapshot: { url: '', box: null, path: null } } }
+    expect(suspiciousItemOf(noPhoto, false).images.finding).toBeNull()
   })
 })

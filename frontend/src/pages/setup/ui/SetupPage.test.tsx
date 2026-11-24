@@ -136,16 +136,16 @@ describe('the setup lobby', () => {
     expect(sent).toEqual([{ type: 'add-robot', kind: 'm20', id: '742', ip: '192.168.123.104', user: 'user', password: 'secret' }])
   })
 
-  it('logs in as agilex for the ALOHA, and shows its four steps', async () => {
+  it('logs in as agilex for the ALOHA, and shows its five steps', async () => {
     const aloha = robot({
       kind: 'aloha',
       id: 'aloha',
       ip: '192.168.123.200',
       user: 'agilex',
-      setup: { state: 'running', steps: steps(['done', 'active'], ['login', 'start', 'stack', 'bridge']), startedAt: Date.now(), endedAt: null },
+      setup: { state: 'running', steps: steps(['done', 'active'], ['login', 'start', 'stack', 'bridge', 'localize']), startedAt: Date.now(), endedAt: null },
     })
     setUp([aloha])
-    for (const title of ['Log in', 'Start ALOHA', 'Check its stack', 'Bridge']) expect(screen.getByText(title)).toBeInTheDocument()
+    for (const title of ['Log in', 'Start ALOHA', 'Check its stack', 'Bridge', 'Localize']) expect(screen.getByText(title)).toBeInTheDocument()
     expect(screen.queryByText('Pull image')).toBeNull()
     expect(within(seats()[0]).getByText('SETTING UP')).toBeInTheDocument()
   })
@@ -191,6 +191,27 @@ describe('the setup lobby', () => {
     expect(screen.getByText(/x 1.25 m, y -0.50 m, heading 90°/)).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: '741 is localized' }))
     expect(sent).toEqual([{ type: 'answer', robot: '741', choice: 'localized' }])
+  })
+
+  it('localizes the ALOHA on its own map: its estimate, and where AMCL then has it', async () => {
+    const aloha = robot({
+      kind: 'aloha',
+      id: 'aloha',
+      ip: '192.168.123.200',
+      user: 'agilex',
+      setup: { state: 'waiting', steps: steps(['done', 'done', 'done', 'done', 'decision'], ['login', 'start', 'stack', 'bridge', 'localize']), startedAt: Date.now(), endedAt: null },
+    })
+    const at = Date.now()
+    aloha.setup.steps[4].prompt = { kind: 'localize', rviz: 'running', pose: { x: 1.2, y: 5.1, yaw: 88, at }, amcl: { x: 1.25, y: 5.05, yaw: 90, at: at + 500 } }
+    const { sent, user } = setUp([aloha])
+    // lettered as the ALOHA's fourth step
+    const row = screen.getByText('Localize').closest('li')!
+    expect(within(row).getByText('d')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Localize ALOHA in RViz' })).toBeInTheDocument()
+    expect(screen.getByText(/which the bridge passes to AMCL on the robot/)).toBeInTheDocument()
+    expect(screen.getByText(/x 1.25 m, y 5.05 m, heading 90°/)).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'ALOHA is localized' }))
+    expect(sent).toEqual([{ type: 'answer', robot: 'aloha', choice: 'localized' }])
   })
 
   it('shows the README commands a step types, with their outcome', async () => {

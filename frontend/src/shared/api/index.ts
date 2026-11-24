@@ -2,6 +2,7 @@ export { connectMission, missionSource, useConnectionStatus, useMissionSnapshot 
 export type {
   AlohaFacts,
   Box2,
+  CameraFacts,
   CommandResult,
   ConnectionStatus,
   ContentsFacts,
@@ -9,6 +10,7 @@ export type {
   EStopFacts,
   FrameBox,
   LogTag,
+  MapReadFacts,
   MissionCommand,
   MissionEvent,
   MissionSnapshot,
@@ -24,6 +26,7 @@ export type {
   RobotFacts,
   RouteFacts,
   SiteMap,
+  SiteMapKind,
 } from './mission-stream'
 export { fetchSiteMap, sendCommand } from './client'
 export { createReplaySource, isReplaySource } from './mission-scenarios/replay-source'

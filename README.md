@@ -203,7 +203,7 @@ ENTER there; `n` + ENTER moves on to the next robot. After the last robot, `w` +
 | patrol | R1 R2 R3 (or PATROL_ROBOTS) | perimeter corners in order, at least 3, first corner not repeated |
 | formation | R1 R2 R3 | 1 per robot: line slots 1, 2, 3 |
 | sweep | R1 R2 R3 | zone 1, 2, 3 waypoints in order; R3's last next to the box |
-| cordon | R1 R2 | 1 per robot: cordon point at zone 3 |
+| cordon | R1 R2 R3 | 1 per robot: R1 and R2 their cordon points around the box, R3 where it watches the box from |
 | aloha | the Aloha (`aloha`, pose from /amcl_pose on ROS_DOMAIN_ID=1) | its route to the box in order; it docks onto the last one. For rviz, `ROS_DOMAIN_ID=1 rviz2 --ros-args -r /goal_pose:=/fleet_goal` with /map and /fleet_goal_markers |
 
 # Running the demo (demo/run_demo.sh)
@@ -217,8 +217,9 @@ every robot.
 - Step 4 (optional) : rviz as in Multi-robot Step 2, to see the routes on /fleet_goal_markers.
 - Step 5 : From the package root, in a terminal with the laptop Step 3 exports
 ```bash
-demo/run_demo.sh
-DETECT=0 demo/run_demo.sh   # without R3's camera: no box detection, every robot sweeps its whole route
+demo/run_demo.sh            # DETECT=fixed: the box is reported once R3 stops next to it (below)
+DETECT=1 demo/run_demo.sh   # YOLO on R3's camera instead (Box detection, below)
+DETECT=0 demo/run_demo.sh   # no box reported; every robot sweeps its whole route
 ```
 - Step 6 : In the same terminal
 
@@ -243,9 +244,41 @@ status (in progress, done, stopped, failed), every plan generated with its statu
 denied, executing, completed, stopped, failed), and a warning when the fleet cannot send (e.g. a robot not connected).
 **Stop demo** is Ctrl+C; **Show** opens the demo's own output.
 
-## Box detection (demo/detect_box.py)
+## The box (demo/box.json) and finding it (demo/find_box.py)
 
-From the start of the sweep until the demo ends, `run_demo.sh` runs `demo/detect_box.py` on R3's front camera only
+The box stands at a known place on the dogs' map: `demo/box.json` (`x`, `y`, `z`, `yaw` in radians, `length` and
+`width` in metres). `fleet_management.py` draws it in RViz from there (`show_box`), and the Command Center from there
+too. Edit that file when the box moves. A UWB tag on the box will later replace it with a live topic.
+
+With `DETECT=fixed`, the default, `run_demo.sh` starts `demo/find_box.py` with the sweep. Once R3 (738) is within 2 m of
+the box (`--reach`) and has stood still for a second, it takes the next frame of R3's front camera
+(`/camera_front_relayed_738`, below) and prints, then exits:
+`[DETECT] Box found by robot 738 at x=1.45 y=6.51 (map), 1.6 m away, confidence 1.00, image demo/detections/box_….jpg`.
+Without a frame within 10 s it says `image none`. The sweep goes on to its end either way. R3's last sweep waypoint
+must therefore end near the box. To try it alone, with the fleet's exports: `python3 demo/find_box.py`.
+
+## The dogs' front cameras (scripts/camera_relay.py)
+
+Each M20's front camera streams `rtsp://10.21.31.103:8554/video1` from the motion host (10.21.31.103), where the
+relays' container runs. `launch/relays.launch.py` also starts `camera_relay.py` there. It runs ffmpeg at nice 10 to cut
+the stream down to one 640-px JPEG a second, published as `/camera_front_relayed_<ROBOT_ID>` (sensor_msgs/CompressedImage,
+about 50 KB/s per robot). The motion host's free CPU is its little cores (the big ones are kept for the controller), shared
+with the RTSP server and the lidar, so ffmpeg decodes as little as it can: only keyframes (`skip_frame` nokey). It needs
+`ffmpeg` in the image (`Dockerfile.deploy`): rebuild and push it once (Build and push, above), then pull it on each robot
+(Setup's image step). Check from the laptop: `ros2 topic hz /camera_front_relayed_741` (about 1 Hz). A watchdog restarts
+ffmpeg when no frame has come for 10 s (`stall_s`), since a stream that stalls without closing would hang it. If frames
+stopped because the camera sends too few keyframes, it logs `… too few keyframes, skip_frame nonintra from now on`, then
+`none` (every frame decoded, the most CPU: watch the robot's load with `top`). `-p skip_frame:=none` starts it there. While
+the camera sends nothing, it logs `No video from …` and tries again every 5 s. Its lines are in the robot's terminal, under
+the relays' launch.
+
+The ALOHA's centre camera (`camera_f` of `multi_camera.launch`) comes over its bridge as
+`/camera_f/color/image_throttled/compressed` (ROS_DOMAIN_ID=1). `aloha/robot/stream.launch` throttles it to `fps_f`,
+1 a second, on the robot; the wrist cameras keep `fps` (3). Copy the new `stream.launch` to the ALOHA once.
+
+## Box detection with YOLO (demo/detect_box.py, DETECT=1)
+
+With `DETECT=1`, from the start of the sweep until the demo ends, `run_demo.sh` runs `demo/detect_box.py` on R3's front camera only
 (robot 738, `rtsp://192.168.123.103:8554/video1` from `external/lynx-M20-yolo/live_config.yaml`). The other robots'
 cameras stay off. It runs the YOLO26 box model of the `external/lynx-M20-yolo` submodule (`weights/shiwei.pt`) at
 the config's `inference_fps` on the CPU. Once the tracker has followed a box for 3 frames, it prints
@@ -264,6 +297,16 @@ pip3 install -r demo/requirements-detect.txt
   `[video] connected: rtsp://…` once it has the stream, `[video] cannot open …, retrying` while it has none. Without a
   stream, the window shows "No video from R3 · 738's camera yet. Retrying…" and the demo goes on.
 - To try the detector alone: `python3 demo/detect_box.py --source external/lynx-M20-yolo/samples/test1.png`.
+
+## The ALOHA to the box (aloha/send_goal.py)
+
+`aloha/run_aloha.sh` drives the ALOHA along `aloha.json` with `send_goal.py --dock`: `move_base` takes each waypoint
+(through the bridge, `/move_base_simple/goal`), then `dock.py` on the robot docks precisely onto the last one, through
+`/aloha/dock/goal`. The last waypoint is the dock pose, right by the box, which is an obstacle in `move_base`'s costmap:
+when `move_base` cannot get there it says `WP n/n not reached by move_base (ABORTED): docking onto it from where it
+stands`, and `dock.py` takes over. `dock.py` docks only from within 0.5 m and 0.5 rad (its `max_xy`, `max_yaw`); further
+off it answers `… too far to dock, move_base did not get there` and the run fails there. Both need the ALOHA localized
+on its own map (the Command Center's Setup, step d): from a wrong pose `move_base` finds no plan at all.
 
 ## Box contents (aloha/inspect_box.py)
 

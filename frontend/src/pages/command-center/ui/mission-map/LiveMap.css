@@ -71,3 +71,8 @@ rect.cc-map__body { fill: color-mix(in srgb, var(--rc) 26%, var(--map-ground)); 
 .cc-map__overlay > * { pointer-events: auto; }
 .cc-map__overlay > .cc-maptool { position: absolute; left: 12px; top: 12px; }
 .cc-map__overlay > .cc-legend { position: absolute; left: 12px; bottom: 12px; }
+.cc-map__overlay > .cc-map__note {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); margin: 0; padding: 8px 12px; max-width: 360px;
+  border-radius: var(--radius-md); background: color-mix(in srgb, var(--surface) 86%, transparent); border: 1px solid var(--line);
+  color: var(--text-2); font-size: 12.5px; line-height: 18px; text-align: center;
+}
