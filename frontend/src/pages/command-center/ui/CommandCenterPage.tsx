@@ -7,7 +7,7 @@ import { cameraTilesOf } from '../model/camera-feeds'
 import { useMapView } from '../model/map-view'
 import { operatorTurnOf } from '../model/operator-turn'
 import { phaseTrackOf } from '../model/phase-track'
-import type { ImageView } from '../model/suspicious-item'
+import { findingImageOf, type ImageView } from '../model/suspicious-item'
 import { taskLanesOf } from '../model/task-lanes'
 import { useMinimized } from '../model/use-minimized'
 import { CameraStrip } from './cameras/CameraStrip'
@@ -38,6 +38,16 @@ export function CommandCenterPage({ startControl }: CommandCenterPageProps) {
   const [camerasMin, setCamerasMin] = useMinimized('cc.command-center.cameras-minimized')
   // A photo, or a camera's feed, which keeps updating while it is enlarged
   const [enlarged, setEnlarged] = useState<{ image: ImageView } | { camera: string } | null>(null)
+  // The suspicious object pops up, enlarged, the moment it is found while this page is open: once, as a refinement keeps
+  // its Found time. Closed, it stays in the Suspicious item card, whose image opens it again. A finding already made
+  // when the page opens (undefined: no facts yet) only shows in the card.
+  const foundAt = snap ? (snap.detection?.foundAt ?? null) : undefined
+  const [seenFoundAt, setSeenFoundAt] = useState(foundAt)
+  if (foundAt !== seenFoundAt) {
+    setSeenFoundAt(foundAt)
+    const image = snap && seenFoundAt !== undefined && foundAt != null ? findingImageOf(snap) : null
+    if (image) setEnlarged({ image })
+  }
   if (!snap) return null
   const track = phaseTrackOf(snap)
   const turn = operatorTurnOf(snap)

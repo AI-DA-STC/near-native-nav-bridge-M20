@@ -42,9 +42,9 @@ ARROW_TOPIC  = "/fleet_goal"
 MARKER_TOPIC = "/fleet_goal_markers"
 COLORS = [(0.3, 0.6, 1.0), (1.0, 0.6, 0.2), (0.9, 0.3, 0.9), (0.3, 0.9, 0.4)]
 
-# The suspicious box, on the map: demo/box.json (x, y, z, yaw in radians, length and width in metres), shared with
-# demo/find_box.py and the Command Center
-BOX_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "demo", "box.json")
+# The suspicious box, on the map: demo/assets/box.json (x, y, z, yaw in radians, length and width in metres), shared
+# with demo/find_box.py and the Command Center
+BOX_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "demo", "assets", "box.json")
 with open(BOX_FILE) as _f:
     _BOX = json.load(_f)
 BOX_POSE = Pose(position=Point(x=float(_BOX["x"]), y=float(_BOX["y"]), z=float(_BOX.get("z", 0.0))),

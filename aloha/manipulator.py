@@ -7,9 +7,9 @@ are, for the first) at --speed at most.
 
 At the last pose but one (--photo-pose), before the arms go home, both wrist cameras photograph the box: the first frame
 each takes once the arms are there (their stamps and the arms' are both the ALOHA's clock, so the Wi-Fi's delay does not
-matter). The arms hold the pose until both photos are in, for at most 10 s, then 2 s longer. inspect_box.py then looks
-for the tools in them while the arms go home. Ctrl+C stops sending: the arms stay where they are. Run with the bridge's
-ROS_DOMAIN_ID."""
+matter). The arms hold the pose until both photos are in, for at most 10 s, then 2 s longer. inspect_box.py then sends
+them to the Roboflow workflow, for what is in the box, while the arms go home. Ctrl+C stops sending: the arms stay where
+they are. Run with the bridge's ROS_DOMAIN_ID."""
 
 import argparse
 import json
@@ -37,7 +37,7 @@ PHOTO_TIMEOUT_S = 10.0  # longest the arms wait at the pose for the photos
 PHOTO_HOLD_S = 2.0  # then they hold it this much longer, on top of --pause
 PHOTO_DIR = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "demo", "detections"))
 INSPECT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "inspect_box.py")
-INSPECT_TIMEOUT_S = 60.0  # for its result, after the last pose
+INSPECT_TIMEOUT_S = 100.0  # for its result, after the last pose: the Roboflow workflow's 3 tries of 30 s at most
 FRESH_S = 0.5  # older puppet positions are not saved
 DEFAULT_FILE = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "demo", "waypoints",
                                              "current", "manipulator.json"))

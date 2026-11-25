@@ -117,7 +117,7 @@ export function mapSceneOf(snap: MissionSnapshot, site: SiteMap): MapScene {
 
   // Where the box is: as it was found, else where the plan knows it to be. Only the found box is drawn
   const boxAt: Pt | null = detection ? [detection.x, detection.y] : site.box ? [site.box.x, site.box.y] : null
-  // demo/find_box.py reports the box where demo/box.json has it (confidence 1.00): its footprint and heading, no halo
+  // demo/find_box.py reports the box where demo/assets/box.json has it (confidence 1.00): its footprint and heading, no halo
   const knownBox = detection && detection.confidence >= 1 && detection.refinements === 0 && site.box ? { ...site.box, x: detection.x, y: detection.y } : null
   const boxZone = boxAt ? site.zones.find((z) => inside(boxAt, z.points)) : undefined
   const watching = ['sweep', 'cordon', 'inspect', 'verdict'].includes(shown)

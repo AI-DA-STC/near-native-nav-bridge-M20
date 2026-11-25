@@ -4,14 +4,14 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { alohaSiteOf, readBox, siteMapOf } from './mission-site.ts'
 
-/* The box, from demo/box.json as fleet_management.py and demo/find_box.py read it */
+/* The box, from demo/assets/box.json as fleet_management.py and demo/find_box.py read it */
 
 const roots: string[] = []
 const rootWith = (box: unknown): string => {
   const root = mkdtempSync(join(tmpdir(), 'site-'))
   roots.push(root)
-  mkdirSync(join(root, 'demo'))
-  if (box !== undefined) writeFileSync(join(root, 'demo', 'box.json'), typeof box === 'string' ? box : JSON.stringify(box))
+  mkdirSync(join(root, 'demo', 'assets'), { recursive: true })
+  if (box !== undefined) writeFileSync(join(root, 'demo', 'assets', 'box.json'), typeof box === 'string' ? box : JSON.stringify(box))
   return root
 }
 afterEach(() => roots.splice(0).forEach((r) => rmSync(r, { recursive: true, force: true })))

@@ -143,7 +143,7 @@ export interface DetectionFacts {
 export interface ContentsFacts {
   state: 'waiting' | 'capturing' | 'ready' | 'failed'
   photo: { url: string; at: Ms; path: string | null } | null
-  /** Classes: screwdriver, drill, pliers, case, scissors, object */
+  /** Classes of the Roboflow workflow's contents model: bottle, screwdriver, tape_roll, warning_taped_box, wire */
   objects: Array<{ label: string; confidence: number; box: FrameBox | null }>
 }
 

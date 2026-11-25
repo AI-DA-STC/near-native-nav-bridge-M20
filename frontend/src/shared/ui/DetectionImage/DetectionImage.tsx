@@ -20,7 +20,7 @@ export interface DetectionImageProps {
   boxes?: DetectionBox[]
   /** CSS aspect ratio, default 16 / 9 */
   aspect?: string
-  /** Shows the enlarge button */
+  /** A click on the image, or its enlarge button (the keyboard's way), enlarges it */
   onExpand?: () => void
   dim?: boolean
   className?: string
@@ -31,7 +31,7 @@ export interface DetectionImageProps {
 /** A camera frame as evidence, with every detection drawn on top in the finding colour, never baked in */
 export function DetectionImage({ src, alt = '', boxes = [], aspect = '16 / 9', onExpand, dim = false, className, children }: DetectionImageProps) {
   return (
-    <figure className={cx('cc-detimg', dim && 'is-dim', className)} style={{ aspectRatio: aspect }}>
+    <figure className={cx('cc-detimg', dim && 'is-dim', onExpand && 'is-expandable', className)} style={{ aspectRatio: aspect }} onClick={onExpand}>
       {src ? <img src={src} alt={alt} draggable={false} /> : <div className="cc-detimg__none" />}
       {boxes.map((b, i) => (
         <div
@@ -53,7 +53,8 @@ export function DetectionImage({ src, alt = '', boxes = [], aspect = '16 / 9', o
       ))}
       {children}
       {onExpand ? (
-        <button type="button" className="cc-detimg__expand" onClick={onExpand} aria-label="Enlarge image">
+        // its click reaches the figure's onExpand
+        <button type="button" className="cc-detimg__expand" aria-label="Enlarge image">
           <Icon name="expand" size={14} />
         </button>
       ) : null}

@@ -2,6 +2,7 @@
 .cc-detimg { position: relative; margin: 0; width: 100%; overflow: hidden; border-radius: var(--radius-sm); background: var(--surface-well); border: 1px solid var(--line); }
 .cc-detimg > img { display: block; width: 100%; height: 100%; object-fit: cover; }
 .cc-detimg.is-dim > img { filter: saturate(.6) brightness(.8); }
+.cc-detimg.is-expandable { cursor: zoom-in; }
 .cc-detimg__none { width: 100%; height: 100%; background: repeating-linear-gradient(-45deg, transparent 0 8px, var(--surface) 8px 10px); }
 .cc-detbox { position: absolute; border: 1px solid var(--finding-line); }
 .cc-detbox.is-faint { opacity: .6; }

@@ -72,7 +72,7 @@ function serveFile(res: ServerResponse, file: string | null): void {
 }
 
 /** The Command center's files: GET /api/mission/site (the dogs' map, from the plan in use; ?map=aloha the ALOHA's own),
- * /api/mission/map.png and /api/mission/aloha-map.png (the dogs' and the ALOHA's SLAM grids), /api/mission/image?path= (a detection or contents photo, from demo/detections only),
+ * /api/mission/map.png and /api/mission/aloha-map.png (the dogs' and the ALOHA's SLAM grids), /api/mission/image?path= (a detection or contents photo, from demo/detections or demo/assets only),
  * /api/mission/camera/<key>.jpg (a robot camera's latest frame). True when it answered. */
 function serveMission(req: IncomingMessage, res: ServerResponse): boolean {
   const url = new URL(req.url ?? '/', 'http://localhost')

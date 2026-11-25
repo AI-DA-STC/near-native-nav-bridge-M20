@@ -68,6 +68,18 @@ const TRAIL_EVERY_MS = 1000
 const TRAIL_POINTS = 120
 const RUNNING: ReadonlySet<RelayState> = new Set(['running', 'kept'])
 
+/** The file of an image the scripts report, when the page may show it: a JPEG or PNG they wrote (demo/detections), or
+ * one kept with the demo, such as find_box.py's photo of the box (demo/assets). Null for anything else. */
+export function servableImage(packageRoot: string, path: string): string | null {
+  const file = isAbsolute(path) ? path : join(packageRoot, path)
+  if (!/\.(jpe?g|png)$/i.test(file)) return null
+  const inside = (folder: string) => {
+    const rel = relative(join(packageRoot, 'demo', folder), file)
+    return rel !== '' && !rel.startsWith('..') && !isAbsolute(rel)
+  }
+  return inside('detections') || inside('assets') ? file : null
+}
+
 interface Tracked {
   pose: { x: number; y: number; yawDeg: number; at: number } | null
   speed: number | null
@@ -229,12 +241,9 @@ export class MissionHub {
     return join(this.deps.packageRoot, 'frontend', 'server', 'maps', 'grid.png')
   }
 
-  /** A file the scripts wrote that the page may show: demo/detections only */
+  /** An image the scripts report that the page may show (servableImage) */
   imageFile(path: string): string | null {
-    const root = join(this.deps.packageRoot, 'demo', 'detections')
-    const file = isAbsolute(path) ? path : join(this.deps.packageRoot, path)
-    const rel = relative(root, file)
-    return rel && !rel.startsWith('..') && !isAbsolute(rel) && /\.(jpe?g|png)$/i.test(file) ? file : null
+    return servableImage(this.deps.packageRoot, path)
   }
 
   private async ensureGrid(): Promise<void> {

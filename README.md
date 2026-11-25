@@ -223,9 +223,10 @@ every robot.
 - Step 5 : From the package root, in a terminal with the laptop Step 3 exports
 ```bash
 demo/run_demo.sh            # DETECT=fixed: the box is reported once R3 stops next to it (below)
-DETECT=1 demo/run_demo.sh   # YOLO on R3's camera instead (Box detection, below)
 DETECT=0 demo/run_demo.sh   # no box reported; every robot sweeps its whole route
 ```
+The Aloha's photos of the box's contents go to a Roboflow workflow, which needs `ROBOFLOW_API_KEY` (Box contents,
+below).
 - Step 6 : In the same terminal
 
 | When | Type | Next |
@@ -249,16 +250,18 @@ status (in progress, done, stopped, failed), every plan generated with its statu
 denied, executing, completed, stopped, failed), and a warning when the fleet cannot send (e.g. a robot not connected).
 **Stop demo** is Ctrl+C; **Show** opens the demo's own output.
 
-## The box (demo/box.json) and finding it (demo/find_box.py)
+## The box (demo/assets/box.json) and finding it (demo/find_box.py)
 
-The box stands at a known place on the dogs' map: `demo/box.json` (`x`, `y`, `z`, `yaw` in radians, `length` and
-`width` in metres). `fleet_management.py` draws it in RViz from there (`show_box`), and the Command Center from there
+The box stands at a known place on the dogs' map: `demo/assets/box.json` (`x`, `y`, `z`, `yaw` in radians, `length`
+and `width` in metres). `fleet_management.py` draws it in RViz from there (`show_box`), and the Command Center from there
 too. Edit that file when the box moves. A UWB tag on the box will later replace it with a live topic.
 
 With `DETECT=fixed`, the default, `run_demo.sh` starts `demo/find_box.py` with the sweep. Once R3 (738) is within 2 m of
 the box (`--reach`) and has stood still for a second, it prints, then exits:
-`[DETECT] Box found by robot 738 at x=1.45 y=6.51 (map), 1.6 m away, confidence 1.00, image none`.
-No photo: the dogs' cameras stay on the dogs. The sweep goes on to its end either way. R3's last sweep waypoint
+`[DETECT] Box found by robot 738 at x=1.45 y=6.51 (map), 1.6 m away, confidence 1.00, image …/demo/assets/unattended_item.jpg`.
+The dogs' cameras stay on the dogs, so the photo is one taken beforehand, `demo/assets/unattended_item.jpg`
+(`--image <photo>` for another, `--image none` for none). The Command Center pops it up, enlarged, the moment the box
+is found, and keeps it in the Suspicious item card, whose image opens it again; `demo_gui.py` shows it too. The sweep goes on to its end either way. R3's last sweep waypoint
 must therefore end near the box. To try it alone, with the fleet's exports: `python3 demo/find_box.py`.
 
 ## The cameras the Command Center shows
@@ -272,28 +275,6 @@ The ALOHA's bridge (`aloha/bridge.yaml`) carries only what the laptop uses: the 
 scan and TF (for RViz's Localize view), the initial pose and navigation goals, move_base's status, the arms' joints
 (`/puppet/joint_*` read, `/master/joint_*` commanded), the two wrist cameras and docking. The arms' end poses and status
 (200 Hz each), move_base's plans and the centre camera stay on the robot.
-
-## Box detection with YOLO (demo/detect_box.py, DETECT=1)
-
-With `DETECT=1`, from the start of the sweep until the demo ends, `run_demo.sh` runs `demo/detect_box.py` on R3's front camera only
-(robot 738, `rtsp://192.168.123.103:8554/video1` from `external/lynx-M20-yolo/live_config.yaml`). The other robots'
-cameras stay off. It runs the YOLO26 box model of the `external/lynx-M20-yolo` submodule (`weights/shiwei.pt`) at
-the config's `inference_fps` on the CPU. Once the tracker has followed a box for 3 frames, it prints
-`[DETECT] Box found by robot 738 at x=… y=… (map), … m away, …, image demo/detections/box_….jpg`. The map position
-comes from R3's `/ODOM_relayed_738` plus the box's distance (the config's depth model) and its bearing in the image.
-The operator window then shows **BOX FOUND** in the banner, and the box's image and map coordinates at the top right.
-A closer view later refines them. The cordon and the Aloha carry on as before.
-
-- Once, after cloning: `git submodule update --init` (the detector and its weights).
-- Once, on the laptop, unless the devcontainer was rebuilt after this was added:
-```bash
-pip3 install --index-url https://download.pytorch.org/whl/cpu torch==2.4.1 torchvision==0.19.1
-pip3 install -r demo/requirements-detect.txt
-```
-- R3's camera must be streaming. Check with `python3 demo/detect_box.py` (Ctrl+C stops it): it prints
-  `[video] connected: rtsp://…` once it has the stream, `[video] cannot open …, retrying` while it has none. Without a
-  stream, the window shows "No video from R3 · 738's camera yet. Retrying…" and the demo goes on.
-- To try the detector alone: `python3 demo/detect_box.py --source external/lynx-M20-yolo/samples/test1.png`.
 
 ## The ALOHA to the box (aloha/send_goal.py)
 
@@ -312,23 +293,43 @@ copied next to `start_aloha.sh`) keeps the known part plus 2 m, a few hundred KB
 coordinates and recorded waypoints stay valid. It keeps the originals as `.orig`. Then restart `map_server` (the
 `navigation` window: Ctrl+C, Up, Enter).
 
-## Box contents (aloha/inspect_box.py)
+## Box contents (aloha/inspect_box.py, Roboflow workflow)
 
 When the Aloha's arms reach the last pose but one, before they go home, `manipulator.py` prints `[INSPECT] Taking
 photos with both wrist cameras` and saves the first frame each wrist camera took once the arms were there:
 `demo/detections/contents_…_left.jpg` and `_right.jpg`. It listens to both cameras from the start, and compares their
 stamps with the arms' (both the ALOHA's clock), so the photos are taken at once whatever the Wi-Fi's delay. The arms
 hold the pose until both photos are in (10 s at most), then 2 s longer, then go home. `--photo-pose N`
-(`run_manipulator.sh`) photographs at another pose. While they go home, `aloha/inspect_box.py` runs the YOLO26 tools
-model, `external/lynx-M20-yolo/weights/tools_seg.pt`, on both photos. The classes are screwdriver, drill, pliers, case,
-scissors and object. It prints each object once, at its best confidence, and both photos side by side with the objects
-outlined: `[INSPECT] Box contents: screwdriver 0.56, object 0.39; image demo/detections/contents_….jpg`.
+(`run_manipulator.sh`) photographs at another pose. While they go home, `aloha/inspect_box.py` sends both photos, in one
+request, to the Roboflow workflow **Carton Interior Mask Preview** (workspace `test001-78x0i`, workflow
+`carton-interior-mask-preview-1795512106163`, on `serverless.roboflow.com`) through `aloha/carton_workflow.py`. The
+workflow finds the carton's interior in each photo (model carton-interior-segmentation), blanks everything outside it,
+and only then finds the objects in it (model carton-contents-detection: bottle, screwdriver, tape_roll,
+warning_taped_box, wire). `inspect_box.py` prints each object once, at its best confidence over both photos, and the
+workflow's drawings of both photos side by side, each object boxed with its class and confidence:
+`[INSPECT] Box contents: warning_taped_box 0.97, bottle 0.92; image demo/detections/contents_….jpg`. Each photo's
+drawing is kept too, as `contents_…_left_annotated.jpg` and `_right_annotated.jpg`.
+A photo in which the workflow finds no carton interior goes in as taken, after
+`[INSPECT] No photo of the inside: the workflow found no carton interior in contents_…_left.jpg`, which the operator
+window shows as a warning: "nothing found" then means the box was not looked into, not that it is empty. When the
+workflow cannot be run (no key, a refused key, no answer after 3 tries of 30 s), it prints `[INSPECT] Cannot run: …`
+instead, and `manipulator.py` waits 100 s at most for either.
 The operator window shows that image under the box's image, with the list of objects.
 It then asks at once for the operator's verdict: **Anomaly** or **Clear**. After **Clear**, R1, R2 and R3 go back to
 their formation slots (`formation.json`), the mission plan's last step, and the demo ends once they are there. After
 **Anomaly**, the demo ends at once and that step shows as skipped. A verdict given before `run_demo.sh` asks is kept until it asks. Click either image, or **⤢ Enlarge**, to
 see it in a window of its own. Maximize that window (or double-click it, or press F) to fill the screen; Esc closes it.
 
-- `tools_seg.pt` is on the detector repo's `instance-training-batch-updates` branch. The submodule is pinned to that
-  branch's commit (`.gitmodules` names the branch).
+- Once: the Roboflow API key (app.roboflow.com/settings/api) as `ROBOFLOW_API_KEY=<key>` in `.env` at the package root,
+  which git and Docker builds ignore, or exported in the terminal that runs the demo (that one wins). It goes only in
+  the request's `Authorization` header. Never commit it.
+- The laptop needs internet access during the demo: the workflow runs on Roboflow's servers.
+- Pillow, for the side-by-side image: `pip3 install Pillow` (`requirements.txt`'s matplotlib already brings it).
+  Nothing else: the client is plain `urllib`, as ROS 2 Foxy's python3 is 3.8 and Roboflow's `inference-sdk` needs 3.10.
+- The workflow's steps and models are edited on Roboflow (workspace `test001-78x0i`, Workflows). `carton_workflow.py`
+  reads only its outputs `interior_count`, `predictions` and `output_image`, and asks for no others. If one is renamed,
+  `inspect_box.py` says `Cannot run: … the result for … has …, not interior_count, predictions, output_image`.
 - To try it alone on photos already taken: `python3 aloha/inspect_box.py demo/detections/contents_…_left.jpg demo/detections/contents_…_right.jpg`.
+- To check the key and the workflow: `python3 aloha/test_carton_workflow.py`, a smoke test on
+  `aloha/samples/carton_open.jpg` and a picture without a carton, against the live workflow (about 5 s). Without a key
+  only its offline test runs.

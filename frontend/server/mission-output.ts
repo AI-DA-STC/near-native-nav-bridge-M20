@@ -13,7 +13,7 @@ import type { RobotKey } from '../src/shared/config/fleet.ts'
 
 /* What demo/run_demo.sh prints, read back into the mission's facts: its phase banners (=== Sweep: … ===), its [DEMO]
  * lines and prompts, fleet_management.py's [FLEET] lines, the ALOHA's [ALOHA], arm poses and [INSPECT] lines,
- * detect_box.py's [DETECT] lines. The same reading as demo/demo_gui.py's, but a dog's waypoint ends ARRIVED, STOPPED
+ * find_box.py's [DETECT] lines. The same reading as demo/demo_gui.py's, but a dog's waypoint ends ARRIVED, STOPPED
  * SHORT or TIMEOUT (only the ALOHA's says SUCCEEDED). Pure: the whole output is read again on every change. */
 
 export interface OutputLine {
@@ -394,7 +394,7 @@ export function readMission(lines: readonly OutputLine[], pending: string, ctx: 
       foundAt: previous?.foundAt ?? at,
       refinedAt: m[1] === 'update' ? at : null,
       refinements: (previous?.refinements ?? -1) + 1,
-      // demo/find_box.py says "image none" when the robot's camera sent no frame
+      // demo/find_box.py reports its photo of the box (demo/assets/unattended_item.jpg), or "image none" without one
       snapshot: m[7] === 'none' ? { url: '', box: null, path: null } : { url: ctx.imageUrl(m[7]), box: null, path: m[7] },
     }
     event(at, 'DETECT', `Box ${m[1]} by robot ${m[2]} at x ${x.toFixed(2)}, y ${y.toFixed(2)}`)

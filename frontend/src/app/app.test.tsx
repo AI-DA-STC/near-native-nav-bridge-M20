@@ -167,6 +167,25 @@ describe('the operator’s flows', () => {
     expect(snapshot().run).toMatchObject({ status: 'ended', outcome: 'stopped' })
   })
 
+  it('the box pops up enlarged the moment R3 finds it; closed, it stays in the card, whose image opens it again', async () => {
+    const user = renderApp(6)
+    expect(screen.queryByRole('dialog')).toBeNull()
+    act(() => source.go(source.states.findIndex((s) => s.n === 7)))
+    const popup = screen.getByRole('dialog', { name: /^R3 · BOX FOUND · / })
+    await user.click(within(popup).getByRole('button', { name: /^Close/ }))
+    expect(screen.queryByRole('dialog')).toBeNull()
+    act(() => vi.advanceTimersByTime(3000)) // the facts go on updating: it does not pop up again
+    expect(screen.queryByRole('dialog')).toBeNull()
+    await user.click(screen.getByRole('img', { name: 'Snapshot of the box' }))
+    expect(screen.getByRole('dialog', { name: /^R3 · BOX FOUND · / })).toBeInTheDocument()
+  })
+
+  it('a box found before the page opened shows in its card only', () => {
+    renderApp(7)
+    expect(screen.getByRole('img', { name: 'Snapshot of the box' })).toBeInTheDocument()
+    expect(screen.queryByRole('dialog')).toBeNull()
+  })
+
   it('ANOMALY has a confirm step and ends the mission, never as a failure', async () => {
     const user = renderApp(12)
     await user.click(screen.getByRole('button', { name: 'ANOMALY' }))

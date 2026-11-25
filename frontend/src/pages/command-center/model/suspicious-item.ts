@@ -4,9 +4,9 @@ import type { DetectionBox } from '@/shared/ui/DetectionImage'
 import type { IconName } from '@/shared/ui/Icon'
 
 export interface FindingView {
-  /** The finding robot's photo of the box (demo/detect_box.py); empty when found by reaching it (demo/find_box.py) */
+  /** The finding robot's photo of the box, when its report has one; empty when found by reaching it (demo/find_box.py) */
   snapshot: string
-  /** Found where demo/box.json has it, by a robot that reached it (demo/find_box.py reports confidence 1.00), not
+  /** Found where demo/assets/box.json has it, by a robot that reached it (demo/find_box.py reports confidence 1.00), not
    * estimated from a camera: no confidence, no refinements */
   atKnownPlace: boolean
   detection: DetectionBox | null
@@ -75,10 +75,9 @@ export function contentsImageOf(snap: MissionSnapshot): ImageView | null {
   }
 }
 
-/** `contentsInOperator`: the Operator panel shows the photo for the verdict, so this panel shows the finding instead */
-export function suspiciousItemOf(snap: MissionSnapshot, contentsInOperator: boolean): SuspiciousItemView {
+function findingOf(snap: MissionSnapshot): FindingView | null {
   const { detection } = snap
-  const finding: FindingView | null = detection && {
+  return detection && {
     snapshot: detection.snapshot.url,
     atKnownPlace: detection.confidence >= 1 && detection.refinements === 0,
     detection: detection.snapshot.box ? { ...detection.snapshot.box, label: 'box', confidence: detection.confidence } : null,
@@ -90,6 +89,25 @@ export function suspiciousItemOf(snap: MissionSnapshot, contentsInOperator: bool
     refinedAt: detection.refinedAt === null ? null : formatTimeOfDay(detection.refinedAt),
     refinements: detection.refinements,
   }
+}
+
+/** The finding's photo, enlarged: the box as the report shows it, at the image's own shape. Null without a photo */
+export function findingImageOf(snap: MissionSnapshot): ImageView | null {
+  const { detection } = snap
+  const finding = findingOf(snap)
+  if (!detection || !finding?.snapshot) return null
+  return {
+    src: finding.snapshot,
+    boxes: finding.detection ? [finding.detection] : [],
+    aspect: 'auto',
+    caption: `${detection.by.toUpperCase()} · ${finding.atKnownPlace ? 'ANOMALOUS OBJECT' : 'BOX FOUND'} · ${finding.refinedAt ?? finding.foundAt}`,
+    meta: [finding.atKnownPlace ? null : `box ${formatPercent(detection.confidence)}`, detection.snapshot.path].filter(Boolean).join(' · '),
+  }
+}
+
+/** `contentsInOperator`: the Operator panel shows the photo for the verdict, so this panel shows the finding instead */
+export function suspiciousItemOf(snap: MissionSnapshot, contentsInOperator: boolean): SuspiciousItemView {
+  const finding = findingOf(snap)
   const contents = contentsOf(snap)
   const stage = contents && contents.state !== 'waiting' && !contentsInOperator ? 'contents' : finding ? 'finding' : 'waiting'
   const status: SuspiciousItemView['status'] =
@@ -103,18 +121,6 @@ export function suspiciousItemOf(snap: MissionSnapshot, contentsInOperator: bool
     status,
     finding,
     contents,
-    images: {
-      finding:
-        detection && finding && finding.snapshot
-          ? {
-              src: detection.snapshot.url,
-              boxes: finding.detection ? [finding.detection] : [],
-              aspect: '16 / 9',
-              caption: `${detection.by.toUpperCase()} · ${finding.atKnownPlace ? 'ANOMALOUS OBJECT' : 'BOX FOUND'} · ${finding.refinedAt ?? finding.foundAt}`,
-              meta: [finding.atKnownPlace ? null : `box ${formatPercent(detection.confidence)}`, detection.snapshot.path].filter(Boolean).join(' · '),
-            }
-          : null,
-      contents: contentsImageOf(snap),
-    },
+    images: { finding: findingImageOf(snap), contents: contentsImageOf(snap) },
   }
 }

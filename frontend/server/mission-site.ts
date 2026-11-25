@@ -5,17 +5,17 @@ import type { PlanRoutes, WaypointFact } from '../src/shared/api/setup-protocol.
 import type { RobotKey } from '../src/shared/config/fleet.ts'
 
 /* The Command center's map, from the plan in use and the dogs' SLAM map: each phase's routes by role, the formation
- * slots, the cordon points and where R3 watches the box, the box (demo/box.json), and the grid image map_grid.py writes.
+ * slots, the cordon points and where R3 watches the box, the box (demo/assets/box.json), and the grid image map_grid.py writes.
  * The ALOHA's route is left out while its map is not the dogs'. */
 
 export type SiteBox = NonNullable<SiteMap['box']>
 
 let cached: { file: string; mtime: number; box: SiteBox | null } | null = null
 
-/** demo/box.json, as fleet_management.py and demo/find_box.py read it (yaw in radians): centre, yaw in degrees, metres.
+/** demo/assets/box.json, as fleet_management.py and demo/find_box.py read it (yaw in radians): centre, yaw in degrees, metres.
  * Null when it is missing or cannot be read. Read again once the file changes. */
 export function readBox(packageRoot: string): SiteBox | null {
-  const file = join(packageRoot, 'demo', 'box.json')
+  const file = join(packageRoot, 'demo', 'assets', 'box.json')
   try {
     const mtime = statSync(file).mtimeMs
     if (cached?.file === file && cached.mtime === mtime) return cached.box

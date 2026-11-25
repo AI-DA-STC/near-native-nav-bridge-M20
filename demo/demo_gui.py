@@ -3,9 +3,9 @@
 
 Runs demo/run_demo.sh as a terminal would (in a pseudo-terminal, so the demo behaves exactly the same) and shows what it
 says, plainly: the mission plan, generated once the operator sends the instruction and then executed step by step, each
-robot's status, every plan generated with its status, and, from the sweep on, the box detection on R3's camera
-(demo/detect_box.py): the box's image and place on the map as soon as it is found, then the photo the Aloha takes of
-its contents with the objects found in it (aloha/inspect_box.py), which the operator marks as an anomaly or clear. Click
+robot's status, every plan generated with its status, and, from the sweep on, the box found by R3
+(demo/find_box.py): its place on the map as soon as R3 reaches it, then the photo the Aloha takes of its contents
+with the objects found in it (aloha/inspect_box.py), which the operator marks as an anomaly or clear. Click
 an image to see it in a window of its own. The operator types the instruction, approves or denies each plan, marks the
 box's contents and stops the demo (as Ctrl+C would) from here. Start every bridge first, as
 for demo/run_demo.sh; the demo gets ROS_DOMAIN_ID=0 and fastdds_profile.xml unless this terminal sets them. R1, R2, R3
